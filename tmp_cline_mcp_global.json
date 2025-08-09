@@ -1,0 +1,15 @@
+{
+  "mcpServers": {
+    "github.com/upstash/context7-mcp": {
+      "command": "npx",
+      "args": ["-y", "@upstash/context7-mcp@latest"],
+      "disabled": false,
+      "autoApprove": []
+    },
+    "context7": {
+      "url": "https://mcp.context7.com/mcp",
+      "disabled": false,
+      "autoApprove": []
+    }
+  }
+}

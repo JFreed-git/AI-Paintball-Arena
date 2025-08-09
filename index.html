@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D Aim Trainer</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div id="gameContainer">
+        <div id="ui">
+            <div id="score">Score: 0</div>
+            <div id="timer">Time: 30s</div>
+            <div id="settings">
+                <label>Time: <input type="number" id="timeInput" value="30" min="5" max="300"></label>
+                <button id="startBtn">Start Game</button>
+            </div>
+        </div>
+        <div id="crosshair">+</div>
+        <div id="instructions">
+            Click to start. Move mouse to look around. Click targets to score points.
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="game.js"></script>
+</body>
+</html>
