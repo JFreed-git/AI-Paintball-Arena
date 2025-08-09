@@ -79,11 +79,105 @@ function createTarget() {
     const angle = Math.random() * Math.PI * 2;
     const distance = 10 + Math.random() * 20;
     target.position.x = Math.cos(angle) * distance;
-    target.position.y = Math.random() * 4 - 2;
+    const minY = -0.4; // keep above ground (ground at -1, target radius ~0.5)
+    const maxY = 3.0;
+    target.position.y = minY + Math.random() * (maxY - minY);
     target.position.z = Math.sin(angle) * distance - 10;
     
     scene.add(target);
     targets.push(target);
+    createIndicatorForTarget(target);
+}
+
+// Offscreen indicator helpers
+function createIndicatorForTarget(target) {
+    const el = document.createElement('div');
+    el.className = 'indicator';
+    el.textContent = '➤';
+    el.style.display = 'none';
+    const container = document.getElementById('gameContainer');
+    container.appendChild(el);
+    target.userData.indicator = el;
+}
+
+function removeIndicatorForTarget(target) {
+    const el = target.userData && target.userData.indicator;
+    if (el && el.parentNode) {
+        el.parentNode.removeChild(el);
+    }
+    if (target.userData) {
+        delete target.userData.indicator;
+    }
+}
+
+function updateIndicators() {
+    if (!gameActive) {
+        targets.forEach(target => {
+            const el = target.userData && target.userData.indicator;
+            if (el) el.style.display = 'none';
+        });
+        return;
+    }
+
+    const width = window.innerWidth;
+    const height = window.innerHeight;
+    const halfW = width / 2;
+    const halfH = height / 2;
+    const margin = 16; // keep arrows right at the inner edge
+
+    const forward = new THREE.Vector3();
+    camera.getWorldDirection(forward);
+
+    targets.forEach(target => {
+        const el = target.userData && target.userData.indicator;
+        if (!el) return;
+
+        // Determine if off-screen/behind
+        const worldPos = target.position.clone();
+        const camToTarget = worldPos.clone().sub(camera.position);
+        const isBehind = camToTarget.dot(forward) < 0;
+
+        const ndc = worldPos.clone().project(camera);
+        const isOffscreen = isBehind || ndc.x < -1 || ndc.x > 1 || ndc.y < -1 || ndc.y > 1;
+
+        if (!isOffscreen) {
+            el.style.display = 'none';
+            return;
+        }
+
+        el.style.display = 'block';
+
+        // Flip NDC if behind so arrow points correctly
+        let nx = ndc.x;
+        let ny = ndc.y;
+        if (isBehind) {
+            nx = -nx;
+            ny = -ny;
+        }
+
+        // Convert to screen-centered coordinates
+        const sx = nx * halfW;
+        const sy = -ny * halfH;
+
+        // Scale to the inner edge of the screen rectangle
+        const eps = 1e-6;
+        const kx = (halfW - margin) / (Math.abs(sx) + eps);
+        const ky = (halfH - margin) / (Math.abs(sy) + eps);
+        const k = Math.min(kx, ky);
+
+        const ex = sx * k;
+        const ey = sy * k;
+
+        const px = ex + halfW;
+        const py = ey + halfH;
+
+        // Point arrow from center toward the target direction
+        const angle = Math.atan2(ey, ex);
+
+        el.style.left = `${px}px`;
+        el.style.top = `${py}px`;
+        el.style.transform = `translate(-50%, -50%) rotate(${angle}rad)`;
+    });
 }
 
 function onMouseMove(event) {
@@ -120,6 +214,7 @@ function onMouseClick(event) {
         
         // Remove target
         scene.remove(hitTarget);
+        removeIndicatorForTarget(hitTarget);
         targets = targets.filter(t => t !== hitTarget);
         
         // Update score
@@ -147,7 +242,7 @@ function startGame() {
     document.getElementById('instructions').classList.add('hidden');
     
     // Clear existing targets
-    targets.forEach(target => scene.remove(target));
+    targets.forEach(target => { scene.remove(target); removeIndicatorForTarget(target); });
     targets = [];
     
     // Create initial targets
@@ -179,6 +274,12 @@ function endGame() {
         <button onclick="resetGame()">Play Again</button>
     `;
     document.getElementById('instructions').classList.remove('hidden');
+
+    // Hide indicators while game inactive
+    targets.forEach(target => {
+        const el = target.userData && target.userData.indicator;
+        if (el) el.style.display = 'none';
+    });
     
     // Exit pointer lock
     document.exitPointerLock();
@@ -199,6 +300,7 @@ function animate() {
         target.rotation.y += 0.01;
     });
     
+    updateIndicators();
     renderer.render(scene, camera);
 }
 
