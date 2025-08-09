@@ -5,11 +5,13 @@ let score = 0;
 let timeLeft = 30;
 let gameActive = false;
 let raycaster, mouse;
-let gameTimer;
+let gameTimer = null;
 let spawnMode = 'Free Space';
 let wallConfig = null;
+let mouseSensitivity = 1.0;
+let isTimed = false;
 
-// Initialize the game
+// ------- Initialization -------
 function init() {
     // Create scene
     scene = new THREE.Scene();
@@ -50,13 +52,25 @@ function init() {
     // Create simple weapon model
     createWeapon();
 
-    // Event listeners
+    // Event listeners (renderer)
     window.addEventListener('resize', onWindowResize);
     renderer.domElement.addEventListener('click', onMouseClick);
     renderer.domElement.addEventListener('mousemove', onMouseMove);
 
+    // Global listeners
+    document.addEventListener('pointerlockchange', onPointerLockChange);
+    document.addEventListener('keydown', onGlobalKeyDown);
+
+    // Bind UI/menu logic
+    bindUI();
+
     // Start animation loop
     animate();
+
+    // Ensure HUD hidden while in menus on load
+    setHUDVisible(false);
+    // Ensure only main menu is visible on load (HTML already does this, but enforce)
+    showOnlyMenu('mainMenu');
 }
 
 function createWeapon() {
@@ -70,6 +84,7 @@ function createWeapon() {
     scene.add(camera);
 }
 
+// ------- Target Spawning -------
 function createTarget() {
     const geometry = new THREE.SphereGeometry(0.5, 16, 16);
     const material = new THREE.MeshLambertMaterial({ 
@@ -82,7 +97,6 @@ function createTarget() {
 
         const minY = -0.4;
         const maxY = 3.0;
-        // Choose v so target stays within visible vertical band
         let vMin = minY - wallConfig.center.y;
         let vMax = maxY - wallConfig.center.y;
         const halfH = wallConfig.height / 2;
@@ -174,7 +188,7 @@ function clearWall() {
     wallConfig = null;
 }
 
-// Offscreen indicator helpers
+// ------- Offscreen indicator helpers -------
 function createIndicatorForTarget(target) {
     const el = document.createElement('div');
     el.className = 'indicator';
@@ -265,6 +279,7 @@ function updateIndicators() {
     });
 }
 
+// ------- Input handlers -------
 function onMouseMove(event) {
     if (!gameActive) return;
 
@@ -272,23 +287,25 @@ function onMouseMove(event) {
     mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
     mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
 
-    // Simple camera rotation based on mouse movement
+    // Camera rotation based on mouse movement and sensitivity
     const movementX = event.movementX || 0;
     const movementY = event.movementY || 0;
+
+    const base = 0.002;
+    const factor = base * mouseSensitivity;
     
-    camera.rotation.y -= movementX * 0.002;
-    camera.rotation.x -= movementY * 0.002;
+    camera.rotation.y -= movementX * factor;
+    camera.rotation.x -= movementY * factor;
     
-    // Limit vertical rotation
+    // Limit vertical rotation and prevent roll
     camera.rotation.x = Math.max(-Math.PI/3, Math.min(Math.PI/3, camera.rotation.x));
-    // Prevent unintended roll
     camera.rotation.z = 0;
 }
 
 function onMouseClick(event) {
     if (!gameActive) return;
 
-    // Cast ray from camera
+    // Cast ray from camera (center crosshair)
     raycaster.setFromCamera(new THREE.Vector2(0, 0), camera);
     
     // Check for intersections with targets
@@ -304,7 +321,8 @@ function onMouseClick(event) {
         
         // Update score
         score++;
-        document.getElementById('score').textContent = `Score: ${score}`;
+        const scoreEl = document.getElementById('score');
+        if (scoreEl) scoreEl.textContent = `Score: ${score}`;
         
         // Create new target
         setTimeout(createTarget, 500);
@@ -317,76 +335,204 @@ function onWindowResize() {
     renderer.setSize(window.innerWidth, window.innerHeight);
 }
 
-function startGame() {
+function onPointerLockChange() {
+    const locked = document.pointerLockElement === renderer.domElement;
+    // If we lose pointer lock during a game, return to main menu
+    if (!locked && gameActive) {
+        returnToMainMenu();
+    }
+}
+
+function onGlobalKeyDown(e) {
+    if (e.key === 'Escape') {
+        // From anywhere, go to main menu
+        if (gameActive) {
+            returnToMainMenu();
+        } else {
+            // Ensure main menu is shown if not in game
+            showOnlyMenu('mainMenu');
+            setHUDVisible(false);
+        }
+    }
+}
+
+// ------- UI and Menu logic -------
+function bindUI() {
+    // Sensitivity: load, display, and wire
+    const sensInput = document.getElementById('sensInput');
+    const sensValue = document.getElementById('sensValue');
+
+    if (sensInput && sensValue) {
+        const saved = localStorage.getItem('mouseSensitivity');
+        if (saved !== null) {
+            mouseSensitivity = parseFloat(saved) || 1.0;
+            sensInput.value = String(mouseSensitivity);
+        } else {
+            mouseSensitivity = parseFloat(sensInput.value) || 1.0;
+        }
+        sensValue.textContent = String(mouseSensitivity.toFixed(1));
+
+        sensInput.addEventListener('input', () => {
+            mouseSensitivity = parseFloat(sensInput.value) || 1.0;
+            sensValue.textContent = String(mouseSensitivity.toFixed(1));
+            try {
+                localStorage.setItem('mouseSensitivity', String(mouseSensitivity));
+            } catch {}
+        });
+    }
+
+    // Navigation
+    const gotoTimed = document.getElementById('gotoTimed');
+    const gotoUntimed = document.getElementById('gotoUntimed');
+    const backFromTimed = document.getElementById('backFromTimed');
+    const backFromUntimed = document.getElementById('backFromUntimed');
+
+    if (gotoTimed) gotoTimed.addEventListener('click', () => showOnlyMenu('timedMenu'));
+    if (gotoUntimed) gotoUntimed.addEventListener('click', () => showOnlyMenu('untimedMenu'));
+    if (backFromTimed) backFromTimed.addEventListener('click', () => showOnlyMenu('mainMenu'));
+    if (backFromUntimed) backFromUntimed.addEventListener('click', () => showOnlyMenu('mainMenu'));
+
+    // Start buttons
+    const startTimed = document.getElementById('startTimed');
+    const startUntimed = document.getElementById('startUntimed');
+
+    if (startTimed) {
+        startTimed.addEventListener('click', () => {
+            const modeSel = document.getElementById('modeSelectTimed');
+            const timeInput = document.getElementById('timeInput');
+            const mode = modeSel ? modeSel.value : 'Free Space';
+            const duration = timeInput ? Math.max(1, parseInt(timeInput.value) || 30) : 30;
+            startGame({ mode, isTimed: true, duration });
+        });
+    }
+    if (startUntimed) {
+        startUntimed.addEventListener('click', () => {
+            const modeSel = document.getElementById('modeSelectUntimed');
+            const mode = modeSel ? modeSel.value : 'Free Space';
+            startGame({ mode, isTimed: false });
+        });
+    }
+}
+
+function setHUDVisible(visible) {
+    const ui = document.getElementById('ui');
+    const crosshair = document.getElementById('crosshair');
+    if (ui) ui.classList.toggle('hidden', !visible);
+    if (crosshair) crosshair.classList.toggle('hidden', !visible);
+}
+
+function showOnlyMenu(idOrNull) {
+    const menus = document.querySelectorAll('.menu');
+    menus.forEach(m => m.classList.add('hidden'));
+    if (idOrNull) {
+        const el = document.getElementById(idOrNull);
+        if (el) el.classList.remove('hidden');
+    }
+}
+
+// ------- Game lifecycle -------
+function startGame(config) {
+    // config: { mode: 'Free Space' | 'Wall', isTimed: boolean, duration?: number }
+    // Clean any previous session
+    stopGameInternal();
+
     gameActive = true;
     score = 0;
-    timeLeft = parseInt(document.getElementById('timeInput').value);
-    
-    document.getElementById('score').textContent = `Score: ${score}`;
-    document.getElementById('timer').textContent = `Time: ${timeLeft}s`;
-    document.getElementById('instructions').classList.add('hidden');
-    
-    // Clear existing targets
+    spawnMode = config.mode || 'Free Space';
+    isTimed = !!config.isTimed;
+    timeLeft = isTimed ? Math.max(1, config.duration || 30) : 0;
+
+    // UI setup
+    const scoreEl = document.getElementById('score');
+    const timerEl = document.getElementById('timer');
+    if (scoreEl) scoreEl.textContent = `Score: ${score}`;
+    if (timerEl) {
+        if (isTimed) {
+            timerEl.classList.remove('hidden');
+            timerEl.textContent = `Time: ${timeLeft}s`;
+        } else {
+            timerEl.classList.add('hidden');
+        }
+    }
+
+    // Hide menus, show HUD
+    showOnlyMenu(null);
+    setHUDVisible(true);
+
+    // Clear existing targets and indicators
     targets.forEach(target => { scene.remove(target); removeIndicatorForTarget(target); });
     targets = [];
 
-    // Determine spawn mode and set up wall if needed
-    const modeEl = document.getElementById('modeSelect');
-    spawnMode = modeEl ? modeEl.value : 'Free Space';
+    // Setup wall if needed
     clearWall();
     if (spawnMode === 'Wall') {
         prepareWall();
     }
-    
-    // Create initial targets
+
+    // Spawn initial targets
     for (let i = 0; i < 5; i++) {
         createTarget();
     }
-    
+
     // Request pointer lock for better mouse control
+    // Must be called from user gesture (click on button) - which this is.
     renderer.domElement.requestPointerLock();
-    
-    // Start timer
-    gameTimer = setInterval(() => {
-        timeLeft--;
-        document.getElementById('timer').textContent = `Time: ${timeLeft}s`;
-        
-        if (timeLeft <= 0) {
-            endGame();
-        }
-    }, 1000);
+
+    // Start timer if timed
+    if (isTimed) {
+        gameTimer = setInterval(() => {
+            timeLeft--;
+            if (timerEl) timerEl.textContent = `Time: ${timeLeft}s`;
+            if (timeLeft <= 0) {
+                returnToMainMenu();
+            }
+        }, 1000);
+    }
 }
 
-function endGame() {
-    gameActive = false;
-    clearInterval(gameTimer);
-    
-    document.getElementById('instructions').innerHTML = `
-        <h2>Game Over!</h2>
-        <p>Final Score: ${score}</p>
-        <button onclick="resetGame()">Play Again</button>
-    `;
-    document.getElementById('instructions').classList.remove('hidden');
-
-    // Hide indicators while game inactive
-    targets.forEach(target => {
-        const el = target.userData && target.userData.indicator;
-        if (el) el.style.display = 'none';
-    });
-
+function stopGameInternal() {
+    // Stop and cleanup without showing menus; used before starting a new session
+    if (gameTimer) {
+        clearInterval(gameTimer);
+        gameTimer = null;
+    }
+    // Clear targets and indicators
+    targets.forEach(target => { scene.remove(target); removeIndicatorForTarget(target); });
+    targets = [];
     // Remove wall if present
     clearWall();
-    
+    gameActive = false;
+    // Exit pointer lock if active
+    try { document.exitPointerLock(); } catch {}
+}
+
+function returnToMainMenu() {
+    if (!gameActive && !gameTimer) {
+        // Ensure menus visible even if not in a game
+        showOnlyMenu('mainMenu');
+        setHUDVisible(false);
+        return;
+    }
+    // Clean up timer/targets/wall and state
+    if (gameTimer) {
+        clearInterval(gameTimer);
+        gameTimer = null;
+    }
+    gameActive = false;
+
+    targets.forEach(target => { scene.remove(target); removeIndicatorForTarget(target); });
+    targets = [];
+    clearWall();
+
+    // Hide HUD, show main menu
+    setHUDVisible(false);
+    showOnlyMenu('mainMenu');
+
     // Exit pointer lock
-    document.exitPointerLock();
+    try { document.exitPointerLock(); } catch {}
 }
 
-function resetGame() {
-    document.getElementById('instructions').innerHTML = `
-        Click to start. Move mouse to look around. Click targets to score points.
-    `;
-}
-
+// ------- Main loop -------
 function animate() {
     requestAnimationFrame(animate);
     
@@ -400,8 +546,5 @@ function animate() {
     renderer.render(scene, camera);
 }
 
-// Event listeners for UI
-document.getElementById('startBtn').addEventListener('click', startGame);
-
-// Initialize when page loads
+// ------- Boot -------
 init();

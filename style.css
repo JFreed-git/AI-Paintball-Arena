@@ -110,3 +110,100 @@ body {
     z-index: 150;
     filter: drop-shadow(0 0 6px rgba(255, 204, 0, 0.8));
 }
+
+/* Menus */
+.menu {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 420px;
+    max-width: 90vw;
+    background: rgba(10, 10, 10, 0.8);
+    padding: 24px;
+    border-radius: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.6);
+    z-index: 200;
+}
+
+.menu h1, .menu h2 {
+    font-size: 26px;
+    margin-bottom: 16px;
+    text-align: center;
+}
+
+.menu .field {
+    margin: 14px 0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.menu label {
+    font-size: 14px;
+    color: #ddd;
+}
+
+.menu input[type="number"] {
+    width: 90px;
+    padding: 6px 8px;
+    background: #222;
+    color: #fff;
+    border: 1px solid #444;
+    border-radius: 6px;
+    outline: none;
+}
+
+.menu select {
+    flex: 1;
+    padding: 8px 10px;
+    background: #222;
+    color: #fff;
+    border: 1px solid #444;
+    border-radius: 6px;
+    outline: none;
+}
+
+.menu input[type="range"] {
+    flex: 1;
+    accent-color: #00ff88;
+}
+
+.menu .actions {
+    display: flex;
+    gap: 12px;
+    margin-top: 12px;
+    justify-content: center;
+}
+
+.menu button {
+    padding: 10px 16px;
+    background: #00ff88;
+    color: #000;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-weight: bold;
+    transition: background 0.2s ease, transform 0.05s ease;
+    min-width: 120px;
+}
+
+.menu button:hover {
+    background: #00d977;
+}
+
+.menu button:active {
+    transform: translateY(1px);
+}
+
+.menu button.secondary {
+    background: transparent;
+    color: #fff;
+    border: 1px solid #555;
+}
+
+.menu button.secondary:hover {
+    background: rgba(255, 255, 255, 0.06);
+}
