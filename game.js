@@ -6,6 +6,8 @@ let timeLeft = 30;
 let gameActive = false;
 let raycaster, mouse;
 let gameTimer;
+let spawnMode = 'Free Space';
+let wallConfig = null;
 
 // Initialize the game
 function init() {
@@ -75,18 +77,101 @@ function createTarget() {
     });
     const target = new THREE.Mesh(geometry, material);
     
-    // Random position in front of camera
-    const angle = Math.random() * Math.PI * 2;
-    const distance = 10 + Math.random() * 20;
-    target.position.x = Math.cos(angle) * distance;
-    const minY = -0.4; // keep above ground (ground at -1, target radius ~0.5)
-    const maxY = 3.0;
-    target.position.y = minY + Math.random() * (maxY - minY);
-    target.position.z = Math.sin(angle) * distance - 10;
+    if (spawnMode === 'Wall' && wallConfig) {
+        const u = (Math.random() - 0.5) * wallConfig.width;
+
+        const minY = -0.4;
+        const maxY = 3.0;
+        // Choose v so target stays within visible vertical band
+        let vMin = minY - wallConfig.center.y;
+        let vMax = maxY - wallConfig.center.y;
+        const halfH = wallConfig.height / 2;
+        vMin = Math.max(vMin, -halfH);
+        vMax = Math.min(vMax, halfH);
+        if (vMax <= vMin) {
+            vMin = -halfH;
+            vMax = halfH;
+        }
+        const v = vMin + Math.random() * (vMax - vMin);
+
+        const pos = wallConfig.center.clone()
+            .add(wallConfig.right.clone().multiplyScalar(u))
+            .add(wallConfig.up.clone().multiplyScalar(v));
+
+        // Offset outward so the sphere sits on the wall surface (radius = 0.5)
+        if (wallConfig.normal) {
+            pos.add(wallConfig.normal.clone().multiplyScalar(0.5));
+        }
+
+        target.position.copy(pos);
+    } else {
+        // Random position in front of camera (free space)
+        const angle = Math.random() * Math.PI * 2;
+        const distance = 10 + Math.random() * 20;
+        target.position.x = Math.cos(angle) * distance;
+        const minY = -0.4; // keep above ground (ground at -1, target radius ~0.5)
+        const maxY = 3.0;
+        target.position.y = minY + Math.random() * (maxY - minY);
+        target.position.z = Math.sin(angle) * distance - 10;
+    }
     
     scene.add(target);
     targets.push(target);
     createIndicatorForTarget(target);
+}
+
+/* Wall mode helpers */
+function prepareWall() {
+    const worldUp = new THREE.Vector3(0, 1, 0);
+    const forward = new THREE.Vector3();
+    camera.getWorldDirection(forward);
+    forward.normalize();
+
+    let right = new THREE.Vector3().crossVectors(forward, worldUp);
+    if (right.lengthSq() < 1e-6) {
+        // Fallback if looking straight up/down
+        right = new THREE.Vector3(1, 0, 0);
+    } else {
+        right.normalize();
+    }
+    const up = new THREE.Vector3().crossVectors(right, forward).normalize();
+
+    const wallDistance = 20;
+    const wallWidth = 30;
+    const wallHeight = 8;
+
+    const center = camera.position.clone().add(forward.clone().multiplyScalar(wallDistance));
+
+    // Visual wall panel (lighter gray than floor)
+    const wallGeom = new THREE.PlaneGeometry(wallWidth, wallHeight);
+    const wallMat = new THREE.MeshLambertMaterial({ color: 0x666666, side: THREE.DoubleSide });
+    const wallMesh = new THREE.Mesh(wallGeom, wallMat);
+    wallMesh.position.copy(center);
+    // Make plane face the camera (plane front +Z should face toward camera => align +Z with -forward)
+    wallMesh.lookAt(center.clone().sub(forward));
+    scene.add(wallMesh);
+
+    const normal = forward.clone().negate();
+
+    wallConfig = {
+        center,
+        right,
+        up,
+        width: wallWidth,
+        height: wallHeight,
+        distance: wallDistance,
+        mesh: wallMesh,
+        normal
+    };
+}
+
+function clearWall() {
+    if (wallConfig && wallConfig.mesh) {
+        scene.remove(wallConfig.mesh);
+        wallConfig.mesh.geometry.dispose();
+        wallConfig.mesh.material.dispose();
+    }
+    wallConfig = null;
 }
 
 // Offscreen indicator helpers
@@ -244,6 +329,14 @@ function startGame() {
     // Clear existing targets
     targets.forEach(target => { scene.remove(target); removeIndicatorForTarget(target); });
     targets = [];
+
+    // Determine spawn mode and set up wall if needed
+    const modeEl = document.getElementById('modeSelect');
+    spawnMode = modeEl ? modeEl.value : 'Free Space';
+    clearWall();
+    if (spawnMode === 'Wall') {
+        prepareWall();
+    }
     
     // Create initial targets
     for (let i = 0; i < 5; i++) {
@@ -280,6 +373,9 @@ function endGame() {
         const el = target.userData && target.userData.indicator;
         if (el) el.style.display = 'none';
     });
+
+    // Remove wall if present
+    clearWall();
     
     // Exit pointer lock
     document.exitPointerLock();
