@@ -10,6 +10,7 @@ let spawnMode = 'Free Space';
 let wallConfig = null;
 let mouseSensitivity = 1.0;
 let isTimed = false;
+let targetCount = 5;
 
 // ------- Initialization -------
 function init() {
@@ -105,6 +106,10 @@ function startGame(config) {
   showOnlyMenu(null);
   setHUDVisible(true);
 
+  // Show instructions for untimed modes
+  const instructionsEl = document.getElementById('instructions');
+  if (instructionsEl) instructionsEl.classList.toggle('hidden', isTimed);
+
   // Clear existing targets and indicators
   targets.forEach(target => { scene.remove(target); removeIndicatorForTarget(target); });
   targets = [];
@@ -116,7 +121,7 @@ function startGame(config) {
   }
 
   // Spawn initial targets
-  for (let i = 0; i < 5; i++) {
+  for (let i = 0; i < targetCount; i++) {
     createTarget();
   }
 
@@ -148,6 +153,11 @@ function stopGameInternal() {
   // Remove wall if present
   clearWall();
   gameActive = false;
+  // Hide instructions (if any were showing)
+  {
+    const instructionsEl = document.getElementById('instructions');
+    if (instructionsEl) instructionsEl.classList.add('hidden');
+  }
   // Exit pointer lock if active
   try { document.exitPointerLock(); } catch {}
 }
@@ -171,6 +181,11 @@ function endTimedSession() {
 
   // Hide HUD
   setHUDVisible(false);
+  // Hide instructions
+  {
+    const instructionsEl = document.getElementById('instructions');
+    if (instructionsEl) instructionsEl.classList.add('hidden');
+  }
 
   // Show final score and results menu
   const finalScoreEl = document.getElementById('finalScore');
@@ -198,6 +213,11 @@ function returnToMainMenu() {
 
   // Hide HUD, show main menu
   setHUDVisible(false);
+  // Hide instructions
+  {
+    const instructionsEl = document.getElementById('instructions');
+    if (instructionsEl) instructionsEl.classList.add('hidden');
+  }
   showOnlyMenu('mainMenu');
 
   // Exit pointer lock

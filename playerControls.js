@@ -38,6 +38,15 @@ function onMouseMove(event) {
 function onMouseClick(event) {
   if (!gameActive) return;
 
+  // If not pointer locked, click should re-lock instead of shooting
+  const canvas = renderer && renderer.domElement;
+  if (document.pointerLockElement !== canvas) {
+    if (canvas && canvas.requestPointerLock) {
+      canvas.requestPointerLock();
+    }
+    return;
+  }
+
   // Cast ray from camera (center crosshair)
   raycaster.setFromCamera(new THREE.Vector2(0, 0), camera);
 
@@ -69,10 +78,21 @@ function onWindowResize() {
 }
 
 function onPointerLockChange() {
-  const locked = document.pointerLockElement === (renderer && renderer.domElement);
-  // If we lose pointer lock during a game, return to main menu
+  const canvas = renderer && renderer.domElement;
+  const locked = document.pointerLockElement === canvas;
+
   if (!locked && gameActive) {
-    returnToMainMenu();
+    // Heuristic:
+    // - If the document is focused and visible, treat pointer unlock as explicit ESC
+    //   and return to main menu immediately (single ESC should exit).
+    // - If focus/visibility was lost (e.g., Alt-Tab), do nothing; clicking the canvas
+    //   will re-lock the pointer (handled in onMouseClick).
+    const focused = typeof document.hasFocus === 'function' ? document.hasFocus() : true;
+    const visible = typeof document.visibilityState === 'string' ? (document.visibilityState === 'visible') : true;
+
+    if (focused && visible) {
+      returnToMainMenu();
+    }
   }
 }
 

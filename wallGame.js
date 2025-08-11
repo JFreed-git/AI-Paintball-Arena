@@ -1,4 +1,8 @@
-// Wall mode helpers
+ // Wall mode helpers
+
+const WALL_DISTANCE = 20;
+const WALL_WIDTH = 24;
+const WALL_HEIGHT = 10;
 
 function prepareWall() {
   const worldUp = new THREE.Vector3(0, 1, 0);
@@ -15,9 +19,9 @@ function prepareWall() {
   }
   const up = new THREE.Vector3().crossVectors(right, forward).normalize();
 
-  const wallDistance = 20;
-  const wallWidth = 30;
-  const wallHeight = 8;
+  const wallDistance = WALL_DISTANCE;
+  const wallWidth = WALL_WIDTH;
+  const wallHeight = WALL_HEIGHT;
 
   const center = camera.position.clone().add(forward.clone().multiplyScalar(wallDistance));
 
@@ -28,6 +32,8 @@ function prepareWall() {
   wallMesh.position.copy(center);
   // Make plane face the camera (plane front +Z should face toward camera => align +Z with -forward)
   wallMesh.lookAt(center.clone().sub(forward));
+  // Ensure consistent world-scale
+  wallMesh.scale.set(1, 1, 1);
   scene.add(wallMesh);
 
   const normal = forward.clone().negate();

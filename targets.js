@@ -56,41 +56,82 @@ function updateIndicators() {
   const halfH = height / 2;
   const margin = 16; // keep arrows right at the inner edge
 
+  // Build camera basis
   const forward = new THREE.Vector3();
-  camera.getWorldDirection(forward);
+  camera.getWorldDirection(forward).normalize();
+
+  let right = new THREE.Vector3().crossVectors(forward, new THREE.Vector3(0, 1, 0));
+  if (right.lengthSq() < 1e-6) {
+    right.set(1, 0, 0);
+  } else {
+    right.normalize();
+  }
+  const up = new THREE.Vector3().crossVectors(right, forward).normalize();
 
   targets.forEach(target => {
     const el = target.userData && target.userData.indicator;
     if (!el) return;
 
-    // Determine if off-screen/behind
     const worldPos = target.position.clone();
     const camToTarget = worldPos.clone().sub(camera.position);
+
+    // Visibility check using original position
+    const ndcCheck = worldPos.clone().project(camera);
     const isBehind = camToTarget.dot(forward) < 0;
+    const onScreen =
+      !isBehind &&
+      ndcCheck.x >= -1 && ndcCheck.x <= 1 &&
+      ndcCheck.y >= -1 && ndcCheck.y <= 1;
 
-    const ndc = worldPos.clone().project(camera);
-    const isOffscreen = isBehind || ndc.x < -1 || ndc.x > 1 || ndc.y < -1 || ndc.y > 1;
-
-    if (!isOffscreen) {
+    if (onScreen) {
       el.style.display = 'none';
       return;
     }
 
     el.style.display = 'block';
 
-    // Flip NDC if behind so arrow points correctly
-    let nx = ndc.x;
-    let ny = ndc.y;
+    // Components in camera space
+    const lx = camToTarget.dot(right);
+    const ly = camToTarget.dot(up);
+    const lz = camToTarget.dot(forward);
+
     if (isBehind) {
-      nx = -nx;
-      ny = -ny;
+      // For behind targets, place arrow on nearest side edge (left/right)
+      const sideRight = lx >= 0;
+      const px = sideRight ? (width - margin) : margin;
+
+      // Vertical position: bias toward center unless pitch is significant.
+      // Compute pitch relative to the camera's forward axis.
+      const pitch = Math.atan2(ly, Math.abs(lz)); // [-pi/2, pi/2], up positive
+      const dead = 10 * Math.PI / 180; // 10° deadzone
+      let ny; // [-1, 1], positive = up
+      if (Math.abs(pitch) <= dead) {
+        ny = 0; // keep centered vertically when mostly a left/right turn
+      } else {
+        const maxPitch = 45 * Math.PI / 180; // scale up to 45°
+        ny = pitch / maxPitch;
+        ny = Math.max(-1, Math.min(1, ny));
+      }
+      const py = Math.min(height - margin, Math.max(margin, halfH - ny * (halfH - margin)));
+
+      const ex = px - halfW;
+      const ey = py - halfH;
+      const angle = Math.atan2(ey, ex);
+
+      el.style.left = `${px}px`;
+      el.style.top = `${py}px`;
+      el.style.transform = `translate(-50%, -50%) rotate(${angle}rad)`;
+      return;
     }
 
-    // Convert to screen-centered coordinates
-    const sx = nx * halfW;
-    const sy = -ny * halfH;
+    // For front targets that are offscreen: project and clamp to the nearest edge.
+    const ndc = worldPos.clone().project(camera);
 
-    // Scale to the inner edge of the screen rectangle
+    // Convert to screen-centered pixel coordinates
+    const sx = ndc.x * halfW;
+    const sy = -ndc.y * halfH;
+
+    // Clamp to inner edge of the screen rectangle
     const eps = 1e-6;
     const kx = (halfW - margin) / (Math.abs(sx) + eps);
     const ky = (halfH - margin) / (Math.abs(sy) + eps);
@@ -102,7 +143,6 @@ function updateIndicators() {
     const px = ex + halfW;
     const py = ey + halfH;
 
-    // Point arrow from center toward the target direction
     const angle = Math.atan2(ey, ex);
 
     el.style.left = `${px}px`;

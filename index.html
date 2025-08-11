@@ -9,6 +9,7 @@
 <body>
     <div id="gameContainer">
         <div id="ui">
+            <div id="instructions" class="hidden">Hit ESC to return to the menu</div>
             <div id="score">Score: 0</div>
             <div id="timer" class="hidden">Time: 0s</div>
         </div>
@@ -20,6 +21,16 @@
                 <label for="sensInput">Mouse Sensitivity</label>
                 <input type="range" id="sensInput" min="0.2" max="3" step="0.1" value="1.0">
                 <span id="sensValue">1.0</span>
+            </div>
+            <div class="field">
+                <label for="fovInput">Field of View</label>
+                <input type="range" id="fovInput" min="50" max="110" step="1" value="75">
+                <span id="fovValue">75</span>
+            </div>
+            <div class="field">
+                <label for="targetCountInput">Targets</label>
+                <input type="range" id="targetCountInput" min="1" max="20" step="1" value="5">
+                <span id="targetCountValue">5</span>
             </div>
             <div class="actions">
                 <button id="gotoTimed">Timed</button>

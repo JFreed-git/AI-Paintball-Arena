@@ -81,16 +81,15 @@ body {
 }
 
 #instructions {
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    text-align: center;
-    font-size: 18px;
-    background: rgba(0, 0, 0, 0.8);
-    padding: 30px;
-    border-radius: 10px;
-    z-index: 200;
+    position: static; /* sit inside the UI panel above the score */
+    font-size: 24px;
+    font-weight: bold;
+    margin-bottom: 10px;
+    text-align: left;
+    background: transparent;
+    padding: 0;
+    border-radius: 0;
+    pointer-events: none; /* never interfere with clicks */
 }
 
 .hidden {
