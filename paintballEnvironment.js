@@ -124,15 +124,15 @@ function buildPaintballArenaSymmetric() {
   }
 
   // Larger cover near spawns to break spawn LOS
-  addCover(0, -arenaHalfL + 6, 10, 3.5, 2.5);
-  addCover(0,  arenaHalfL - 6, 10, 3.5, 2.5);
+  addCover(0, -arenaHalfL + 18, 10, 3.5, 2.5);
+  addCover(0,  arenaHalfL - 18, 10, 3.5, 2.5);
   addCover(20, -arenaHalfL + 14, 6, 3.0, 2.0);
   addCover(-20, -arenaHalfL + 14, 6, 3.0, 2.0);
   addCover(20,  arenaHalfL - 14, 6, 3.0, 2.0);
   addCover(-20,  arenaHalfL - 14, 6, 3.0, 2.0);
 
   // Spawns opposite along Z axis
-  const spawnZ = arenaHalfL - 5;
+  const spawnZ = arenaHalfL - 12;
   const spawnA = new THREE.Vector3(0, 2, -spawnZ); // Player (camera/eye)
   const spawnB = new THREE.Vector3(0, 0,  spawnZ); // AI (grounded body)
 

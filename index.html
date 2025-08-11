@@ -3,15 +3,15 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>3D Aim Trainer</title>
+    <title>Paintball Arena</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
     <div id="gameContainer">
+        <!-- Round UI (moved outside #ui so fixed positioning uses viewport) -->
+        <div id="roundBanner" class="hidden"></div>
+        <div id="roundCountdown" class="hidden"></div>
         <div id="ui">
-            <div id="instructions" class="hidden">Hit ESC to return to the menu</div>
-            <div id="score">Score: 0</div>
-            <div id="timer" class="hidden">Time: 0s</div>
 
             <!-- Paintball HUD -->
             <div id="healthContainer" class="hidden">
@@ -27,7 +27,7 @@
         </div>
 
         <div id="mainMenu" class="menu">
-            <h1>3D Aim Trainer</h1>
+            <h1>Paintball Arena</h1>
             <div class="field">
                 <label for="sensInput">Mouse Sensitivity</label>
                 <input type="range" id="sensInput" min="0.2" max="3" step="0.1" value="1.0">
@@ -38,52 +38,8 @@
                 <input type="range" id="fovInput" min="50" max="110" step="1" value="75">
                 <span id="fovValue">75</span>
             </div>
-            <div class="field">
-                <label for="targetCountInput">Targets</label>
-                <input type="range" id="targetCountInput" min="1" max="20" step="1" value="5">
-                <span id="targetCountValue">5</span>
-            </div>
             <div class="actions">
-                <button id="gotoTimed">Timed</button>
-                <button id="gotoUntimed">Free Practice</button>
-                <button id="gotoPaintball">Paintball (AI)</button>
-            </div>
-        </div>
-
-        <div id="timedMenu" class="menu hidden">
-            <h2>Timed</h2>
-            <div class="field">
-                <label>Gamemode
-                    <select id="modeSelectTimed">
-                        <option value="Free Space" selected>Free Space</option>
-                        <option value="Wall">Wall</option>
-                    </select>
-                </label>
-            </div>
-            <div class="field">
-                <label>Time (seconds)
-                    <input type="number" id="timeInput" value="30" min="5" max="300">
-                </label>
-            </div>
-            <div class="actions">
-                <button id="startTimed">Start</button>
-                <button class="secondary" id="backFromTimed">Back</button>
-            </div>
-        </div>
-
-        <div id="untimedMenu" class="menu hidden">
-            <h2>Free Practice</h2>
-            <div class="field">
-                <label>Gamemode
-                    <select id="modeSelectUntimed">
-                        <option value="Free Space" selected>Free Space</option>
-                        <option value="Wall">Wall</option>
-                    </select>
-                </label>
-            </div>
-            <div class="actions">
-                <button id="startUntimed">Start</button>
-                <button class="secondary" id="backFromUntimed">Back</button>
+                <button id="gotoPaintball">Play Paintball</button>
             </div>
         </div>
 
@@ -114,15 +70,12 @@
     </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    <script src="freeSpaceGame.js"></script>
-    <script src="wallGame.js"></script>
-    <script src="targets.js"></script>
     <script src="menuNavigation.js"></script>
     <script src="playerControls.js"></script>
     <script src="environment.js"></script>
     <script src="playerModels.js"></script>
     <script src="paintballEnvironment.js"></script>
-    <!-- New Paintball mode scripts -->
+    <!-- Paintball mode scripts -->
     <script src="physics.js"></script>
     <script src="projectiles.js"></script>
     <script src="aiOpponent.js"></script>

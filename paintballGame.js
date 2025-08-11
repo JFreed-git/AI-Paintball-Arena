@@ -15,16 +15,16 @@
   const SPRINT_SPEED = 8.5;
   const PLAYER_RADIUS = 0.5;
 
-  const FIRE_COOLDOWN_MS = 180; // ~333 RPM
-  const MAG_SIZE = 24;
-  const RELOAD_TIME_SEC = 2.0;
+  const FIRE_COOLDOWN_MS = 0; // ~333 RPM
+  const MAG_SIZE = 1;
+  const RELOAD_TIME_SEC = 5;
 
   const BASE_SPREAD_RAD = 0.0;      // no base spread when not sprinting
   const SPRINT_SPREAD_BONUS_RAD = 0.012; // ~0.7 deg
   const BASE_CROSSHAIR_SPREAD_PX = 0;
   const SPRINT_CROSSHAIR_BONUS_PX = 10;
 
-  const PLAYER_DAMAGE = 18; // per hit to AI
+  const PLAYER_DAMAGE = 150; // per hit to AI
 
   // State
   let state = null;
@@ -70,7 +70,13 @@
         scoreEl: document.getElementById('score'),
         timerEl: document.getElementById('timer'),
         instructionsEl: document.getElementById('instructions'),
+        bannerEl: document.getElementById('roundBanner'),
+        countdownEl: document.getElementById('roundCountdown'),
       },
+      inputArmed: false,
+      inputEnabled: false,
+      countdownTimer: 0,
+      bannerTimer: 0,
       lastTs: 0,
       loopHandle: 0
     };
@@ -126,6 +132,72 @@
   }
 
   // Round/match flow
+
+  // Round UI helpers
+  function showRoundBanner(text, ms = 1200) {
+    if (!state) return;
+    const el = state.hud.bannerEl;
+    if (!el) return;
+    el.textContent = text;
+    el.classList.remove('hidden');
+    if (state.bannerTimer) {
+      try { clearTimeout(state.bannerTimer); } catch {}
+      state.bannerTimer = 0;
+    }
+    state.bannerTimer = setTimeout(() => {
+      el.classList.add('hidden');
+    }, ms);
+  }
+
+  function startRoundCountdown(seconds = 3) {
+    if (!state) return;
+    // Lock input and round state during countdown
+    state.inputEnabled = false;
+    state.match.roundActive = false;
+    // Re-arm input and add small buffer to prevent any instant shots after countdown
+    state.inputArmed = false;
+    if (state.player && state.player.weapon) {
+      state.player.weapon.lastShotTime = performance.now() + 300;
+    }
+
+    const el = state.hud.countdownEl;
+    if (!el) {
+      setTimeout(() => {
+        state.inputEnabled = true;
+        state.match.roundActive = true;
+      }, seconds * 1000);
+      return;
+    }
+
+    let remain = Math.max(1, Math.floor(seconds));
+    el.classList.remove('hidden');
+    el.textContent = String(remain);
+
+    if (state.countdownTimer) {
+      try { clearInterval(state.countdownTimer); } catch {}
+      state.countdownTimer = 0;
+    }
+
+    state.countdownTimer = setInterval(() => {
+      remain -= 1;
+      if (remain > 0) {
+        el.textContent = String(remain);
+      } else {
+        // Show GO briefly then hide
+        el.textContent = 'GO!';
+        setTimeout(() => {
+          el.classList.add('hidden');
+        }, 400);
+
+        try { clearInterval(state.countdownTimer); } catch {}
+        state.countdownTimer = 0;
+
+        // Enable input and round state
+        state.inputEnabled = true;
+        state.match.roundActive = true;
+      }
+    }, 1000);
+  }
   function resetEntitiesForRound() {
     const spawns = state.spawns;
     // Place player & camera at spawn A
@@ -134,6 +206,10 @@
     camera.rotation.z = 0;
     // Face toward B
     camera.lookAt(spawns.B);
+    // Ensure we are not spawning inside geometry
+    if (typeof resolveCollisions2D === 'function') {
+      try { resolveCollisions2D(camera.position, PLAYER_RADIUS, state.arena.colliders); } catch {}
+    }
 
     // Reset player stats
     const p = state.player;
@@ -172,11 +248,12 @@
       return;
     }
 
-    // Next round after short delay
+    // Show who won, then prepare next round with a countdown
+    showRoundBanner(winner === 'player' ? 'Player wins the round!' : 'AI wins the round!', 1200);
     setTimeout(() => {
-      state.match.roundActive = true;
       resetEntitiesForRound();
       updateHUD();
+      startRoundCountdown(3);
     }, 1200);
   }
 
@@ -256,21 +333,34 @@
     // Read inputs
     const input = window.getInputState ? window.getInputState() : { moveX: 0, moveZ: 0, sprint: false, fireDown: false, reloadPressed: false };
 
+    // Ignore any initial stuck fire until the first release after starting
+    if (state && !state.inputArmed) {
+      if (input.fireDown) {
+        input.fireDown = false;
+      } else {
+        state.inputArmed = true;
+      }
+    }
+
     // Crosshair & sprint UI
     setCrosshairBySprint(!!input.sprint);
     setSprintUI(!!input.sprint);
 
-    // Movement (XZ only)
-    updateXZPhysics(
-      state.player,
-      { moveX: input.moveX || 0, moveZ: input.moveZ || 0, sprint: !!input.sprint },
-      { colliders: state.arena.colliders },
-      dt
-    );
+    // Movement (XZ only) — disabled during countdown
+    if (state.inputEnabled) {
+      updateXZPhysics(
+        state.player,
+        { moveX: input.moveX || 0, moveZ: input.moveZ || 0, sprint: !!input.sprint },
+        { colliders: state.arena.colliders },
+        dt
+      );
+    }
 
     // Shooting + reload
     const now = performance.now();
-    handlePlayerShooting(input, now);
+    if (state.inputEnabled) {
+      handlePlayerShooting(input, now);
+    }
     updateReload(now);
 
     // AI update
@@ -324,8 +414,13 @@
       renderer.domElement.requestPointerLock();
     }
 
+    // Begin round countdown
+    startRoundCountdown(3);
+
     // Activate and run loop
     window.paintballActive = true;
+    state.inputArmed = false;
+    state.player.weapon.lastShotTime = performance.now() + 300;
     state.lastTs = 0;
     state.loopHandle = requestAnimationFrame(tick);
   };

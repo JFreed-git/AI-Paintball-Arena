@@ -19,8 +19,8 @@ body {
 
 #ui {
     position: absolute;
-    top: 20px;
-    left: 20px;
+    bottom: 20px;
+    right: 20px;
     z-index: 100;
     background: rgba(0, 0, 0, 0.7);
     padding: 20px;
@@ -28,87 +28,18 @@ body {
     backdrop-filter: blur(10px);
 }
 
-#score, #timer {
-    font-size: 24px;
-    margin-bottom: 10px;
-    font-weight: bold;
-}
 
-#settings {
-    margin-top: 20px;
-}
 
-#settings label {
-    display: block;
-    margin-bottom: 10px;
-}
 
-#timeInput {
-    width: 60px;
-    padding: 5px;
-    margin-left: 10px;
-    background: #333;
-    color: #fff;
-    border: 1px solid #555;
-    border-radius: 3px;
-}
 
-#startBtn {
-    padding: 10px 20px;
-    background: #00ff00;
-    color: #000;
-    border: none;
-    border-radius: 5px;
-    cursor: pointer;
-    font-weight: bold;
-    margin-top: 10px;
-}
 
-#startBtn:hover {
-    background: #00cc00;
-}
 
-#crosshair {
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    font-size: 30px;
-    color: #00ff00;
-    pointer-events: none;
-    z-index: 50;
-    text-shadow: 0 0 10px #00ff00;
-}
 
-#instructions {
-    position: static; /* sit inside the UI panel above the score */
-    font-size: 24px;
-    font-weight: bold;
-    margin-bottom: 10px;
-    text-align: left;
-    background: transparent;
-    padding: 0;
-    border-radius: 0;
-    pointer-events: none; /* never interfere with clicks */
-}
 
 .hidden {
     display: none;
 }
 
-.indicator {
-    position: absolute;
-    width: 28px;
-    height: 28px;
-    line-height: 28px;
-    text-align: center;
-    color: #ffcc00;
-    font-size: 22px;
-    font-weight: bold;
-    pointer-events: none;
-    z-index: 150;
-    filter: drop-shadow(0 0 6px rgba(255, 204, 0, 0.8));
-}
 
 /* Menus */
 .menu {
@@ -210,7 +141,7 @@ body {
 /* Paintball HUD */
 #healthContainer {
     position: absolute;
-    left: 20px;
+    right: 20px;
     bottom: 20px;
     z-index: 150;
     background: rgba(0, 0, 0, 0.55);
@@ -311,20 +242,6 @@ body {
     opacity: 0.5;
 }
 
-/* Offscreen indicator arrow style (existing) */
-.indicator {
-    position: absolute;
-    width: 28px;
-    height: 28px;
-    line-height: 28px;
-    text-align: center;
-    color: #ffcc00;
-    font-size: 22px;
-    font-weight: bold;
-    pointer-events: none;
-    z-index: 150;
-    filter: drop-shadow(0 0 6px rgba(255, 204, 0, 0.8));
-}
 
 /* Optional: style for spawn rings if using DOM overlay (3D rings handled in scene) */
 .spawn-ring {
@@ -354,4 +271,28 @@ body {
     width: 100%;
     height: 100%;
     background: linear-gradient(90deg, #ff6a6a, #d61d1d);
+}
+
+#roundBanner {
+    position: absolute;
+    top: 64px; /* Below the countdown to avoid overlap */
+    left: 20px; /* Changed from right to left */
+    z-index: 300;
+    pointer-events: none;
+    font-size: 18px;
+    font-weight: bold;
+    color: #fff;
+    text-align: left; /* Changed to left for consistency */
+}
+
+#roundCountdown {
+    position: absolute;
+    top: 20px;
+    left: 20px; /* Changed from right to left */
+    z-index: 300;
+    pointer-events: none;
+    font-size: 36px;
+    font-weight: 800;
+    color: #00ff88;
+    text-shadow: 0 0 12px rgba(0, 255, 136, 0.6);
 }

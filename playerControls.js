@@ -43,7 +43,6 @@ function bindPlayerControls(renderer) {
   // Window and renderer-level listeners
   window.addEventListener('resize', onWindowResize);
   if (renderer && renderer.domElement) {
-    renderer.domElement.addEventListener('click', onMouseClick);
     renderer.domElement.addEventListener('mousemove', onMouseMove);
     // Additional input hooks for Paintball mode
     renderer.domElement.addEventListener('mousedown', onMouseDownGeneric);
@@ -57,7 +56,7 @@ function bindPlayerControls(renderer) {
 }
 
 function onMouseMove(event) {
-  if (!gameActive && !window.paintballActive) return;
+  if (!window.paintballActive) return;
 
   // Raycasting mouse coords (kept for completeness)
   mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
@@ -79,41 +78,6 @@ function onMouseMove(event) {
   camera.rotation.z = 0;
 }
 
-function onMouseClick(event) {
-  if (!gameActive) return;
-
-  // If not pointer locked, click should re-lock instead of shooting
-  const canvas = renderer && renderer.domElement;
-  if (document.pointerLockElement !== canvas) {
-    if (canvas && canvas.requestPointerLock) {
-      canvas.requestPointerLock();
-    }
-    return;
-  }
-
-  // Cast ray from camera (center crosshair)
-  raycaster.setFromCamera(new THREE.Vector2(0, 0), camera);
-
-  // Check for intersections with targets
-  const intersects = raycaster.intersectObjects(targets);
-
-  if (intersects.length > 0) {
-    const hitTarget = intersects[0].object;
-
-    // Remove target
-    scene.remove(hitTarget);
-    removeIndicatorForTarget(hitTarget);
-    targets = targets.filter(t => t !== hitTarget);
-
-    // Update score
-    score++;
-    const scoreEl = document.getElementById('score');
-    if (scoreEl) scoreEl.textContent = `Score: ${score}`;
-
-    // Create new target
-    setTimeout(createTarget, 500);
-  }
-}
 
 function onWindowResize() {
   camera.aspect = window.innerWidth / window.innerHeight;
@@ -137,8 +101,6 @@ function onPointerLockChange() {
         try { if (typeof stopPaintballInternal === 'function') stopPaintballInternal(); } catch {}
         showOnlyMenu('mainMenu');
         setHUDVisible(false);
-      } else if (gameActive) {
-        returnToMainMenu();
       }
     }
   }
@@ -146,20 +108,11 @@ function onPointerLockChange() {
 
 function onGlobalKeyDown(e) {
   if (e.key === 'Escape') {
-    // From anywhere, go to main menu/stop mode
     if (window.paintballActive) {
       try { if (typeof stopPaintballInternal === 'function') stopPaintballInternal(); } catch {}
-      showOnlyMenu('mainMenu');
-      setHUDVisible(false);
-      return;
     }
-    if (gameActive) {
-      returnToMainMenu();
-    } else {
-      // Ensure main menu is shown if not in game
-      showOnlyMenu('mainMenu');
-      setHUDVisible(false);
-    }
+    showOnlyMenu('mainMenu');
+    setHUDVisible(false);
     return;
   }
 

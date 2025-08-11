@@ -1,20 +1,10 @@
- // Environment setup (background, fog, lights, ground)
-
- // Wall material factory for Wall mode (texture lives in environment)
- let _ENV_WALL_MATERIAL = null;
- function getWallMaterial() {
-   if (_ENV_WALL_MATERIAL) return _ENV_WALL_MATERIAL;
-   _ENV_WALL_MATERIAL = new THREE.MeshLambertMaterial({ color: 0x666666, side: THREE.DoubleSide });
-   return _ENV_WALL_MATERIAL;
- }
-
+// Environment setup (background, fog, lights, ground)
 function setupEnvironment() {
   // Background and fog
-  // Neutral white background and fog to match the white box arena
   scene.background = new THREE.Color(0xf5f5f5);
   scene.fog = new THREE.Fog(0xf5f5f5, 10, 220);
 
-  // Lighting (smoother)
+  // Lighting
   const hemi = new THREE.HemisphereLight(0xffffff, 0x888888, 0.6);
   scene.add(hemi);
 
