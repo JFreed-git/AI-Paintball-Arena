@@ -73,7 +73,7 @@ function onMouseMove(event) {
   camera.rotation.x -= movementY * factor;
 
   // Limit vertical rotation and prevent roll
-  const maxPitch = Math.PI / 2 - 0.001; // allow ~±89.9°
+  const maxPitch = Math.PI / 2 - 0.004; // allow ~±89.6°
   camera.rotation.x = Math.max(-maxPitch, Math.min(maxPitch, camera.rotation.x));
   camera.rotation.z = 0;
 }

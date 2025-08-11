@@ -1,7 +1,7 @@
 // Paintball (AI) mode
 // - Uses playerControls.js for inputs (getInputState, mouse look, sprint/reload keys).
 // - Uses physics.js for movement & collisions.
-// - Uses environment.js to build a symmetric arena.
+// - Uses paintballEnvironment.js to build a symmetric arena.
 // - Uses projectiles.js for fast hitscan paintball shots.
 // - Uses aiOpponent.js for a simple AI enemy.
 // - Leaves aim trainer logic untouched.
@@ -15,16 +15,16 @@
   const SPRINT_SPEED = 8.5;
   const PLAYER_RADIUS = 0.5;
 
-  const FIRE_COOLDOWN_MS = 0; // ~333 RPM
-  const MAG_SIZE = 1;
-  const RELOAD_TIME_SEC = 5;
+  const FIRE_COOLDOWN_MS = 166;
+  const MAG_SIZE = 6;
+  const RELOAD_TIME_SEC = 2.5;
 
   const BASE_SPREAD_RAD = 0.0;      // no base spread when not sprinting
   const SPRINT_SPREAD_BONUS_RAD = 0.012; // ~0.7 deg
   const BASE_CROSSHAIR_SPREAD_PX = 0;
   const SPRINT_CROSSHAIR_BONUS_PX = 10;
 
-  const PLAYER_DAMAGE = 150; // per hit to AI
+  const PLAYER_DAMAGE = 20; // per hit to AI
 
   // State
   let state = null;
@@ -40,7 +40,7 @@
         walkSpeed: WALK_SPEED,
         sprintSpeed: SPRINT_SPEED,
         radius: PLAYER_RADIUS,
-        health: 100,
+        health: 60,
         alive: true,
         weapon: {
           magSize: MAG_SIZE,

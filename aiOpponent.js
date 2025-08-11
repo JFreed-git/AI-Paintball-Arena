@@ -8,14 +8,14 @@ class AIOpponent {
     this.arena = arena;
     this.walkSpeed = 3.6;
     this.radius = 0.5;
-    this.health = 100;
+    this.health = 60;
     this.alive = true;
 
     // Difficulty tuning
     const diffs = {
-      Easy:   { spreadRad: 0.020, cooldownMs: 350, damage: 14, magSize: 10 },
-      Medium: { spreadRad: 0.012, cooldownMs: 280, damage: 16, magSize: 12 },
-      Hard:   { spreadRad: 0.008, cooldownMs: 220, damage: 18, magSize: 14 },
+      Easy:   { spreadRad: 0.020, cooldownMs: 250, damage: 15, magSize: 8 },
+      Medium: { spreadRad: 0.012, cooldownMs: 166, damage: 20, magSize: 6 },
+      Hard:   { spreadRad: 0.008, cooldownMs: 166, damage: 20, magSize: 6 },
     };
     const d = diffs[this.difficulty] || diffs.Easy;
 
@@ -69,7 +69,12 @@ class AIOpponent {
       this._healthFill = fill;
       // Initialize
       this._healthFill.style.width = '100%';
+      // Start hidden to avoid flashes before first update
+      this._healthRoot.style.display = 'none';
     }
+
+    // Track when last damaged by player; used to gate health bar visibility
+    this.lastDamagedAt = -Infinity;
 
     // Internal movement helpers
     this._strafeSign = Math.random() < 0.5 ? 1 : -1;
@@ -90,6 +95,8 @@ class AIOpponent {
   takeDamage(amount) {
     if (!this.alive) return;
     this.health -= amount;
+    // record last time AI was damaged by player
+    this.lastDamagedAt = performance.now();
     if (this._healthFill) {
       const pct = Math.max(0, Math.min(100, this.health)) + '%';
       this._healthFill.style.width = pct;
@@ -211,16 +218,39 @@ class AIOpponent {
         ndc.x >= -1 && ndc.x <= 1 &&
         ndc.y >= -1 && ndc.y <= 1;
 
-      // Only show health if not occluded by solids
-      const viewBlocked = hasBlockingBetween(camera.position.clone(), headPos, solids);
+      // Visibility: cast a ray toward the AI center including both world solids and the AI mesh,
+      // and consider it visible ONLY if the nearest hit is the AI. This prevents "seeing through walls".
+      const bbox = new THREE.Box3().setFromObject(this.mesh);
+      const center = bbox.getCenter(new THREE.Vector3());
+      const toCenter = center.clone().sub(camera.position);
+      const distToCenter = Math.max(0.001, toCenter.length());
+      const dirToCenter = toCenter.clone().divideScalar(distToCenter);
 
-      if (onScreen && this.alive && !viewBlocked) {
+      let firstIsAI = false;
+      try {
+        const rc = new THREE.Raycaster(camera.position.clone(), dirToCenter, 0, distToCenter);
+        const hits = rc.intersectObjects(solids.concat(this.mesh), true) || [];
+        const first = hits[0];
+        if (first) {
+          // Walk up parents to see if the first hit belongs to this AI
+          let o = first.object;
+          while (o) {
+            if (o === this.mesh) { firstIsAI = true; break; }
+            o = o.parent;
+          }
+        }
+      } catch {}
+
+      // Only show if recently damaged by the player (last 5s)
+      const recentlyDamaged = (this.lastDamagedAt && (now - this.lastDamagedAt) <= 5000);
+
+      if (onScreen && this.alive && firstIsAI && recentlyDamaged) {
         const sx = (ndc.x * 0.5 + 0.5) * w;
-        const sy = (-ndc.y * 0.5 + 0.5) * h;
+        const sy2 = (-ndc.y * 0.5 + 0.5) * h;
         this._healthRoot.style.display = 'block';
         // Center above the head; CSS handles transform offset
         this._healthRoot.style.left = `${sx}px`;
-        this._healthRoot.style.top = `${sy}px`;
+        this._healthRoot.style.top = `${sy2}px`;
       } else {
         this._healthRoot.style.display = 'none';
       }
