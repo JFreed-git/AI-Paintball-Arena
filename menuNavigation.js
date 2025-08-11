@@ -72,6 +72,12 @@ function bindUI() {
   if (gotoPaintball) gotoPaintball.addEventListener('click', () => showOnlyMenu('paintballMenu'));
   if (backFromPaintball) backFromPaintball.addEventListener('click', () => showOnlyMenu('mainMenu'));
 
+  // LAN menu navigation
+  const gotoLAN = document.getElementById('gotoLAN');
+  const backFromLAN = document.getElementById('backFromLAN');
+  if (gotoLAN) gotoLAN.addEventListener('click', () => showOnlyMenu('lanMenu'));
+  if (backFromLAN) backFromLAN.addEventListener('click', () => showOnlyMenu('mainMenu'));
+
   // Paintball (AI) start
   const startPaintball = document.getElementById('startPaintball');
   if (startPaintball) {
@@ -80,6 +86,38 @@ function bindUI() {
       const difficulty = sel ? sel.value : 'Easy';
       if (typeof startPaintballGame === 'function') {
         startPaintballGame({ difficulty });
+      }
+    });
+  }
+
+  // LAN host/join
+  const hostLanBtn = document.getElementById('hostLanBtn');
+  const joinLanBtn = document.getElementById('joinLanBtn');
+  if (hostLanBtn) {
+    hostLanBtn.addEventListener('click', () => {
+      const roomIdEl = document.getElementById('roomId');
+      const roomId = roomIdEl ? String(roomIdEl.value || '').trim() : '';
+      const fireCooldownMs = parseInt((document.getElementById('fireCooldownMs') || {}).value, 10) || 166;
+      const magSize = parseInt((document.getElementById('magSize') || {}).value, 10) || 6;
+      const reloadTimeSec = parseFloat((document.getElementById('reloadTimeSec') || {}).value) || 2.5;
+      const playerHealth = parseInt((document.getElementById('playerHealth') || {}).value, 10) || 100;
+      const playerDamage = parseInt((document.getElementById('playerDamage') || {}).value, 10) || 20;
+      const settings = { fireCooldownMs, magSize, reloadTimeSec, playerHealth, playerDamage };
+      if (typeof hostLanGame === 'function') {
+        hostLanGame(roomId, settings);
+      } else {
+        alert('Multiplayer module not loaded.');
+      }
+    });
+  }
+  if (joinLanBtn) {
+    joinLanBtn.addEventListener('click', () => {
+      const roomIdEl = document.getElementById('roomId');
+      const roomId = roomIdEl ? String(roomIdEl.value || '').trim() : '';
+      if (typeof joinLanGame === 'function') {
+        joinLanGame(roomId);
+      } else {
+        alert('Multiplayer module not loaded.');
       }
     });
   }

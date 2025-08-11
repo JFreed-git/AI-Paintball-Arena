@@ -56,7 +56,7 @@ function bindPlayerControls(renderer) {
 }
 
 function onMouseMove(event) {
-  if (!window.paintballActive) return;
+  if (!window.paintballActive && !window.multiplayerActive) return;
 
   // Raycasting mouse coords (kept for completeness)
   mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
@@ -101,6 +101,10 @@ function onPointerLockChange() {
         try { if (typeof stopPaintballInternal === 'function') stopPaintballInternal(); } catch {}
         showOnlyMenu('mainMenu');
         setHUDVisible(false);
+      } else if (window.multiplayerActive) {
+        try { if (typeof stopMultiplayerInternal === 'function') stopMultiplayerInternal(); } catch {}
+        showOnlyMenu('mainMenu');
+        setHUDVisible(false);
       }
     }
   }
@@ -110,6 +114,8 @@ function onGlobalKeyDown(e) {
   if (e.key === 'Escape') {
     if (window.paintballActive) {
       try { if (typeof stopPaintballInternal === 'function') stopPaintballInternal(); } catch {}
+    } else if (window.multiplayerActive) {
+      try { if (typeof stopMultiplayerInternal === 'function') stopMultiplayerInternal(); } catch {}
     }
     showOnlyMenu('mainMenu');
     setHUDVisible(false);

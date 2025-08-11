@@ -155,5 +155,6 @@
   }
 
   // Expose
+  window.spawnTracer = spawnTracer;
   window.fireHitscan = fireHitscan;
 })();
