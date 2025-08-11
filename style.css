@@ -22,10 +22,11 @@ body {
     bottom: 20px;
     right: 20px;
     z-index: 100;
-    background: rgba(0, 0, 0, 0.7);
-    padding: 20px;
-    border-radius: 10px;
-    backdrop-filter: blur(10px);
+    /* UI container no longer draws a background; individual HUD elements are styled themselves */
+    background: transparent;
+    padding: 0;
+    border-radius: 0;
+    backdrop-filter: none;
 }
 
 
@@ -37,6 +38,12 @@ body {
 
 
 .hidden {
+    display: none;
+}
+
+/* Ensure hidden overrides element-specific display on round UI */
+#roundBanner.hidden,
+#roundCountdown.hidden {
     display: none;
 }
 
@@ -283,6 +290,12 @@ body {
     font-weight: bold;
     color: #fff;
     text-align: left; /* Changed to left for consistency */
+    /* Give the banner its own background so it is not tied to #ui bottom-right panel */
+    background: rgba(0, 0, 0, 0.7);
+    padding: 8px 12px;
+    border-radius: 10px;
+    backdrop-filter: blur(10px);
+    display: inline-block;
 }
 
 #roundCountdown {
@@ -295,4 +308,10 @@ body {
     font-weight: 800;
     color: #00ff88;
     text-shadow: 0 0 12px rgba(0, 255, 136, 0.6);
+    /* Give the countdown its own background so it is not tied to #ui bottom-right panel */
+    background: rgba(0, 0, 0, 0.7);
+    padding: 8px 12px;
+    border-radius: 10px;
+    backdrop-filter: blur(10px);
+    display: inline-block;
 }

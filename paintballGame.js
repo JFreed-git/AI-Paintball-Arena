@@ -183,11 +183,11 @@
       if (remain > 0) {
         el.textContent = String(remain);
       } else {
-        // Show GO briefly then hide
+        // Show GO, then hide after 1s
         el.textContent = 'GO!';
         setTimeout(() => {
           el.classList.add('hidden');
-        }, 400);
+        }, 1000);
 
         try { clearInterval(state.countdownTimer); } catch {}
         state.countdownTimer = 0;
