@@ -37,19 +37,36 @@
     return dist2 <= radius * radius;
   }
 
-  // Visual tracer line between two points, auto-removed shortly
+  // Visual bullet: small sphere that travels from origin to hit point
   function spawnTracer(origin, end, color = 0x00ff88, lifetimeMs = 60) {
     try {
-      const geom = new THREE.BufferGeometry().setFromPoints([origin, end]);
-      const mat = new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.9 });
-      const line = new THREE.Line(geom, mat);
-      line.frustumCulled = false;
-      scene.add(line);
-      setTimeout(() => {
-        scene.remove(line);
-        geom.dispose();
-        mat.dispose();
-      }, lifetimeMs);
+      const radius = 0.06;
+      const geom = new THREE.SphereGeometry(radius, 12, 12);
+      const mat = new THREE.MeshBasicMaterial({ color });
+      const bullet = new THREE.Mesh(geom, mat);
+      bullet.frustumCulled = false;
+      bullet.position.copy(origin);
+      scene.add(bullet);
+
+      const totalDist = origin.distanceTo(end);
+      const speed = 120; // units per second
+      const travelMs = (totalDist / Math.max(0.001, speed)) * 1000;
+      const duration = Math.max(lifetimeMs, travelMs);
+
+      const start = performance.now();
+      function step() {
+        const now = performance.now();
+        const t = Math.min(1, (now - start) / duration);
+        const pos = new THREE.Vector3().lerpVectors(origin, end, t);
+        bullet.position.copy(pos);
+        if (t < 1) {
+          requestAnimationFrame(step);
+        } else {
+          scene.remove(bullet);
+          try { geom.dispose(); mat.dispose(); } catch {}
+        }
+      }
+      requestAnimationFrame(step);
     } catch {}
   }
 

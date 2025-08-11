@@ -12,16 +12,16 @@
 
   // Tunables
   const WALK_SPEED = 4.5;
-  const SPRINT_SPEED = 6.5;
-  const PLAYER_RADIUS = 0.35;
+  const SPRINT_SPEED = 8.5;
+  const PLAYER_RADIUS = 0.5;
 
   const FIRE_COOLDOWN_MS = 180; // ~333 RPM
-  const MAG_SIZE = 12;
+  const MAG_SIZE = 24;
   const RELOAD_TIME_SEC = 2.0;
 
-  const BASE_SPREAD_RAD = 0.0052;      // ~0.3 deg
+  const BASE_SPREAD_RAD = 0.0;      // no base spread when not sprinting
   const SPRINT_SPREAD_BONUS_RAD = 0.012; // ~0.7 deg
-  const BASE_CROSSHAIR_SPREAD_PX = 10;
+  const BASE_CROSSHAIR_SPREAD_PX = 0;
   const SPRINT_CROSSHAIR_BONUS_PX = 10;
 
   const PLAYER_DAMAGE = 18; // per hit to AI
@@ -113,9 +113,16 @@
     }
   }
 
+  function spreadRadToPx(spreadRad) {
+    const fov = (camera && camera.isPerspectiveCamera) ? camera.fov : 75;
+    const fovRad = fov * Math.PI / 180;
+    const focalPx = (window.innerHeight / 2) / Math.tan(fovRad / 2);
+    const px = Math.tan(Math.max(0, spreadRad)) * focalPx;
+    return Math.max(0, Math.min(60, px)); // clamp for readability
+  }
   function setCrosshairBySprint(sprinting) {
-    const px = BASE_CROSSHAIR_SPREAD_PX + (sprinting ? SPRINT_CROSSHAIR_BONUS_PX : 0);
-    setCrosshairSpread(px);
+    const spread = sprinting ? SPRINT_SPREAD_BONUS_RAD : 0;
+    setCrosshairSpread(spreadRadToPx(spread));
   }
 
   // Round/match flow
@@ -202,7 +209,7 @@
     if (input.fireDown && playerCanShoot(now)) {
       const dir = new THREE.Vector3();
       camera.getWorldDirection(dir);
-      const spread = BASE_SPREAD_RAD + (input.sprint ? SPRINT_SPREAD_BONUS_RAD : 0);
+      const spread = input.sprint ? SPRINT_SPREAD_BONUS_RAD : 0;
 
       const hit = fireHitscan(camera.position.clone(), dir, {
         spreadRad: spread,
@@ -292,6 +299,8 @@
     if (window.paintballActive) {
       try { if (typeof stopPaintballInternal === 'function') stopPaintballInternal(); } catch {}
     }
+    // Stop standard Aim Trainer session if running to avoid stray targets and walls
+    try { if (typeof stopGameInternal === 'function') stopGameInternal(); } catch {}
     const difficulty = (opts && opts.difficulty) || 'Easy';
     state = newState(difficulty);
 

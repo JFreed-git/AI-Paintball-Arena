@@ -7,7 +7,7 @@ class AIOpponent {
     this.difficulty = difficulty;
     this.arena = arena;
     this.walkSpeed = 3.6;
-    this.radius = 0.3;
+    this.radius = 0.5;
     this.health = 100;
     this.alive = true;
 
@@ -41,6 +41,7 @@ class AIOpponent {
     const gun = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.1, 0.1), new THREE.MeshLambertMaterial({ color: 0x333333 }));
     gun.position.set(0.35, 1.4, -0.1);
     group.add(head, torso, gun);
+    group.scale.set(1.5, 1.5, 1.5);
     group.position.copy(spawn || new THREE.Vector3());
     this.mesh = group;
     scene.add(group);
@@ -81,7 +82,10 @@ class AIOpponent {
   }
 
   get position() { return this.mesh.position; }
-  get eyePos() { return this.mesh.position.clone().add(new THREE.Vector3(0, 1.6, 0)); }
+  get eyePos() {
+    const sy = (this.mesh && this.mesh.scale) ? this.mesh.scale.y : 1;
+    return this.mesh.position.clone().add(new THREE.Vector3(0, 1.6 * sy, 0));
+  }
 
   takeDamage(amount) {
     if (!this.alive) return;
@@ -189,7 +193,7 @@ class AIOpponent {
     if (moveVec.lengthSq() > 0) {
       const delta = moveVec.multiplyScalar(dt);
       this.position.add(delta);
-      resolveCollisions2D(this.position, 0.3, this.arena.colliders);
+      resolveCollisions2D(this.position, this.radius, this.arena.colliders);
     }
 
     // Face toward player (y-rotation only)
@@ -198,7 +202,8 @@ class AIOpponent {
 
     // Update health bar overlay position (project head position)
     if (this._healthRoot) {
-      const headPos = this.eyePos.clone().add(new THREE.Vector3(0, 0.35, 0));
+      const sy = (this.mesh && this.mesh.scale) ? this.mesh.scale.y : 1;
+      const headPos = this.eyePos.clone().add(new THREE.Vector3(0, 0.35 * sy, 0));
       const ndc = headPos.project(camera);
       const w = window.innerWidth, h = window.innerHeight;
       const onScreen =
