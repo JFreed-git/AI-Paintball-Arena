@@ -206,3 +206,152 @@ body {
 .menu button.secondary:hover {
     background: rgba(255, 255, 255, 0.06);
 }
+
+/* Paintball HUD */
+#healthContainer {
+    position: absolute;
+    left: 20px;
+    bottom: 20px;
+    z-index: 150;
+    background: rgba(0, 0, 0, 0.55);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 10px;
+    padding: 10px 12px;
+    min-width: 220px;
+    backdrop-filter: blur(6px);
+}
+
+#sprintIndicator {
+    text-align: center;
+    color: #00ff88;
+    font-weight: bold;
+    letter-spacing: 1px;
+    margin-bottom: 6px;
+    font-size: 12px;
+    text-shadow: 0 0 8px rgba(0,255,136,0.4);
+}
+
+#healthBar {
+    width: 100%;
+    height: 12px;
+    background: #1b1b1b;
+    border: 1px solid #333;
+    border-radius: 6px;
+    overflow: hidden;
+}
+
+#healthFill {
+    height: 100%;
+    width: 100%;
+    background: linear-gradient(90deg, #24e66a, #0fb85a);
+    transition: width 0.15s ease;
+}
+
+#ammoRow {
+    margin-top: 8px;
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    font-family: Consolas, 'Courier New', monospace;
+    font-size: 14px;
+}
+
+#ammoDisplay {
+    color: #fff;
+}
+
+#reloadIndicator {
+    color: #ffcc00;
+    font-weight: bold;
+    text-shadow: 0 0 6px rgba(255,204,0,0.5);
+}
+
+/* Enhanced crosshair for paintball */
+#crosshair {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    pointer-events: none;
+    z-index: 160;
+    /* Use CSS var to control spread in px */
+    --spread: 10px;
+}
+
+#crosshair .ch-bar {
+    position: absolute;
+    background: #00ff88;
+    filter: drop-shadow(0 0 6px rgba(0,255,136,0.7));
+    border-radius: 1px;
+}
+
+/* Horizontal bars */
+#crosshair .ch-left,
+#crosshair .ch-right {
+    top: 0;
+    height: 2px;
+    width: 14px;
+}
+
+#crosshair .ch-left { left: calc(var(--spread) * -1 - 14px); }
+#crosshair .ch-right { left: var(--spread); }
+
+/* Vertical bars */
+#crosshair .ch-top,
+#crosshair .ch-bottom {
+    left: 0;
+    width: 2px;
+    height: 14px;
+}
+
+#crosshair .ch-top { top: calc(var(--spread) * -1 - 14px); }
+#crosshair .ch-bottom { top: var(--spread); }
+
+#crosshair.dimmed .ch-bar {
+    opacity: 0.5;
+}
+
+/* Offscreen indicator arrow style (existing) */
+.indicator {
+    position: absolute;
+    width: 28px;
+    height: 28px;
+    line-height: 28px;
+    text-align: center;
+    color: #ffcc00;
+    font-size: 22px;
+    font-weight: bold;
+    pointer-events: none;
+    z-index: 150;
+    filter: drop-shadow(0 0 6px rgba(255, 204, 0, 0.8));
+}
+
+/* Optional: style for spawn rings if using DOM overlay (3D rings handled in scene) */
+.spawn-ring {
+    border: 3px solid #ffd700;
+    border-radius: 50%;
+}
+
+/* AI health bar overlay (positioned above AI head via JS) */
+.aiHealth {
+    position: absolute;
+    transform: translate(-50%, -140%);
+    pointer-events: none;
+    z-index: 180;
+}
+
+.aiHealthBg {
+    width: 90px;
+    height: 8px;
+    background: rgba(0, 0, 0, 0.55);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 5px;
+    overflow: hidden;
+    box-shadow: 0 0 8px rgba(0,0,0,0.4);
+}
+
+.aiHealthFill {
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, #ff6a6a, #d61d1d);
+}

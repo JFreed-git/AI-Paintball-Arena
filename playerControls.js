@@ -1,4 +1,43 @@
-// Player controls and input handlers
+/**
+ * Player controls and input handlers
+ * Camera defaults/reset are defined here to keep input + camera behavior together.
+ */
+
+// Camera defaults and reset live with player controls
+const DEFAULT_CAMERA_POS = new THREE.Vector3(0, 2, 5);
+const DEFAULT_CAMERA_YAW = 0;   // facing -Z
+const DEFAULT_CAMERA_PITCH = 0; // level
+function resetCameraToDefaults() {
+  if (typeof camera === 'undefined' || !camera) return;
+  camera.position.copy(DEFAULT_CAMERA_POS);
+  camera.rotation.order = 'YXZ';
+  camera.rotation.x = DEFAULT_CAMERA_PITCH;
+  camera.rotation.y = DEFAULT_CAMERA_YAW;
+  camera.rotation.z = 0;
+  camera.up.set(0, 1, 0);
+}
+
+/* Paintball input state (inputs live here; physics elsewhere) */
+const INPUT_STATE = { fireDown: false, sprint: false, reloadPressed: false, moveX: 0, moveZ: 0 };
+let _w = false, _a = false, _s = false, _d = false;
+function recomputeMoveAxes() {
+  INPUT_STATE.moveZ = (_w ? 1 : 0) + (_s ? -1 : 0);
+  INPUT_STATE.moveX = (_d ? 1 : 0) + (_a ? -1 : 0);
+}
+// Mouse button state for paintball
+function onMouseDownGeneric() { INPUT_STATE.fireDown = true; }
+function onMouseUpGeneric() { INPUT_STATE.fireDown = false; }
+// One-shot accessor for reload
+function getInputState() {
+  const out = { ...INPUT_STATE };
+  if (INPUT_STATE.reloadPressed) {
+    out.reloadPressed = true;
+    INPUT_STATE.reloadPressed = false;
+  }
+  return out;
+}
+// Expose to paintball mode
+window.getInputState = getInputState;
 
 function bindPlayerControls(renderer) {
   // Window and renderer-level listeners
@@ -6,15 +45,19 @@ function bindPlayerControls(renderer) {
   if (renderer && renderer.domElement) {
     renderer.domElement.addEventListener('click', onMouseClick);
     renderer.domElement.addEventListener('mousemove', onMouseMove);
+    // Additional input hooks for Paintball mode
+    renderer.domElement.addEventListener('mousedown', onMouseDownGeneric);
+    renderer.domElement.addEventListener('mouseup', onMouseUpGeneric);
   }
 
   // Global listeners
   document.addEventListener('pointerlockchange', onPointerLockChange);
   document.addEventListener('keydown', onGlobalKeyDown);
+  document.addEventListener('keyup', onGlobalKeyUp);
 }
 
 function onMouseMove(event) {
-  if (!gameActive) return;
+  if (!gameActive && !window.paintballActive) return;
 
   // Raycasting mouse coords (kept for completeness)
   mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
@@ -31,7 +74,8 @@ function onMouseMove(event) {
   camera.rotation.x -= movementY * factor;
 
   // Limit vertical rotation and prevent roll
-  camera.rotation.x = Math.max(-Math.PI / 3, Math.min(Math.PI / 3, camera.rotation.x));
+  const maxPitch = Math.PI / 2 - 0.001; // allow ~±89.9°
+  camera.rotation.x = Math.max(-maxPitch, Math.min(maxPitch, camera.rotation.x));
   camera.rotation.z = 0;
 }
 
@@ -81,24 +125,34 @@ function onPointerLockChange() {
   const canvas = renderer && renderer.domElement;
   const locked = document.pointerLockElement === canvas;
 
-  if (!locked && gameActive) {
+  if (!locked) {
     // Heuristic:
-    // - If the document is focused and visible, treat pointer unlock as explicit ESC
-    //   and return to main menu immediately (single ESC should exit).
-    // - If focus/visibility was lost (e.g., Alt-Tab), do nothing; clicking the canvas
-    //   will re-lock the pointer (handled in onMouseClick).
+    // - If the document is focused and visible, treat pointer unlock as explicit ESC.
+    // - If focus/visibility was lost (Alt-Tab), do nothing; clicking will re-lock.
     const focused = typeof document.hasFocus === 'function' ? document.hasFocus() : true;
     const visible = typeof document.visibilityState === 'string' ? (document.visibilityState === 'visible') : true;
 
     if (focused && visible) {
-      returnToMainMenu();
+      if (window.paintballActive) {
+        try { if (typeof stopPaintballInternal === 'function') stopPaintballInternal(); } catch {}
+        showOnlyMenu('mainMenu');
+        setHUDVisible(false);
+      } else if (gameActive) {
+        returnToMainMenu();
+      }
     }
   }
 }
 
 function onGlobalKeyDown(e) {
   if (e.key === 'Escape') {
-    // From anywhere, go to main menu
+    // From anywhere, go to main menu/stop mode
+    if (window.paintballActive) {
+      try { if (typeof stopPaintballInternal === 'function') stopPaintballInternal(); } catch {}
+      showOnlyMenu('mainMenu');
+      setHUDVisible(false);
+      return;
+    }
     if (gameActive) {
       returnToMainMenu();
     } else {
@@ -106,5 +160,26 @@ function onGlobalKeyDown(e) {
       showOnlyMenu('mainMenu');
       setHUDVisible(false);
     }
+    return;
+  }
+
+  // Paintball input tracking (WASD + Sprint + Reload)
+  switch (e.code) {
+    case 'KeyW': _w = true; recomputeMoveAxes(); break;
+    case 'KeyA': _a = true; recomputeMoveAxes(); break;
+    case 'KeyS': _s = true; recomputeMoveAxes(); break;
+    case 'KeyD': _d = true; recomputeMoveAxes(); break;
+    case 'ShiftLeft': INPUT_STATE.sprint = true; break;
+    case 'KeyR': INPUT_STATE.reloadPressed = true; break;
+  }
+}
+
+function onGlobalKeyUp(e) {
+  switch (e.code) {
+    case 'KeyW': _w = false; recomputeMoveAxes(); break;
+    case 'KeyA': _a = false; recomputeMoveAxes(); break;
+    case 'KeyS': _s = false; recomputeMoveAxes(); break;
+    case 'KeyD': _d = false; recomputeMoveAxes(); break;
+    case 'ShiftLeft': INPUT_STATE.sprint = false; break;
   }
 }

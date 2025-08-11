@@ -121,11 +121,15 @@ function bindUI() {
   const gotoUntimed = document.getElementById('gotoUntimed');
   const backFromTimed = document.getElementById('backFromTimed');
   const backFromUntimed = document.getElementById('backFromUntimed');
+  const gotoPaintball = document.getElementById('gotoPaintball');
+  const backFromPaintball = document.getElementById('backFromPaintball');
 
   if (gotoTimed) gotoTimed.addEventListener('click', () => showOnlyMenu('timedMenu'));
   if (gotoUntimed) gotoUntimed.addEventListener('click', () => showOnlyMenu('untimedMenu'));
   if (backFromTimed) backFromTimed.addEventListener('click', () => showOnlyMenu('mainMenu'));
   if (backFromUntimed) backFromUntimed.addEventListener('click', () => showOnlyMenu('mainMenu'));
+  if (gotoPaintball) gotoPaintball.addEventListener('click', () => showOnlyMenu('paintballMenu'));
+  if (backFromPaintball) backFromPaintball.addEventListener('click', () => showOnlyMenu('mainMenu'));
 
   // Start buttons
   const startTimed = document.getElementById('startTimed');
@@ -148,10 +152,26 @@ function bindUI() {
     });
   }
 
+  // Paintball (AI) start
+  const startPaintball = document.getElementById('startPaintball');
+  if (startPaintball) {
+    startPaintball.addEventListener('click', () => {
+      const sel = document.getElementById('paintballDifficulty');
+      const difficulty = sel ? sel.value : 'Easy';
+      if (typeof startPaintballGame === 'function') {
+        startPaintballGame({ difficulty });
+      }
+    });
+  }
+
   // Results screen
   const backToMenu = document.getElementById('backToMenu');
   if (backToMenu) {
     backToMenu.addEventListener('click', () => {
+      // If paintball is running, stop it
+      try {
+        if (typeof stopPaintballInternal === 'function') stopPaintballInternal();
+      } catch {}
       showOnlyMenu('mainMenu');
       setHUDVisible(false);
     });

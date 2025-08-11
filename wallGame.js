@@ -27,8 +27,14 @@ function prepareWall() {
 
   // Visual wall panel (lighter gray than floor)
   const wallGeom = new THREE.PlaneGeometry(wallWidth, wallHeight);
-  const wallMat = new THREE.MeshLambertMaterial({ color: 0x666666, side: THREE.DoubleSide });
+  // Use environment-provided wall material/texture if available; fallback to solid color.
+  const usedSharedMat = (typeof getWallMaterial === 'function');
+  const wallMat = usedSharedMat
+    ? getWallMaterial()
+    : new THREE.MeshLambertMaterial({ color: 0x666666, side: THREE.DoubleSide });
   const wallMesh = new THREE.Mesh(wallGeom, wallMat);
+  wallMesh.userData = wallMesh.userData || {};
+  wallMesh.userData.sharedEnvMat = usedSharedMat;
   wallMesh.position.copy(center);
   // Make plane face the camera (plane front +Z should face toward camera => align +Z with -forward)
   wallMesh.lookAt(center.clone().sub(forward));
@@ -54,7 +60,10 @@ function clearWall() {
   if (wallConfig && wallConfig.mesh) {
     scene.remove(wallConfig.mesh);
     wallConfig.mesh.geometry.dispose();
-    wallConfig.mesh.material.dispose();
+    const shared = wallConfig.mesh.userData && wallConfig.mesh.userData.sharedEnvMat;
+    if (!shared) {
+      wallConfig.mesh.material.dispose();
+    }
   }
   wallConfig = null;
 }

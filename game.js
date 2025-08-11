@@ -12,46 +12,37 @@ let mouseSensitivity = 1.0;
 let isTimed = false;
 let targetCount = 5;
 
+
 // ------- Initialization -------
 function init() {
   // Create scene
   scene = new THREE.Scene();
-  scene.background = new THREE.Color(0x001122);
-  scene.fog = new THREE.Fog(0x001122, 10, 100);
 
   // Create camera
   camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
   camera.position.set(0, 2, 5);
   camera.rotation.order = 'YXZ';
   camera.up.set(0, 1, 0);
+  resetCameraToDefaults();
 
   // Create renderer
   renderer = new THREE.WebGLRenderer({ antialias: true });
   renderer.setSize(window.innerWidth, window.innerHeight);
   document.getElementById('gameContainer').appendChild(renderer.domElement);
+  // Build base environment (background, fog, lights, ground)
+  setupEnvironment();
+
+  // Ensure crosshair element exists in DOM
+  ensureCrosshair();
 
   // Setup raycaster for shooting
   raycaster = new THREE.Raycaster();
   mouse = new THREE.Vector2();
 
-  // Add lighting
-  const ambientLight = new THREE.AmbientLight(0x404040, 0.6);
-  scene.add(ambientLight);
 
-  const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
-  directionalLight.position.set(10, 10, 5);
-  scene.add(directionalLight);
-
-  // Create ground
-  const groundGeometry = new THREE.PlaneGeometry(100, 100);
-  const groundMaterial = new THREE.MeshLambertMaterial({ color: 0x333333 });
-  const ground = new THREE.Mesh(groundGeometry, groundMaterial);
-  ground.rotation.x = -Math.PI / 2;
-  ground.position.y = -1;
-  scene.add(ground);
 
   // Create simple weapon model
-  createWeapon();
+  createWeaponModel();
 
   // Bind player controls and UI/menu logic
   bindPlayerControls(renderer);
@@ -66,22 +57,14 @@ function init() {
   showOnlyMenu('mainMenu');
 }
 
-function createWeapon() {
-  // Simple weapon - just a basic rectangle for now
-  const weaponGeometry = new THREE.BoxGeometry(0.1, 0.1, 1);
-  const weaponMaterial = new THREE.MeshLambertMaterial({ color: 0x444444 });
-  const weapon = new THREE.Mesh(weaponGeometry, weaponMaterial);
-  weapon.position.set(0.5, -0.5, -2);
-  weapon.rotation.x = 0.2;
-  camera.add(weapon);
-  scene.add(camera);
-}
 
 // ------- Game lifecycle -------
 function startGame(config) {
   // config: { mode: 'Free Space' | 'Wall', isTimed: boolean, duration?: number }
   // Clean any previous session
   stopGameInternal();
+  // Ensure a consistent starting camera transform each session
+  resetCameraToDefaults();
 
   gameActive = true;
   score = 0;
