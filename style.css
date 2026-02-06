@@ -387,6 +387,10 @@ body {
     gap: 10px;
 }
 
+#devPassword.hidden {
+    display: none;
+}
+
 #devPasswordInput {
     padding: 8px 12px;
     background: #1a1a1a;
@@ -426,6 +430,10 @@ body {
     display: flex;
     flex-direction: column;
     gap: 8px;
+}
+
+#devCommands.hidden {
+    display: none;
 }
 
 #devCommands .dev-cmd {

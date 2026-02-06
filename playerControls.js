@@ -4,7 +4,7 @@
  */
 
 // Camera defaults and reset live with player controls
-const DEFAULT_CAMERA_POS = new THREE.Vector3(0, 2, 5);
+const DEFAULT_CAMERA_POS = new THREE.Vector3(0, (typeof GROUND_Y !== 'undefined' ? GROUND_Y : -1) + (typeof EYE_HEIGHT !== 'undefined' ? EYE_HEIGHT : 3.0), 5);
 const DEFAULT_CAMERA_YAW = 0;   // facing -Z
 const DEFAULT_CAMERA_PITCH = 0; // level
 function resetCameraToDefaults() {
@@ -18,7 +18,7 @@ function resetCameraToDefaults() {
 }
 
 /* Paintball input state (inputs live here; physics elsewhere) */
-const INPUT_STATE = { fireDown: false, sprint: false, reloadPressed: false, moveX: 0, moveZ: 0 };
+const INPUT_STATE = { fireDown: false, sprint: false, reloadPressed: false, jump: false, moveX: 0, moveZ: 0 };
 let _w = false, _a = false, _s = false, _d = false;
 function recomputeMoveAxes() {
   INPUT_STATE.moveZ = (_w ? 1 : 0) + (_s ? -1 : 0);
@@ -33,6 +33,10 @@ function getInputState() {
   if (INPUT_STATE.reloadPressed) {
     out.reloadPressed = true;
     INPUT_STATE.reloadPressed = false;
+  }
+  if (INPUT_STATE.jump) {
+    out.jump = true;
+    INPUT_STATE.jump = false;
   }
   return out;
 }
@@ -131,6 +135,7 @@ function onGlobalKeyDown(e) {
     case 'KeyD': _d = true; recomputeMoveAxes(); break;
     case 'ShiftLeft': INPUT_STATE.sprint = true; break;
     case 'KeyR': INPUT_STATE.reloadPressed = true; break;
+    case 'Space': INPUT_STATE.jump = true; break;
   }
 }
 

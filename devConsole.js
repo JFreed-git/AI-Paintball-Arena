@@ -3,6 +3,7 @@
   var PASSWORD = 'devpower5';
   var authenticated = false;
   window.devAuthenticated = false;
+  window.devGodMode = false;
 
   var consoleEl = document.getElementById('devConsole');
   var passwordView = document.getElementById('devPassword');
@@ -115,6 +116,7 @@
 
     if (cmd === 'godMode') {
       cheats.godMode = !cheats.godMode;
+      window.devGodMode = cheats.godMode;
       btn.textContent = 'God Mode: ' + (cheats.godMode ? 'ON' : 'OFF');
       btn.classList.toggle('active', cheats.godMode);
     } else if (cmd === 'unlimitedAmmo') {
@@ -135,6 +137,9 @@
     } else if (cmd === 'killEnemy') {
       if (state && state.ai && state.ai.alive) {
         state.ai.takeDamage(9999);
+        if (!state.ai.alive && window.endPaintballRound) {
+          window.endPaintballRound('player');
+        }
       }
     } else if (cmd === 'heal') {
       if (state && state.player) {

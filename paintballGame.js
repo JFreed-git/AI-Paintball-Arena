@@ -6,6 +6,7 @@
   window.devSpectatorMode = false;
 
   window.getPaintballState = function () { return state; };
+  window.endPaintballRound = function (winner) { if (state && state.match.roundActive) endRound(winner); };
 
   // Tunables
   var WALK_SPEED = 4.5;
@@ -33,6 +34,9 @@
         walkSpeed: WALK_SPEED,
         sprintSpeed: SPRINT_SPEED,
         radius: PLAYER_RADIUS,
+        feetY: GROUND_Y,
+        verticalVelocity: 0,
+        grounded: true,
         health: 100,
         alive: true,
         weapon: {
@@ -123,6 +127,10 @@
     var p = state.player;
     p.health = 100;
     p.alive = true;
+    p.feetY = GROUND_Y;
+    p.verticalVelocity = 0;
+    p.grounded = true;
+    camera.position.y = GROUND_Y + EYE_HEIGHT;
     p.weapon.ammo = p.weapon.magSize;
     p.weapon.reloading = false;
     p.weapon.lastShotTime = 0;
@@ -238,10 +246,10 @@
     sharedSetSprintUI(!!input.sprint, state.hud.sprintIndicator);
 
     if (state.inputEnabled && !window.devSpectatorMode) {
-      updateXZPhysics(
+      updateFullPhysics(
         state.player,
-        { moveX: input.moveX || 0, moveZ: input.moveZ || 0, sprint: !!input.sprint },
-        { colliders: state.arena.colliders },
+        { moveX: input.moveX || 0, moveZ: input.moveZ || 0, sprint: !!input.sprint, jump: !!input.jump },
+        { colliders: state.arena.colliders, solids: state.arena.solids },
         dt
       );
     }
@@ -258,6 +266,7 @@
         playerRadius: PLAYER_RADIUS,
         onPlayerHit: function (dmg) {
           if (!state.player.alive) return;
+          if (window.devGodMode) return;
           state.player.health = Math.max(0, state.player.health - dmg);
           updateHUD();
           if (state.player.health <= 0) {

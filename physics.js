@@ -1,5 +1,12 @@
-// Lightweight 2D (XZ-plane) movement + collision for a capsule-like player/opponent.
-// - Inputs are kept in playerControls.js (WASD, Shift). This file focuses on physics only.
+// Physics: 2D (XZ) movement + collision + vertical (gravity, jumping, ramps).
+// Inputs are kept in playerControls.js (WASD, Shift, Space). This file focuses on physics only.
+
+// --- Vertical physics constants ---
+var GROUND_Y = -1;
+var GRAVITY = -20;
+var JUMP_VELOCITY = 8.5;
+var EYE_HEIGHT = 3.0;
+var MAX_STEP_HEIGHT = 0.3;
 
 // Compute camera-relative movement direction on the XZ plane:
 // moveZ: forward/back (-1..1), moveX: right/left (-1..1)
@@ -34,20 +41,56 @@ function computeMoveDirXZ(moveZ, moveX) {
   return dir;
 }
 
+// Raycast downward to find the highest walkable surface at a given XZ position.
+// Returns the Y of the ground surface (top of geometry), or GROUND_Y if nothing found.
+// pos: THREE.Vector3 (XZ used), solids: array of THREE.Mesh, feetY: current feet Y,
+// grounded: boolean (when airborne, accept any surface below feetY; when grounded, limit to step height)
+function getGroundHeight(pos, solids, feetY, grounded) {
+  if (!solids || solids.length === 0) return GROUND_Y;
+
+  var currentFeetY = (typeof feetY === 'number') ? feetY : GROUND_Y;
+  var rc = new THREE.Raycaster();
+  // Cast from well above the player downward
+  var origin = new THREE.Vector3(pos.x, currentFeetY + EYE_HEIGHT + 5, pos.z);
+  rc.set(origin, new THREE.Vector3(0, -1, 0));
+  rc.far = origin.y - GROUND_Y + 10;
+
+  var hits = rc.intersectObjects(solids, true);
+  var bestY = GROUND_Y;
+  for (var i = 0; i < hits.length; i++) {
+    var hitY = hits[i].point.y;
+    if (grounded) {
+      // When grounded, only accept surfaces within step tolerance above current feet
+      if (hitY > bestY && hitY <= currentFeetY + MAX_STEP_HEIGHT + 0.5) {
+        bestY = hitY;
+      }
+    } else {
+      // When airborne/falling, accept any surface at or below current feet position
+      if (hitY > bestY && hitY <= currentFeetY) {
+        bestY = hitY;
+      }
+    }
+  }
+  return bestY;
+}
+
 // Resolve collisions against an array of AABBs (THREE.Box3) in XZ plane with sliding.
 // position: THREE.Vector3 (modified in-place)
 // radius: number (capsule radius approximation)
 // aabbs: array of THREE.Box3
-// yCheck: the Y height where our capsule center roughly exists (default ~2)
-function resolveCollisions2D(position, radius, aabbs, yCheck = 2) {
-  // For 2D resolution, we expand each AABB in X/Z by the radius and push the point out
-  // along the axis of least penetration.
+// feetY: current feet Y position for dynamic band check (default GROUND_Y)
+function resolveCollisions2D(position, radius, aabbs, feetY) {
+  if (feetY === undefined) feetY = GROUND_Y;
+  var bandMin = feetY + 0.2;
+  var bandMax = feetY + EYE_HEIGHT + 0.2;
+
   for (let i = 0; i < aabbs.length; i++) {
     const box = aabbs[i];
-    // Quick vertical overlap test so we don't collide with very low/high objects
-    // Treat player "height band" roughly [0.2, 3.2]
-    const bandMin = 0.2;
-    const bandMax = 3.2;
+    // Skip colliders the player is standing on top of (feet at or above the collider top)
+    if (feetY + 0.1 >= box.max.y) continue;
+    // Skip colliders entirely above our head
+    if (box.min.y > bandMax) continue;
+    // Skip colliders that don't vertically overlap our body band
     if (box.max.y < bandMin || box.min.y > bandMax) continue;
 
     const minX = box.min.x - radius;
@@ -80,9 +123,87 @@ function resolveCollisions2D(position, radius, aabbs, yCheck = 2) {
   }
 }
 
-// Update entity (player or AI) XZ movement with collisions.
+// Full 3D physics update: horizontal movement + gravity + jumping + ground detection.
+// state: { position: THREE.Vector3, feetY: number, verticalVelocity: number, grounded: boolean,
+//          walkSpeed: number, sprintSpeed?: number, radius: number }
+// input: { moveX?, moveZ?, sprint?, jump?, worldMoveDir?: THREE.Vector3 }
+//   - If worldMoveDir is set (AI), use it directly instead of camera-relative WASD
+// arena: { colliders: Array<THREE.Box3>, solids: Array<THREE.Mesh> }
+// dt: seconds
+function updateFullPhysics(state, input, arena, dt) {
+  // 1. Compute horizontal direction
+  var dir;
+  if (input.worldMoveDir && input.worldMoveDir.lengthSq && input.worldMoveDir.lengthSq() > 1e-6) {
+    dir = input.worldMoveDir.clone();
+    dir.y = 0;
+    if (dir.lengthSq() > 1e-6) dir.normalize(); else dir.set(0, 0, 0);
+  } else {
+    dir = computeMoveDirXZ(input.moveZ || 0, input.moveX || 0);
+  }
+
+  // 2. Apply horizontal movement
+  var speed = input.sprint && state.sprintSpeed ? state.sprintSpeed : state.walkSpeed;
+  if (dir.lengthSq() > 0) {
+    state.position.x += dir.x * speed * dt;
+    state.position.z += dir.z * speed * dt;
+  }
+
+  // 3. Detect ground height at new XZ
+  var solids = (arena && arena.solids) ? arena.solids : [];
+  var groundH = getGroundHeight(state.position, solids, state.feetY, state.grounded);
+
+  // 4. Jump
+  if (input.jump && state.grounded) {
+    state.verticalVelocity = JUMP_VELOCITY;
+    state.grounded = false;
+  }
+
+  // 5. Apply gravity when not grounded
+  if (!state.grounded) {
+    state.verticalVelocity += GRAVITY * dt;
+    state.feetY += state.verticalVelocity * dt;
+
+    // Land when feet reach ground
+    if (state.feetY <= groundH) {
+      state.feetY = groundH;
+      state.verticalVelocity = 0;
+      state.grounded = true;
+    }
+  } else {
+    // 6. Grounded: snap to ground, detect drops
+    if (groundH < state.feetY - MAX_STEP_HEIGHT) {
+      // Ground dropped away — start falling
+      state.grounded = false;
+      state.verticalVelocity = 0;
+    } else {
+      // Smooth snap to ground (handles ramps)
+      state.feetY = groundH;
+    }
+  }
+
+  // 7. Resolve 2D collisions with dynamic feetY
+  if (arena && Array.isArray(arena.colliders)) {
+    resolveCollisions2D(state.position, state.radius || 0.3, arena.colliders, state.feetY);
+  }
+
+  // 8. Recheck ground after collision push-out (may have been pushed to different XZ)
+  var groundH2 = getGroundHeight(state.position, solids, state.feetY, state.grounded);
+  if (state.grounded) {
+    if (groundH2 < state.feetY - MAX_STEP_HEIGHT) {
+      state.grounded = false;
+      state.verticalVelocity = 0;
+    } else {
+      state.feetY = groundH2;
+    }
+  }
+
+  // 9. Set eye-height position
+  state.position.y = state.feetY + EYE_HEIGHT;
+}
+
+// Update entity (player or AI) XZ movement with collisions (legacy — kept for compatibility).
 // state: { position: THREE.Vector3, walkSpeed: number, sprintSpeed?: number, radius: number }
-// input: { moveX: number, moveZ: number, sprint: boolean }  (for AI, set sprint=false typically)
+// input: { moveX: number, moveZ: number, sprint: boolean }
 // arena: { colliders: Array<THREE.Box3> }
 // dt: seconds
 function updateXZPhysics(state, input, arena, dt) {
@@ -112,11 +233,17 @@ function hasBlockingBetween(origin, target, solids) {
   raycaster.far = dist;
 
   const hits = raycaster.intersectObjects(solids, true);
-  // Ignore the target itself if it's part of solids; caller should pass solids excluding the target mesh.
   return hits && hits.length > 0;
 }
 
-// Expose functions globally
+// Expose functions and constants globally
+window.GROUND_Y = GROUND_Y;
+window.GRAVITY = GRAVITY;
+window.JUMP_VELOCITY = JUMP_VELOCITY;
+window.EYE_HEIGHT = EYE_HEIGHT;
+window.MAX_STEP_HEIGHT = MAX_STEP_HEIGHT;
+window.getGroundHeight = getGroundHeight;
 window.resolveCollisions2D = resolveCollisions2D;
+window.updateFullPhysics = updateFullPhysics;
 window.updateXZPhysics = updateXZPhysics;
 window.hasBlockingBetween = hasBlockingBetween;

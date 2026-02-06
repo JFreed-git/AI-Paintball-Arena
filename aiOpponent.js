@@ -1,37 +1,48 @@
 // AI opponent for Paintball mode
 // Responsibilities: A* pathfinding, movement, LOS, firing with ammo + reload, taking damage.
 // 3D health bar floats above the AI's head (billboarded toward camera).
+// Uses updateFullPhysics for movement (shared with player).
 
 class AIOpponent {
   constructor(opts) {
     const { difficulty = 'Easy', arena, spawn, color = 0xff5555 } = opts || {};
     this.difficulty = difficulty;
     this.arena = arena;
-    this.walkSpeed = 3.6;
+    this.walkSpeed = 4.5;
+    this.sprintSpeed = 8.5;
     this.radius = 0.5;
     this.maxHealth = 100;
     this.health = this.maxHealth;
     this.alive = true;
 
-    // Difficulty tuning
+    // Vertical physics state
+    this.feetY = GROUND_Y;
+    this.verticalVelocity = 0;
+    this.grounded = true;
+
+    // Difficulty tuning — only spread and cooldown vary; damage/mag/reload unified with player
     const diffs = {
-      Easy:   { spreadRad: 0.020, cooldownMs: 250, damage: 15, magSize: 8 },
-      Medium: { spreadRad: 0.012, cooldownMs: 166, damage: 20, magSize: 6 },
-      Hard:   { spreadRad: 0.008, cooldownMs: 166, damage: 20, magSize: 6 },
+      Easy:   { spreadRad: 0.020, cooldownMs: 250 },
+      Medium: { spreadRad: 0.012, cooldownMs: 166 },
+      Hard:   { spreadRad: 0.008, cooldownMs: 166 },
     };
     const d = diffs[this.difficulty] || diffs.Easy;
 
     this.weapon = {
       spreadRad: d.spreadRad,
       cooldownMs: d.cooldownMs,
-      damage: d.damage,
-      magSize: d.magSize,
-      ammo: d.magSize,
+      damage: 20,
+      magSize: 6,
+      ammo: 6,
       reloading: false,
       reloadEnd: 0,
       lastShotTime: 0,
-      reloadTimeSec: 2.0
+      reloadTimeSec: 2.5
     };
+
+    // Independent position (decoupled from mesh)
+    this._position = new THREE.Vector3();
+    if (spawn) this._position.copy(spawn);
 
     // Build a simple humanoid mesh
     const group = new THREE.Group();
@@ -44,16 +55,20 @@ class AIOpponent {
     gun.position.set(0.35, 1.4, -0.1);
     group.add(head, torso, gun);
     group.scale.set(1.5, 1.5, 1.5);
-    group.position.copy(spawn || new THREE.Vector3());
     this.mesh = group;
     scene.add(group);
 
-    // Align AI to ground
+    // Compute mesh ground offset (how much to shift mesh Y so feet sit at feetY)
     try {
+      group.position.set(0, 0, 0);
       const bbox = new THREE.Box3().setFromObject(group);
-      const dy = -1 - bbox.min.y;
-      group.position.y += dy;
-    } catch {}
+      this._meshFeetOffset = -bbox.min.y; // positive: add to feetY to get mesh.position.y
+    } catch (e) {
+      this._meshFeetOffset = 0;
+    }
+
+    // Place mesh at spawn
+    this._syncMeshFromPosition();
 
     // --- 3D Health Bar ---
     this._buildHealthBar3D();
@@ -69,6 +84,15 @@ class AIOpponent {
     this._pathIndex = 0;
     this._repathTimer = 0;
     this._waypointGraph = this._buildWaypointGraph();
+  }
+
+  // Sync mesh position from physics position
+  _syncMeshFromPosition() {
+    this.mesh.position.set(
+      this._position.x,
+      this.feetY + this._meshFeetOffset,
+      this._position.z
+    );
   }
 
   // --- 3D Health Bar ---
@@ -200,10 +224,9 @@ class AIOpponent {
     this._pathIndex = 0;
   }
 
-  get position() { return this.mesh.position; }
+  get position() { return this._position; }
   get eyePos() {
-    var sy = (this.mesh && this.mesh.scale) ? this.mesh.scale.y : 1;
-    return this.mesh.position.clone().add(new THREE.Vector3(0, 1.6 * sy, 0));
+    return new THREE.Vector3(this._position.x, this.feetY + EYE_HEIGHT, this._position.z);
   }
 
   takeDamage(amount) {
@@ -245,16 +268,17 @@ class AIOpponent {
       }
     }
 
-    // Movement
+    // Movement — compute a world-space direction, then route through updateFullPhysics
     var playerPos = ctx.playerPos;
     var solids = this.arena.solids;
     var toPlayer = playerPos.clone().sub(this.position);
     var dist = Math.max(0.001, toPlayer.length());
     var dir = toPlayer.clone();
-    dir.y = 0; // flatten to XZ — AI should never move vertically
+    dir.y = 0;
     if (dir.lengthSq() > 1e-6) dir.normalize(); else dir.set(0, 0, -1);
     var blocked = hasBlockingBetween(this.eyePos, playerPos, solids);
-    var moveVec = new THREE.Vector3();
+    var moveDir = new THREE.Vector3();
+    var wantSprint = false;
 
     if (blocked) {
       // A* navigation when no line of sight
@@ -274,14 +298,14 @@ class AIOpponent {
         toTarget.y = 0;
         if (toTarget.lengthSq() > 1e-4) {
           toTarget.normalize();
-          moveVec.add(toTarget.multiplyScalar(this.walkSpeed * 0.9));
+          moveDir.copy(toTarget);
         }
       } else {
         var toP = playerPos.clone().sub(this.position);
         toP.y = 0;
         if (toP.lengthSq() > 1e-4) {
           toP.normalize();
-          moveVec.add(toP.multiplyScalar(this.walkSpeed * 0.5));
+          moveDir.copy(toP).multiplyScalar(0.5);
         }
       }
     } else {
@@ -290,9 +314,9 @@ class AIOpponent {
       this._pathIndex = 0;
       var desired = 7.0;
       if (dist > desired + 1.0) {
-        moveVec.add(dir.multiplyScalar(this.walkSpeed * 0.85));
+        moveDir.add(dir.clone().multiplyScalar(0.85));
       } else if (dist < desired - 1.0) {
-        moveVec.add(dir.clone().multiplyScalar(-this.walkSpeed * 0.85));
+        moveDir.add(dir.clone().multiplyScalar(-0.85));
       }
       this._strafeTimer -= dt;
       if (this._strafeTimer <= 0) {
@@ -300,16 +324,23 @@ class AIOpponent {
         this._strafeSign *= -1;
       }
       var right = new THREE.Vector3(-dir.z, 0, dir.x).normalize();
-      moveVec.add(right.multiplyScalar(this._strafeSign * this.walkSpeed * 0.7));
+      moveDir.add(right.multiplyScalar(this._strafeSign * 0.7));
     }
 
-    if (moveVec.lengthSq() > 0) {
-      moveVec.y = 0; // enforce XZ-only movement
-      var savedY = this.position.y;
-      this.position.add(moveVec.multiplyScalar(dt));
-      this.position.y = savedY; // restore Y — AI never moves vertically
-      resolveCollisions2D(this.position, this.radius, this.arena.colliders);
-    }
+    // Normalize direction for physics (speed is handled by updateFullPhysics)
+    moveDir.y = 0;
+    if (moveDir.lengthSq() > 1e-6) moveDir.normalize(); else moveDir.set(0, 0, 0);
+
+    // Route through shared physics pipeline
+    updateFullPhysics(
+      this,
+      { worldMoveDir: moveDir, sprint: wantSprint, jump: false },
+      { colliders: this.arena.colliders, solids: this.arena.solids },
+      dt
+    );
+
+    // Sync mesh from physics position
+    this._syncMeshFromPosition();
 
     // Face player
     var yaw = Math.atan2(toPlayer.x, toPlayer.z);

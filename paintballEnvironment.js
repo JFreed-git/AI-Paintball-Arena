@@ -50,6 +50,14 @@ function buildPaintballArenaSymmetric() {
     if (Math.abs(z) > 0.5) addCover(x, -z, sx, sy, sz);
   }
 
+  // Floor mesh for ground-height raycasting (surface at Y = -1, not a collider)
+  var floorGeom = new THREE.PlaneGeometry(arenaHalfW * 2 + 10, arenaHalfL * 2 + 10);
+  var floorMesh = new THREE.Mesh(floorGeom, new THREE.MeshBasicMaterial({ visible: false }));
+  floorMesh.rotation.x = -Math.PI / 2;
+  floorMesh.position.y = -1;
+  group.add(floorMesh);
+  solids.push(floorMesh);
+
   // Perimeter walls (short wooden fence panels)
   // Front/back (along X)
   addSolidBox(0, wallHeight / 2 - 1, -arenaHalfL, arenaHalfW * 2, wallHeight, 0.5, wallMat);
