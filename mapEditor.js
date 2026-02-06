@@ -314,6 +314,18 @@
     return null;
   }
 
+  function mirrorRotation(rotation, axis) {
+    var rot = rotation || 0;
+    if (axis === 'z') {
+      // Reflecting across z=0: negate the Y-rotation
+      return (360 - rot) % 360;
+    } else if (axis === 'x') {
+      // Reflecting across x=0: supplement the Y-rotation (180 - rot)
+      return (540 - rot) % 360;
+    }
+    return rot;
+  }
+
   function syncMirrorPartner(srcData) {
     var partner = findMirrorPartner(srcData);
     if (!partner) return;
@@ -325,14 +337,14 @@
     if (srcData.radius !== undefined) partner.radius = srcData.radius;
     if (srcData.height !== undefined) partner.height = srcData.height;
 
-    // Mirror position (copy Y as-is), negate rotation, toggle geometry flip
+    // Mirror position (copy Y as-is), mirror rotation based on axis, toggle geometry flip
     partner.position = srcData.position.slice();
     if (axis === 'z') {
       partner.position[2] = -srcData.position[2];
     } else if (axis === 'x') {
       partner.position[0] = -srcData.position[0];
     }
-    partner.rotation = (360 - (srcData.rotation || 0)) % 360;
+    partner.rotation = mirrorRotation(srcData.rotation, axis);
     partner.mirrorFlip = !srcData.mirrorFlip;
 
     var partnerEntry = findMirrorPartnerEntry(srcData);
@@ -349,7 +361,7 @@
     } else if (axis === 'x') {
       obj.position[0] = -obj.position[0];
     }
-    obj.rotation = (360 - (obj.rotation || 0)) % 360;
+    obj.rotation = mirrorRotation(obj.rotation, axis);
     obj.mirrorFlip = !srcData.mirrorFlip;
     return obj;
   }
@@ -372,7 +384,9 @@
       mesh.userData.mapObj = objData;
       arena.group.add(mesh);
       arena.solids.push(mesh);
-      arena.colliders.push(new THREE.Box3().setFromObject(mesh));
+      var meshColliders = window.computeColliderForMesh(mesh);
+      mesh.userData.colliderBoxes = meshColliders;
+      for (var ci = 0; ci < meshColliders.length; ci++) arena.colliders.push(meshColliders[ci]);
       var entry = { mesh: mesh, data: objData };
       editorObjects.push(entry);
       return entry;
@@ -425,8 +439,9 @@
       shape.lineTo(0, rsy);
       shape.closePath();
       var extGeom = new THREE.ExtrudeGeometry(shape, { depth: rsx, bevelEnabled: false });
+      extGeom.translate(-rsz / 2, 0, -rsx / 2);
       mesh = new THREE.Mesh(extGeom, mat);
-      mesh.position.set(obj.position[0] - rsx / 2, -1 + yOff, obj.position[2] - rsz / 2);
+      mesh.position.set(obj.position[0], -1 + yOff, obj.position[2]);
     }
 
     if (mesh && rotY !== 0) mesh.rotation.y = rotY;
@@ -442,33 +457,52 @@
 
   // ── Resize Handles ──
 
+  function rotateOffset(offX, offZ, rotDeg) {
+    var rad = (rotDeg || 0) * Math.PI / 180;
+    var cosR = Math.cos(rad);
+    var sinR = Math.sin(rad);
+    return {
+      x: offX * cosR + offZ * sinR,
+      z: -offX * sinR + offZ * cosR
+    };
+  }
+
   function createResizeHandles(entry) {
     removeResizeHandles();
     var d = entry.data;
     var baseY = -1 + (d.position[1] || 0);
     var cx = d.position[0], cz = d.position[2];
+    var rot = d.rotation || 0;
     var isCyl = (d.type === 'cylinder' || d.type === 'halfCylinder');
 
     if (isCyl) {
       var r = d.radius || 1.5;
       var h = d.height || 3.0;
-      // 4 radius handles at cardinal directions
-      addHandle(cx + r, baseY + 0.25, cz, 'radius', 1, 0);
-      addHandle(cx - r, baseY + 0.25, cz, 'radius', -1, 0);
-      addHandle(cx, baseY + 0.25, cz + r, 'radius', 0, 1);
-      addHandle(cx, baseY + 0.25, cz - r, 'radius', 0, -1);
-      // Top handle
+      // 4 radius handles at cardinal directions, rotated by object rotation
+      var rOff1 = rotateOffset(r, 0, rot);
+      var rOff2 = rotateOffset(-r, 0, rot);
+      var rOff3 = rotateOffset(0, r, rot);
+      var rOff4 = rotateOffset(0, -r, rot);
+      addHandle(cx + rOff1.x, baseY + 0.25, cz + rOff1.z, 'radius', 1, 0);
+      addHandle(cx + rOff2.x, baseY + 0.25, cz + rOff2.z, 'radius', -1, 0);
+      addHandle(cx + rOff3.x, baseY + 0.25, cz + rOff3.z, 'radius', 0, 1);
+      addHandle(cx + rOff4.x, baseY + 0.25, cz + rOff4.z, 'radius', 0, -1);
+      // Top handle (centered, no rotation offset needed)
       addHandle(cx, baseY + h, cz, 'top', 0, 0);
     } else if (d.size) {
       var hsx = d.size[0] / 2;
       var hsz = d.size[2] / 2;
       var sy = d.size[1];
-      // 4 corner handles at base
-      addHandle(cx + hsx, baseY + 0.25, cz + hsz, 'corner', 1, 1);
-      addHandle(cx + hsx, baseY + 0.25, cz - hsz, 'corner', 1, -1);
-      addHandle(cx - hsx, baseY + 0.25, cz + hsz, 'corner', -1, 1);
-      addHandle(cx - hsx, baseY + 0.25, cz - hsz, 'corner', -1, -1);
-      // Top handle
+      // 4 corner handles at base, rotated by object rotation
+      var c1 = rotateOffset(hsx, hsz, rot);
+      var c2 = rotateOffset(hsx, -hsz, rot);
+      var c3 = rotateOffset(-hsx, hsz, rot);
+      var c4 = rotateOffset(-hsx, -hsz, rot);
+      addHandle(cx + c1.x, baseY + 0.25, cz + c1.z, 'corner', 1, 1);
+      addHandle(cx + c2.x, baseY + 0.25, cz + c2.z, 'corner', 1, -1);
+      addHandle(cx + c3.x, baseY + 0.25, cz + c3.z, 'corner', -1, 1);
+      addHandle(cx + c4.x, baseY + 0.25, cz + c4.z, 'corner', -1, -1);
+      // Top handle (centered, no rotation offset needed)
       addHandle(cx, baseY + sy, cz, 'top', 0, 0);
     }
   }
@@ -585,7 +619,7 @@
 
     rebuildSingleObject(selectedObj);
     if (boxHelper && boxHelper.parent) boxHelper.parent.remove(boxHelper);
-    boxHelper = new THREE.BoxHelper(selectedObj.mesh, 0x00ff88);
+    boxHelper = createRotatedOutline(selectedObj, 0x00ff88);
     editorScene.add(boxHelper);
     updateResizeHandlePositions();
     showPropsPanel(d);
@@ -599,12 +633,61 @@
 
   // ── Selection ──
 
+  function createRotatedOutline(entry, color) {
+    var d = entry.data;
+    var rot = (d.rotation || 0) * Math.PI / 180;
+    var cx = d.position[0], cz = d.position[2];
+    var baseY = -1 + (d.position[1] || 0);
+    var isCyl = (d.type === 'cylinder' || d.type === 'halfCylinder');
+    var hx, hz, sy;
+
+    if (isCyl) {
+      var r = d.radius || 1.5;
+      hx = r; hz = r;
+      sy = d.height || 3.0;
+    } else if (d.size) {
+      hx = d.size[0] / 2;
+      hz = d.size[2] / 2;
+      sy = d.size[1];
+    } else {
+      // Fallback to THREE.BoxHelper
+      return new THREE.BoxHelper(entry.mesh, color);
+    }
+
+    // Build a wireframe box in local space, then position and rotate it
+    var geom = new THREE.BufferGeometry();
+    var corners = [
+      [-hx, 0, -hz], [ hx, 0, -hz], [ hx, 0,  hz], [-hx, 0,  hz],
+      [-hx, sy, -hz], [ hx, sy, -hz], [ hx, sy,  hz], [-hx, sy,  hz]
+    ];
+    // 12 edges of a box
+    var indices = [
+      0,1, 1,2, 2,3, 3,0,   // bottom
+      4,5, 5,6, 6,7, 7,4,   // top
+      0,4, 1,5, 2,6, 3,7    // verticals
+    ];
+    var positions = [];
+    for (var i = 0; i < indices.length; i++) {
+      var c = corners[indices[i]];
+      positions.push(c[0], c[1], c[2]);
+    }
+    geom.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+
+    var mat = new THREE.LineBasicMaterial({ color: color, depthTest: false, transparent: true });
+    var outline = new THREE.LineSegments(geom, mat);
+    outline.position.set(cx, baseY, cz);
+    outline.rotation.y = rot;
+    outline.renderOrder = 998;
+    outline.name = 'EditorGroup';
+    return outline;
+  }
+
   function selectObject(entry) {
     deselectAll();
     if (!entry) return;
     selectedObj = entry;
     selectedSpawn = null;
-    boxHelper = new THREE.BoxHelper(entry.mesh, 0x00ff88);
+    boxHelper = createRotatedOutline(entry, 0x00ff88);
     editorScene.add(boxHelper);
     createResizeHandles(entry);
     showPropsPanel(entry.data);
@@ -678,7 +761,7 @@
 
     rebuildSingleObject(selectedObj);
     if (boxHelper && boxHelper.parent) boxHelper.parent.remove(boxHelper);
-    boxHelper = new THREE.BoxHelper(selectedObj.mesh, 0x00ff88);
+    boxHelper = createRotatedOutline(selectedObj, 0x00ff88);
     editorScene.add(boxHelper);
     updateResizeHandlePositions();
 
@@ -688,11 +771,16 @@
   function rebuildSingleObject(entry) {
     if (entry.mesh && entry.mesh.parent) entry.mesh.parent.remove(entry.mesh);
     if (arena) {
-      var solidIdx = arena.solids.indexOf(entry.mesh);
-      if (solidIdx >= 0) {
-        arena.solids.splice(solidIdx, 1);
-        arena.colliders.splice(solidIdx, 1);
+      // Remove old colliders by reference (not parallel index)
+      var oldBoxes = entry.mesh.userData.colliderBoxes;
+      if (oldBoxes) {
+        for (var ci = oldBoxes.length - 1; ci >= 0; ci--) {
+          var idx = arena.colliders.indexOf(oldBoxes[ci]);
+          if (idx >= 0) arena.colliders.splice(idx, 1);
+        }
       }
+      var solidIdx = arena.solids.indexOf(entry.mesh);
+      if (solidIdx >= 0) arena.solids.splice(solidIdx, 1);
     }
 
     var newMesh = buildSingleMesh(entry.data);
@@ -700,7 +788,9 @@
       if (arena) {
         arena.group.add(newMesh);
         arena.solids.push(newMesh);
-        arena.colliders.push(new THREE.Box3().setFromObject(newMesh));
+        var meshColliders = window.computeColliderForMesh(newMesh);
+        newMesh.userData.colliderBoxes = meshColliders;
+        for (var ci = 0; ci < meshColliders.length; ci++) arena.colliders.push(meshColliders[ci]);
       } else {
         newMesh.name = 'EditorGroup';
         editorScene.add(newMesh);
@@ -774,11 +864,16 @@
   function removeObjectEntry(entry) {
     if (entry.mesh && entry.mesh.parent) entry.mesh.parent.remove(entry.mesh);
     if (arena) {
-      var solidIdx = arena.solids.indexOf(entry.mesh);
-      if (solidIdx >= 0) {
-        arena.solids.splice(solidIdx, 1);
-        arena.colliders.splice(solidIdx, 1);
+      // Remove colliders by reference (not parallel index)
+      var oldBoxes = entry.mesh.userData.colliderBoxes;
+      if (oldBoxes) {
+        for (var ci = oldBoxes.length - 1; ci >= 0; ci--) {
+          var cidx = arena.colliders.indexOf(oldBoxes[ci]);
+          if (cidx >= 0) arena.colliders.splice(cidx, 1);
+        }
       }
+      var solidIdx = arena.solids.indexOf(entry.mesh);
+      if (solidIdx >= 0) arena.solids.splice(solidIdx, 1);
     }
     var idx = editorObjects.indexOf(entry);
     if (idx >= 0) editorObjects.splice(idx, 1);
@@ -830,7 +925,7 @@
     selectedObj.data.rotation = ((selectedObj.data.rotation || 0) + 90) % 360;
     rebuildSingleObject(selectedObj);
     if (boxHelper && boxHelper.parent) boxHelper.parent.remove(boxHelper);
-    boxHelper = new THREE.BoxHelper(selectedObj.mesh, 0x00ff88);
+    boxHelper = createRotatedOutline(selectedObj, 0x00ff88);
     editorScene.add(boxHelper);
     updateResizeHandlePositions();
     showPropsPanel(selectedObj.data);
@@ -845,7 +940,7 @@
     selectedObj.data.position[1] = (selectedObj.data.position[1] || 0) + delta;
     rebuildSingleObject(selectedObj);
     if (boxHelper && boxHelper.parent) boxHelper.parent.remove(boxHelper);
-    boxHelper = new THREE.BoxHelper(selectedObj.mesh, 0x00ff88);
+    boxHelper = createRotatedOutline(selectedObj, 0x00ff88);
     editorScene.add(boxHelper);
     updateResizeHandlePositions();
     showPropsPanel(selectedObj.data);
@@ -1220,7 +1315,7 @@
         selectedObj.data.position[2] = newZ;
         rebuildSingleObject(selectedObj);
         if (boxHelper && boxHelper.parent) boxHelper.parent.remove(boxHelper);
-        boxHelper = new THREE.BoxHelper(selectedObj.mesh, 0x00ff88);
+        boxHelper = createRotatedOutline(selectedObj, 0x00ff88);
         editorScene.add(boxHelper);
         updateResizeHandlePositions();
         showPropsPanel(selectedObj.data);
@@ -1558,8 +1653,8 @@
       if (flyKeys.shift) editorCamera.position.y -= flySpeed;
     }
 
-    // Update box helper
-    if (boxHelper) boxHelper.update();
+    // Update box helper (only BoxHelper has .update; custom outlines are static)
+    if (boxHelper && typeof boxHelper.update === 'function') boxHelper.update();
 
     editorRenderer.render(editorScene, editorCamera);
     requestAnimationFrame(editorRenderLoop);

@@ -129,6 +129,66 @@
     return max + 1;
   };
 
+  // ── Compute colliders for a mesh ──
+  // Returns an ARRAY of Box3 colliders.
+  // Ramps get staircase colliders (approximating the triangular cross-section)
+  // plus a thin tall-wall collider. Other types get a single standard AABB.
+  //
+  // The staircase works with resolveCollisions2D's Y-skip logic:
+  //   if (feetY + 0.1 >= box.max.y) continue;
+  // Each step's max.y = slope height at its lower edge, so when the player
+  // walks up the slope (feetY at slope surface), lower steps are skipped.
+  // Approaching from the side at ground level, the steps still block.
+
+  window.computeColliderForMesh = function (mesh) {
+    var obj = mesh.userData.mapObj;
+    if (!obj || obj.type !== 'ramp') {
+      return [new THREE.Box3().setFromObject(mesh)];
+    }
+
+    // Centered geometry: translate(-rsz/2, 0, -rsx/2) applied to ExtrudeGeometry.
+    //   Geom X: -rsz/2 (tall wall) to rsz/2 (slope base)
+    //   Geom Y: 0 to rsy (height)
+    //   Geom Z: -rsx/2 to rsx/2 (width)
+    var rsx = obj.size[0], rsy = obj.size[1], rsz = obj.size[2];
+    var result = [];
+    var N = 5;
+
+    // Staircase: N steps from tall wall (X=-rsz/2) to slope base (X=rsz/2).
+    // Step i covers X from -rsz/2 + rsz*i/N to -rsz/2 + rsz*(i+1)/N.
+    // Step height = slope height at its outer (lower) edge = rsy*(N-i-1)/N.
+    for (var i = 0; i < N; i++) {
+      var stepHeight = rsy * (N - i - 1) / N;
+      if (stepHeight < 0.05) continue;
+      var stepDepth = rsz / N;
+      var helper = new THREE.Mesh(
+        new THREE.BoxGeometry(stepDepth, stepHeight, rsx)
+      );
+      helper.position.set(
+        -rsz / 2 + rsz * i / N + stepDepth / 2, // X center of step
+        stepHeight / 2,                            // Y center
+        0                                          // Z center (full width)
+      );
+      mesh.add(helper);
+      mesh.updateMatrixWorld(true);
+      result.push(new THREE.Box3().setFromObject(helper));
+      mesh.remove(helper);
+    }
+
+    // Tall wall: thin collider at X=-rsz/2, full height and width.
+    // Blocks approach from behind the ramp; skipped when player stands on top.
+    var wallHelper = new THREE.Mesh(
+      new THREE.BoxGeometry(0.3, rsy, rsx)
+    );
+    wallHelper.position.set(-rsz / 2, rsy / 2, 0);
+    mesh.add(wallHelper);
+    mesh.updateMatrixWorld(true);
+    result.push(new THREE.Box3().setFromObject(wallHelper));
+    mesh.remove(wallHelper);
+
+    return result;
+  };
+
   // ── Build arena from map data ──
 
   window.buildArenaFromMap = function (mapData) {
@@ -156,6 +216,14 @@
       colliders.push(new THREE.Box3().setFromObject(mesh));
       return mesh;
     }
+
+    // Floor mesh for ground-height raycasting (surface at Y = -1, not a collider)
+    var floorGeom = new THREE.PlaneGeometry(halfW * 2 + 10, halfL * 2 + 10);
+    var floorMesh = new THREE.Mesh(floorGeom, new THREE.MeshBasicMaterial({ visible: false }));
+    floorMesh.rotation.x = -Math.PI / 2;
+    floorMesh.position.y = -1;
+    group.add(floorMesh);
+    solids.push(floorMesh);
 
     // Perimeter walls
     addSolidBox(0, wallHeight / 2 - 1, -halfL, halfW * 2, wallHeight, 0.5, wallMat);
@@ -195,8 +263,9 @@
         shape.closePath();
         var extrudeSettings = { depth: rsx, bevelEnabled: false };
         var extGeom = new THREE.ExtrudeGeometry(shape, extrudeSettings);
+        extGeom.translate(-rsz / 2, 0, -rsx / 2);
         mesh = new THREE.Mesh(extGeom, mat);
-        mesh.position.set(obj.position[0] - rsx / 2, -1 + yOff, obj.position[2] - rsz / 2);
+        mesh.position.set(obj.position[0], -1 + yOff, obj.position[2]);
       }
 
       if (mesh) {
@@ -210,7 +279,9 @@
         mesh.userData.mapObj = obj;
         group.add(mesh);
         solids.push(mesh);
-        colliders.push(new THREE.Box3().setFromObject(mesh));
+        var meshColliders = window.computeColliderForMesh(mesh);
+        mesh.userData.colliderBoxes = meshColliders;
+        for (var ci = 0; ci < meshColliders.length; ci++) colliders.push(meshColliders[ci]);
       }
     }
 

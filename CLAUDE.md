@@ -29,11 +29,11 @@ All JS files use IIFEs `(function() { ... })()` for scope isolation. Public APIs
 
 **Shared game logic** (`gameShared.js`): Both modes call shared functions for HUD updates (`sharedUpdateHealthBar`, `sharedUpdateAmmoDisplay`), reload logic (`sharedHandleReload`, `sharedStartReload`), round flow (`sharedShowRoundBanner`, `sharedStartRoundCountdown`), and crosshair/sprint UI (`sharedSetCrosshairBySprint`, `sharedSetReloadingUI`, `sharedSetSprintUI`). Mode-specific logic (AI, networking) stays in their respective files.
 
-Both modes also share `physics.js` (2D XZ movement + AABB collision), `projectiles.js` (hitscan raycasting + tracer visuals), `paintballEnvironment.js` (symmetric arena generation), and `playerControls.js` (keyboard/mouse input with pointer lock).
+Both modes also share `physics.js` (3D movement: XZ walking + vertical gravity/jumping/ramps), `projectiles.js` (hitscan raycasting + tracer visuals), `paintballEnvironment.js` (symmetric arena generation), and `playerControls.js` (keyboard/mouse input with pointer lock).
 
 ### Physics & Combat
 
-Movement is 2D on the XZ plane only — the camera handles vertical look. Collision uses AABB push-out against `arena.colliders` (Box3 array). Combat is hitscan with configurable spread cone, not projectile-based. Player hitboxes are spheres for raycasting. `arena.solids` (Mesh array) is used for bullet raycasting and AI line-of-sight checks; `arena.colliders` (Box3 array) is used for movement collision.
+Movement is full 3D — horizontal XZ walking plus vertical gravity, jumping, and ramp traversal. `updateFullPhysics` handles the complete cycle: horizontal movement → ground detection via `getGroundHeight` (downward raycast against `arena.solids`) → jump/gravity → ground snapping → 2D collision resolution → recheck. Collision uses Y-aware AABB push-out against `arena.colliders` (Box3 array); colliders are skipped when the player stands on top of them (`feetY + 0.1 >= box.max.y`). Ramp colliders use a staircase approximation (multiple progressively shorter AABBs) so the Y-skip logic lets players ascend slopes while still blocking side entry. `arena.solids` (Mesh array) is used for ground-height raycasting, bullet raycasting, and AI line-of-sight checks; `arena.colliders` (Box3 array) is used for movement collision. Combat is hitscan with configurable spread cone, not projectile-based. Player hitboxes are spheres for raycasting.
 
 ### Networking Protocol (Socket.IO events)
 
