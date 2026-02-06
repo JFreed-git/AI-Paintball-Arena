@@ -8,34 +8,49 @@ function buildPaintballArenaSymmetric() {
   const colliders = []; // Box3 for movement collisions
   const waypoints = [];
 
-  // Arena size (bigger: ~130m end-to-end along Z to match ~20s sprint)
-  const arenaHalfW = 45; // X extent 90
-  const arenaHalfL = 65; // Z extent 130
-  const wallHeight = 6;
+  // Arena size (tighter: ~90m end-to-end along Z, 60m wide)
+  const arenaHalfW = 30; // X extent 60
+  const arenaHalfL = 45; // Z extent 90
+  const wallHeight = 3.5;
 
   // Materials
-  const wallMat = new THREE.MeshLambertMaterial({ color: 0x555555 });
-  const coverMat = new THREE.MeshLambertMaterial({ color: 0x4a4a4a });
+  const wallMat = new THREE.MeshLambertMaterial({ color: 0x8B7355 });  // wood-brown walls
   const ringMat = new THREE.MeshBasicMaterial({ color: 0xffd700, side: THREE.DoubleSide });
+
+  // Muted cover palette (browns and grays)
+  const coverPalette = [
+    new THREE.MeshLambertMaterial({ color: 0x6B5B4F }), // warm brown
+    new THREE.MeshLambertMaterial({ color: 0x5A5A5A }), // medium gray
+    new THREE.MeshLambertMaterial({ color: 0x7A6A55 }), // tan brown
+    new THREE.MeshLambertMaterial({ color: 0x4A4A4A }), // dark gray
+    new THREE.MeshLambertMaterial({ color: 0x5C4A3A }), // dark brown
+  ];
+  var _coverIdx = 0;
 
   // Helpers
   function addSolidBox(x, y, z, sx, sy, sz, mat) {
-    const geom = new THREE.BoxGeometry(sx, sy, sz);
-    const mesh = new THREE.Mesh(geom, mat || coverMat);
+    var geom = new THREE.BoxGeometry(sx, sy, sz);
+    var mesh = new THREE.Mesh(geom, mat);
     mesh.position.set(x, y, z);
     group.add(mesh);
     solids.push(mesh);
-    const box = new THREE.Box3().setFromObject(mesh);
+    var box = new THREE.Box3().setFromObject(mesh);
     colliders.push(box);
     return mesh;
   }
-  // Cover sits on the floor (y = -1)
+  // Cover sits on the floor (y = -1), cycles through palette colors
   function addCover(x, z, sx, sy, sz) {
-    const y = -1 + sy / 2;
-    return addSolidBox(x, y, z, sx, sy, sz, coverMat);
+    var y = -1 + sy / 2;
+    var mat = coverPalette[_coverIdx++ % coverPalette.length];
+    return addSolidBox(x, y, z, sx, sy, sz, mat);
+  }
+  // Z-symmetric cover: places block at (x,z) and mirror at (x,-z)
+  function mirroredCover(x, z, sx, sy, sz) {
+    addCover(x, z, sx, sy, sz);
+    if (Math.abs(z) > 0.5) addCover(x, -z, sx, sy, sz);
   }
 
-  // Perimeter walls (thin boxes)
+  // Perimeter walls (short wooden fence panels)
   // Front/back (along X)
   addSolidBox(0, wallHeight / 2 - 1, -arenaHalfL, arenaHalfW * 2, wallHeight, 0.5, wallMat);
   addSolidBox(0, wallHeight / 2 - 1,  arenaHalfL, arenaHalfW * 2, wallHeight, 0.5, wallMat);
@@ -43,103 +58,84 @@ function buildPaintballArenaSymmetric() {
   addSolidBox(-arenaHalfW, wallHeight / 2 - 1, 0, 0.5, wallHeight, arenaHalfL * 2, wallMat);
   addSolidBox( arenaHalfW, wallHeight / 2 - 1, 0, 0.5, wallHeight, arenaHalfL * 2, wallMat);
 
-  // Visual white walls + ceiling with gray grid
-  (function addWhiteBox() {
-    // Build a grid texture on white background
-    function buildGridTexture(size = 512, step = 32, bg = '#ffffff', line = '#d0d0d0') {
-      const c = document.createElement('canvas');
-      c.width = size; c.height = size;
-      const ctx = c.getContext('2d');
-      ctx.fillStyle = bg;
-      ctx.fillRect(0, 0, size, size);
-      ctx.strokeStyle = line;
-      ctx.lineWidth = 1;
-      for (let i = 0; i <= size; i += step) {
-        ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i, size); ctx.stroke();
-        ctx.beginPath(); ctx.moveTo(0, i); ctx.lineTo(size, i); ctx.stroke();
-      }
-      const tex = new THREE.CanvasTexture(c);
-      tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
-      // Repeat roughly one grid every 10m
-      tex.repeat.set((arenaHalfW * 2) / 10, (arenaHalfL * 2) / 10);
-      tex.anisotropy = 8;
-      tex.needsUpdate = true;
-      return tex;
-    }
+  // ── ZONE A: CENTER CONTESTED AREA (|Z| < 7) ──
+  // Split pillars + L-walls creating peek corners
 
-    const gridTex = buildGridTexture(512, 32);
-    const gridMat = new THREE.MeshLambertMaterial({ color: 0xffffff, map: gridTex, side: THREE.DoubleSide });
+  // Split pillars flanking dead center (gap at X=0)
+  addCover(-3,    0,    2.5, 3.5, 2.0);
+  addCover( 3,    0,    2.5, 3.5, 2.0);
 
-    const wallY = 4;        // center Y for 8m height walls (from floor y=-1 to y=7)
-    const wallH = 8;        // height of wall planes
-    const ceilY = 8;        // ceiling height above floor(-1)
+  // Left L-wall
+  addCover(-7,    0,    1.5, 3.0, 4.0);
+  addCover(-5,    3,    3.0, 3.0, 1.5);
 
-    // Front wall (+Z)
-    const front = new THREE.Mesh(new THREE.PlaneGeometry(arenaHalfW * 2, wallH), gridMat);
-    front.position.set(0, wallY - 1, arenaHalfL);
-    front.lookAt(new THREE.Vector3(0, wallY - 1, 0));
-    group.add(front); solids.push(front);
+  // Right L-wall (X-mirrored, Z-flipped)
+  addCover( 7,    0,    1.5, 3.0, 4.0);
+  addCover( 5,   -3,    3.0, 3.0, 1.5);
 
-    // Back wall (-Z)
-    const back = new THREE.Mesh(new THREE.PlaneGeometry(arenaHalfW * 2, wallH), gridMat);
-    back.position.set(0, wallY - 1, -arenaHalfL);
-    back.lookAt(new THREE.Vector3(0, wallY - 1, 0));
-    group.add(back); solids.push(back);
+  // Mid-width peek blocks
+  mirroredCover(-14,   4,    2.0, 2.5, 2.0);
+  mirroredCover( 14,   4,    2.0, 2.5, 2.0);
 
-    // Right wall (+X)
-    const rightW = new THREE.Mesh(new THREE.PlaneGeometry(arenaHalfL * 2, wallH), gridMat);
-    rightW.position.set(arenaHalfW, wallY - 1, 0);
-    rightW.lookAt(new THREE.Vector3(0, wallY - 1, 0));
-    group.add(rightW); solids.push(rightW);
+  // Edge lane cover
+  mirroredCover(-26,   3,    2.5, 2.0, 2.0);
+  mirroredCover( 26,   3,    2.5, 2.0, 2.0);
 
-    // Left wall (-X)
-    const leftW = new THREE.Mesh(new THREE.PlaneGeometry(arenaHalfL * 2, wallH), gridMat);
-    leftW.position.set(-arenaHalfW, wallY - 1, 0);
-    leftW.lookAt(new THREE.Vector3(0, wallY - 1, 0));
-    group.add(leftW); solids.push(leftW);
+  // ── ZONE B: MID-FIELD (7 < |Z| <= 19) ──
+  // Clusters of 2-3 blocks with gaps; corridors and rooms
 
-    // Ceiling
-    const ceil = new THREE.Mesh(new THREE.PlaneGeometry(arenaHalfW * 2, arenaHalfL * 2), gridMat);
-    ceil.position.set(0, ceilY - 1, 0);
-    // Face downward toward the arena center
-    ceil.lookAt(new THREE.Vector3(0, -100, 0));
-    group.add(ceil); solids.push(ceil);
-  })();
+  // B1: Near transition (Z ~ 9-13)
+  mirroredCover(-10,  10,    4.0, 3.0, 2.0);
+  mirroredCover(-13,  13,    2.0, 2.5, 1.5);
+  mirroredCover( 10,   9,    2.5, 3.5, 2.5);
+  mirroredCover( 14,   9,    1.5, 2.0, 1.5);
+  mirroredCover(  0,  10,    3.0, 3.5, 1.5);
+  mirroredCover(-27,  11,    2.5, 2.5, 3.0);
+  mirroredCover( 27,  11,    2.5, 2.5, 3.0);
 
-  // Symmetric, taller, denser cover layout:
-  // Central lanes and side lanes every 10m along Z, with varied widths/heights (2.0–3.5 m tall).
-  const zStep = 10;
-  for (let z = -arenaHalfL + 10; z <= arenaHalfL - 10; z += zStep) {
-    // Central block
-    addCover(0, z, 6, 3.0, 2.0);
+  // B2: Deep mid-field (Z ~ 15-19)
+  mirroredCover( -9,  16,    5.0, 3.0, 1.5);
+  mirroredCover(  6,  15,    2.5, 3.5, 1.5);
+  mirroredCover( 10,  18,    2.0, 2.5, 1.5);
+  mirroredCover(-24,  16,    3.0, 2.5, 2.0);
+  mirroredCover(-21,  13,    1.5, 1.8, 1.5);   // low block
+  mirroredCover( 24,  16,    3.0, 2.5, 2.0);
+  mirroredCover( 21,  13,    1.5, 1.8, 1.5);   // low block
 
-    // Staggered wider blocks left/right
-    const offsetX = 14 + (Math.abs(z / zStep) % 2) * 6; // alternate offsets 14/20
-    addCover(offsetX, z, 5, 3.5, 2.0);
-    addCover(-offsetX, z, 5, 3.5, 2.0);
+  // ── ZONE C: CORRIDOR ZONE (19 < |Z| <= 30) ──
+  // Funneling lanes with staggered center and side walls
 
-    // Narrow pillars further out
-    addCover(offsetX + 12, z, 2.5, 3.0, 2.0);
-    addCover(-(offsetX + 12), z, 2.5, 3.0, 2.0);
-  }
+  mirroredCover( -4,  23,    2.5, 3.0, 2.0);
+  mirroredCover(  4,  27,    2.5, 3.0, 2.0);
+  mirroredCover(-18,  23,    3.5, 3.0, 1.5);
+  mirroredCover( 18,  23,    3.5, 3.0, 1.5);
+  mirroredCover(-15,  27,    3.0, 2.5, 2.0);
+  mirroredCover( 15,  27,    3.0, 2.5, 2.0);
+  mirroredCover(-28,  25,    2.0, 2.5, 2.5);
+  mirroredCover( 28,  25,    2.0, 2.5, 2.5);
+  mirroredCover(-12,  26,    1.5, 2.5, 1.5);
+  mirroredCover( 12,  26,    1.5, 2.5, 1.5);
 
-  // Larger cover near spawns to break spawn LOS
-  addCover(0, -arenaHalfL + 18, 10, 3.5, 2.5);
-  addCover(0,  arenaHalfL - 18, 10, 3.5, 2.5);
-  addCover(20, -arenaHalfL + 14, 6, 3.0, 2.0);
-  addCover(-20, -arenaHalfL + 14, 6, 3.0, 2.0);
-  addCover(20,  arenaHalfL - 14, 6, 3.0, 2.0);
-  addCover(-20,  arenaHalfL - 14, 6, 3.0, 2.0);
+  // ── ZONE D: SPAWN APPROACH (30 < |Z| <= 40) ──
+  // Heavy cover protecting spawn exits with multiple routes
+
+  mirroredCover(  0,  33,    8.0, 3.5, 2.0);
+  mirroredCover(-13,  34,    4.0, 3.0, 2.0);
+  mirroredCover( 13,  34,    4.0, 3.0, 2.0);
+  mirroredCover(-24,  36,    3.0, 2.5, 1.5);
+  mirroredCover( 24,  36,    3.0, 2.5, 1.5);
+  mirroredCover( -7,  37,    2.0, 2.0, 1.5);
+  mirroredCover(  7,  37,    2.0, 2.0, 1.5);
 
   // Spawns opposite along Z axis
-  const spawnZ = arenaHalfL - 12;
-  const spawnA = new THREE.Vector3(0, 2, -spawnZ); // Player (camera/eye)
-  const spawnB = new THREE.Vector3(0, 0,  spawnZ); // AI (grounded body)
+  var spawnZ = arenaHalfL - 8;
+  var spawnA = new THREE.Vector3(0, 2, -spawnZ); // Player (camera/eye)
+  var spawnB = new THREE.Vector3(0, 0,  spawnZ); // AI (grounded body)
 
   // Gold spawn rings on floor (use RingGeometry rotated flat)
   function addGoldSpawnRing(pos) {
-    const ring = new THREE.RingGeometry(0.8, 1.2, 64);
-    const ringMesh = new THREE.Mesh(ring, ringMat);
+    var ring = new THREE.RingGeometry(0.8, 1.2, 64);
+    var ringMesh = new THREE.Mesh(ring, ringMat);
     ringMesh.position.set(pos.x, -0.99, pos.z);
     ringMesh.rotation.x = -Math.PI / 2;
     ringMesh.renderOrder = 1;
@@ -149,21 +145,67 @@ function buildPaintballArenaSymmetric() {
   addGoldSpawnRing(spawnA);
   addGoldSpawnRing(spawnB);
 
-  // Waypoints (grid across the arena for simple navigation)
-  for (let x of [-30, -15, 0, 15, 30]) {
-    for (let z of [-50, -25, 0, 25, 50]) {
+  // Waypoints (5x5 grid scaled for smaller arena)
+  for (var x of [-20, -10, 0, 10, 20]) {
+    for (var z of [-35, -17, 0, 17, 35]) {
       waypoints.push(new THREE.Vector3(x, 0, z));
     }
   }
+
+  // ── SCENERY: Trees around the perimeter ──
+  var trunkMat = new THREE.MeshLambertMaterial({ color: 0x5C4033 });
+  var canopyMat = new THREE.MeshLambertMaterial({ color: 0x2E5930 });
+  var canopyDarkMat = new THREE.MeshLambertMaterial({ color: 0x1E3E22 });
+
+  function addTree(x, z, scale) {
+    scale = scale || 1;
+    var trunkH = 3 * scale;
+    var trunkR = 0.3 * scale;
+    var canopyH = 4 * scale;
+    var canopyR = 2 * scale;
+    var mat = (scale > 1.1) ? canopyDarkMat : canopyMat;
+
+    var trunk = new THREE.Mesh(
+      new THREE.CylinderGeometry(trunkR * 0.7, trunkR, trunkH, 8),
+      trunkMat
+    );
+    trunk.position.set(x, -1 + trunkH / 2, z);
+    group.add(trunk);
+
+    var canopy = new THREE.Mesh(
+      new THREE.ConeGeometry(canopyR, canopyH, 8),
+      mat
+    );
+    canopy.position.set(x, -1 + trunkH + canopyH / 2, z);
+    group.add(canopy);
+  }
+
+  // Trees scattered outside the arena walls
+  var trees = [
+    // Along +X side
+    [36, -30, 1.2], [39, -12, 0.9], [35, 5, 1.1], [40, 20, 1.0], [37, 35, 0.8],
+    [42, -20, 0.7], [38, 40, 1.3],
+    // Along -X side
+    [-36, -25, 1.0], [-40, -5, 1.3], [-35, 15, 0.9], [-38, 30, 1.1], [-37, -40, 0.8],
+    [-42, 10, 0.7], [-36, 42, 1.2],
+    // Along +Z side
+    [-20, 50, 1.1], [-5, 52, 0.9], [10, 50, 1.2], [25, 52, 1.0], [0, 55, 0.8],
+    // Along -Z side
+    [-15, -50, 1.0], [0, -52, 1.2], [20, -50, 0.8], [-25, -52, 1.1], [8, -55, 0.9],
+    // Corners and scattered further out
+    [45, 45, 1.4], [-45, 45, 1.3], [45, -45, 1.0], [-45, -45, 1.1],
+    [50, 0, 1.4], [-50, 10, 1.3],
+  ];
+  trees.forEach(function(t) { addTree(t[0], t[1], t[2]); });
 
   // Attach to scene
   scene.add(group);
 
   return {
-    group,
-    colliders,
-    solids,
-    waypoints,
+    group: group,
+    colliders: colliders,
+    solids: solids,
+    waypoints: waypoints,
     spawns: { A: spawnA, B: spawnB }
   };
 }

@@ -1,27 +1,29 @@
 // Environment setup (background, fog, lights, ground)
 function setupEnvironment() {
-  // Background and fog
-  scene.background = new THREE.Color(0xf5f5f5);
-  scene.fog = new THREE.Fog(0xf5f5f5, 10, 220);
+  // Sky blue background and fog
+  scene.background = new THREE.Color(0x87CEEB);
+  scene.fog = new THREE.Fog(0x87CEEB, 50, 160);
 
-  // Lighting
-  const hemi = new THREE.HemisphereLight(0xffffff, 0x888888, 0.6);
+  // Outdoor lighting — hemisphere for sky/ground bounce
+  const hemi = new THREE.HemisphereLight(0x87CEEB, 0x556B2F, 0.6);
   scene.add(hemi);
 
-  const ambientLight = new THREE.AmbientLight(0xffffff, 0.4);
+  const ambientLight = new THREE.AmbientLight(0xffffff, 0.35);
   scene.add(ambientLight);
 
-  const dir1 = new THREE.DirectionalLight(0xffffff, 0.7);
-  dir1.position.set(12, 18, 8);
-  scene.add(dir1);
+  // Sun (warm directional light)
+  const sun = new THREE.DirectionalLight(0xfffae6, 0.8);
+  sun.position.set(20, 30, 10);
+  scene.add(sun);
 
-  const dir2 = new THREE.DirectionalLight(0xffffff, 0.4);
-  dir2.position.set(-12, 12, -8);
-  scene.add(dir2);
+  // Fill light from opposite side
+  const fill = new THREE.DirectionalLight(0xffffff, 0.3);
+  fill.position.set(-15, 10, -10);
+  scene.add(fill);
 
-  // Ground
-  const groundGeometry = new THREE.PlaneGeometry(300, 300);
-  const groundMaterial = new THREE.MeshLambertMaterial({ color: 0x333333 });
+  // Grass ground (large plane extending well beyond arena)
+  const groundGeometry = new THREE.PlaneGeometry(400, 400);
+  const groundMaterial = new THREE.MeshLambertMaterial({ color: 0x355E2A });
   const ground = new THREE.Mesh(groundGeometry, groundMaterial);
   ground.rotation.x = -Math.PI / 2;
   ground.position.y = -1;

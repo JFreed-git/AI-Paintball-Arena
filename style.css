@@ -43,7 +43,8 @@ body {
 
 /* Ensure hidden overrides element-specific display on round UI */
 #roundBanner.hidden,
-#roundCountdown.hidden {
+#roundCountdown.hidden,
+#editorLoadPanel.hidden {
     display: none;
 }
 
@@ -250,6 +251,45 @@ body {
 }
 
 
+/* Enemy (AI) health bar HUD — top-right corner */
+#enemyHealthContainer {
+    position: absolute;
+    right: 20px;
+    top: 20px;
+    z-index: 150;
+    background: rgba(0, 0, 0, 0.55);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 10px;
+    padding: 8px 12px;
+    min-width: 180px;
+    backdrop-filter: blur(6px);
+}
+
+#enemyHealthContainer .label {
+    font-size: 11px;
+    color: #ff8888;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 4px;
+    font-weight: bold;
+}
+
+#enemyHealthBar {
+    width: 100%;
+    height: 10px;
+    background: #1b1b1b;
+    border: 1px solid #333;
+    border-radius: 5px;
+    overflow: hidden;
+}
+
+#enemyHealthFill {
+    height: 100%;
+    width: 100%;
+    background: linear-gradient(90deg, #ff6a6a, #d61d1d);
+    transition: width 0.15s ease;
+}
+
 /* Optional: style for spawn rings if using DOM overlay (3D rings handled in scene) */
 .spawn-ring {
     border: 3px solid #ffd700;
@@ -314,4 +354,371 @@ body {
     border-radius: 10px;
     backdrop-filter: blur(10px);
     display: inline-block;
+}
+
+/* Dev Console */
+#devConsole {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 500;
+    background: rgba(10, 10, 10, 0.92);
+    border: 1px solid rgba(255, 100, 100, 0.3);
+    border-radius: 12px;
+    padding: 24px;
+    min-width: 280px;
+    backdrop-filter: blur(8px);
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.7);
+}
+
+#devConsole h3 {
+    font-size: 18px;
+    color: #ff6a6a;
+    margin-bottom: 16px;
+    text-align: center;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+}
+
+#devPassword {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+#devPasswordInput {
+    padding: 8px 12px;
+    background: #1a1a1a;
+    color: #fff;
+    border: 1px solid #444;
+    border-radius: 6px;
+    outline: none;
+    font-size: 14px;
+}
+
+#devPasswordInput:focus {
+    border-color: #ff6a6a;
+}
+
+#devPasswordSubmit {
+    padding: 8px 16px;
+    background: #ff6a6a;
+    color: #000;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: bold;
+    font-size: 14px;
+}
+
+#devPasswordSubmit:hover {
+    background: #ff4a4a;
+}
+
+#devPasswordError {
+    color: #ff4444;
+    font-size: 12px;
+    text-align: center;
+}
+
+#devCommands {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+#devCommands .dev-cmd {
+    padding: 10px 16px;
+    background: #222;
+    color: #ccc;
+    border: 1px solid #444;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: bold;
+    text-align: left;
+    transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+#devCommands .dev-cmd:hover {
+    background: #333;
+    border-color: #666;
+}
+
+#devCommands .dev-cmd.active {
+    background: rgba(255, 106, 106, 0.15);
+    border-color: #ff6a6a;
+    color: #ff6a6a;
+}
+
+/* ── Map Editor ── */
+
+#editorUI {
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    z-index: 400;
+    pointer-events: none;
+}
+
+#editorUI > * {
+    pointer-events: auto;
+}
+
+#editorToolbar {
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 6px 10px;
+    background: rgba(10, 10, 10, 0.9);
+    border-bottom: 1px solid #333;
+    z-index: 410;
+    flex-wrap: wrap;
+}
+
+.editor-tool, .editor-btn {
+    padding: 6px 12px;
+    background: #222;
+    color: #ccc;
+    border: 1px solid #444;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: bold;
+    white-space: nowrap;
+}
+
+.editor-tool:hover, .editor-btn:hover {
+    background: #333;
+    border-color: #666;
+}
+
+.editor-tool.active {
+    background: rgba(0, 255, 136, 0.15);
+    border-color: #00ff88;
+    color: #00ff88;
+}
+
+.editor-btn.editor-exit {
+    background: #441111;
+    border-color: #ff4444;
+    color: #ff4444;
+}
+
+.editor-btn.editor-exit:hover {
+    background: #661111;
+}
+
+.editor-btn.editor-danger {
+    background: #331111;
+    border-color: #cc3333;
+    color: #ff6666;
+}
+
+.editor-sep {
+    width: 1px;
+    height: 20px;
+    background: #444;
+    margin: 0 4px;
+}
+
+/* Panel close buttons */
+.panel-close {
+    position: absolute;
+    top: 6px;
+    right: 8px;
+    width: 24px;
+    height: 24px;
+    background: transparent;
+    border: 1px solid #555;
+    border-radius: 4px;
+    color: #999;
+    font-size: 16px;
+    line-height: 20px;
+    text-align: center;
+    cursor: pointer;
+    padding: 0;
+    z-index: 5;
+}
+
+.panel-close:hover {
+    background: #333;
+    color: #fff;
+    border-color: #888;
+}
+
+/* Mirror toggle active state */
+#editorMirrorToggle.mirror-active {
+    background: rgba(255, 170, 0, 0.2);
+    border-color: #ffaa00;
+    color: #ffaa00;
+}
+
+/* Properties panel */
+#editorPropsPanel {
+    position: absolute;
+    top: 50px;
+    right: 10px;
+    width: 200px;
+    background: rgba(10, 10, 10, 0.9);
+    border: 1px solid #333;
+    border-radius: 8px;
+    padding: 12px;
+    padding-top: 16px;
+    z-index: 410;
+}
+
+#editorPropsPanel h4 {
+    font-size: 14px;
+    color: #00ff88;
+    margin-bottom: 10px;
+    text-align: center;
+}
+
+.eprop {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin: 6px 0;
+    gap: 6px;
+}
+
+.eprop label {
+    font-size: 11px;
+    color: #aaa;
+    min-width: 50px;
+}
+
+.eprop input[type="number"],
+.eprop input[type="text"] {
+    width: 80px;
+    padding: 4px 6px;
+    background: #1a1a1a;
+    color: #fff;
+    border: 1px solid #444;
+    border-radius: 4px;
+    font-size: 12px;
+    outline: none;
+}
+
+.eprop input[type="color"] {
+    width: 40px;
+    height: 24px;
+    border: 1px solid #444;
+    border-radius: 4px;
+    background: transparent;
+    cursor: pointer;
+    padding: 0;
+}
+
+.eprop span {
+    font-size: 12px;
+    color: #ddd;
+}
+
+/* Settings panel */
+#editorSettingsPanel {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 300px;
+    background: rgba(10, 10, 10, 0.95);
+    border: 1px solid #444;
+    border-radius: 10px;
+    padding: 16px;
+    z-index: 420;
+}
+
+#editorSettingsPanel h4 {
+    font-size: 16px;
+    color: #00ff88;
+    margin-bottom: 12px;
+    text-align: center;
+}
+
+#editorSettingsPanel .eprop input[type="text"],
+#editorSettingsPanel .eprop input[type="number"] {
+    width: 120px;
+}
+
+#editorSettingsPanel .editor-btn {
+    margin-top: 8px;
+    width: 100%;
+}
+
+/* Load panel */
+#editorLoadPanel {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 300px;
+    background: rgba(10, 10, 10, 0.95);
+    border: 1px solid #444;
+    border-radius: 10px;
+    padding: 16px;
+    z-index: 420;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+#editorLoadPanel h4 {
+    font-size: 16px;
+    color: #00ff88;
+    text-align: center;
+}
+
+#editorLoadSelect {
+    padding: 8px;
+    background: #1a1a1a;
+    color: #fff;
+    border: 1px solid #444;
+    border-radius: 6px;
+    font-size: 13px;
+    outline: none;
+}
+
+/* Status bar */
+#editorStatusBar {
+    position: absolute;
+    bottom: 0; left: 0; right: 0;
+    display: flex;
+    justify-content: space-between;
+    padding: 4px 12px;
+    background: rgba(10, 10, 10, 0.85);
+    border-top: 1px solid #333;
+    font-size: 11px;
+    color: #888;
+    z-index: 410;
+}
+
+#editorControlsHint {
+    color: #666;
+    font-size: 10px;
+}
+
+#editorPlayerHint {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: rgba(0, 0, 0, 0.75);
+    color: #00ff88;
+    padding: 12px 24px;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: bold;
+    z-index: 430;
+    pointer-events: none;
+    text-align: center;
+}
+
+#editorPlayerMode.player-active {
+    background: rgba(0, 200, 255, 0.2);
+    border-color: #00ccff;
+    color: #00ccff;
 }

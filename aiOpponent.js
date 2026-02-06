@@ -1,5 +1,6 @@
-// Simple AI opponent for Paintball mode
-// Responsibilities: movement, LOS, firing with ammo + reload, taking damage.
+// AI opponent for Paintball mode
+// Responsibilities: A* pathfinding, movement, LOS, firing with ammo + reload, taking damage.
+// 3D health bar floats above the AI's head (billboarded toward camera).
 
 class AIOpponent {
   constructor(opts) {
@@ -8,7 +9,8 @@ class AIOpponent {
     this.arena = arena;
     this.walkSpeed = 3.6;
     this.radius = 0.5;
-    this.health = 60;
+    this.maxHealth = 100;
+    this.health = this.maxHealth;
     this.alive = true;
 
     // Difficulty tuning
@@ -31,7 +33,7 @@ class AIOpponent {
       reloadTimeSec: 2.0
     };
 
-    // Build a very simple humanoid
+    // Build a simple humanoid mesh
     const group = new THREE.Group();
     const bodyMat = new THREE.MeshLambertMaterial({ color });
     const head = new THREE.Mesh(new THREE.SphereGeometry(0.25, 16, 16), bodyMat);
@@ -46,67 +48,173 @@ class AIOpponent {
     this.mesh = group;
     scene.add(group);
 
-    // Align AI to ground (y = -1) based on its bounding box
+    // Align AI to ground
     try {
       const bbox = new THREE.Box3().setFromObject(group);
       const dy = -1 - bbox.min.y;
       group.position.y += dy;
     } catch {}
 
-    // Create a DOM health bar above the AI's head
-    const container = document.getElementById('gameContainer');
-    if (container) {
-      const root = document.createElement('div');
-      root.className = 'aiHealth';
-      const bg = document.createElement('div');
-      bg.className = 'aiHealthBg';
-      const fill = document.createElement('div');
-      fill.className = 'aiHealthFill';
-      bg.appendChild(fill);
-      root.appendChild(bg);
-      container.appendChild(root);
-      this._healthRoot = root;
-      this._healthFill = fill;
-      // Initialize
-      this._healthFill.style.width = '100%';
-      // Start hidden to avoid flashes before first update
-      this._healthRoot.style.display = 'none';
-    }
-
-    // Track when last damaged by player; used to gate health bar visibility
+    // --- 3D Health Bar ---
+    this._buildHealthBar3D();
     this.lastDamagedAt = -Infinity;
 
-    // Internal movement helpers
+    // Movement helpers
     this._strafeSign = Math.random() < 0.5 ? 1 : -1;
     this._strafeTimer = 0;
 
-    // Waypoint patrol data (move even without LOS)
+    // A* pathfinding data
     this.waypoints = (arena && arena.waypoints) ? arena.waypoints.slice() : [];
-    this._wpTarget = null;
+    this._currentPath = [];
+    this._pathIndex = 0;
     this._repathTimer = 0;
+    this._waypointGraph = this._buildWaypointGraph();
+  }
+
+  // --- 3D Health Bar ---
+
+  _buildHealthBar3D() {
+    var barWidth = 0.6;
+    var barHeight = 0.06;
+    var barDepth = 0.02;
+
+    var bgGeom = new THREE.BoxGeometry(barWidth, barHeight, barDepth);
+    var bgMat = new THREE.MeshBasicMaterial({ color: 0x333333, depthTest: false });
+    this._healthBarBg = new THREE.Mesh(bgGeom, bgMat);
+    this._healthBarBg.renderOrder = 999;
+
+    var fillGeom = new THREE.BoxGeometry(barWidth, barHeight, barDepth);
+    var fillMat = new THREE.MeshBasicMaterial({ color: 0x00ff00, depthTest: false });
+    this._healthBarFill = new THREE.Mesh(fillGeom, fillMat);
+    this._healthBarFill.renderOrder = 1000;
+    this._healthBarFill.position.z = barDepth * 0.5 + 0.001;
+
+    this._healthBarGroup = new THREE.Group();
+    this._healthBarGroup.add(this._healthBarBg);
+    this._healthBarGroup.add(this._healthBarFill);
+    // Position above head (local coords, before parent scale)
+    this._healthBarGroup.position.set(0, 2.05, 0);
+    this._healthBarGroup.visible = false;
+    this._healthBarWidth = barWidth;
+    this.mesh.add(this._healthBarGroup);
+  }
+
+  // --- Waypoint Graph for A* ---
+
+  _buildWaypointGraph() {
+    var wps = this.waypoints;
+    var solids = this.arena ? this.arena.solids : [];
+    var n = wps.length;
+    var graph = new Array(n);
+    for (var i = 0; i < n; i++) graph[i] = [];
+
+    var losY = 1.0;
+    for (var i = 0; i < n; i++) {
+      for (var j = i + 1; j < n; j++) {
+        var dist = wps[i].distanceTo(wps[j]);
+        if (dist > 40) continue;
+        var a = new THREE.Vector3(wps[i].x, losY, wps[i].z);
+        var b = new THREE.Vector3(wps[j].x, losY, wps[j].z);
+        if (!hasBlockingBetween(a, b, solids)) {
+          graph[i].push({ neighbor: j, cost: dist });
+          graph[j].push({ neighbor: i, cost: dist });
+        }
+      }
+    }
+    return graph;
+  }
+
+  _findNearestWaypointIndex(pos) {
+    var wps = this.waypoints;
+    var bestIdx = 0, bestDist = Infinity;
+    for (var i = 0; i < wps.length; i++) {
+      var d = pos.distanceTo(wps[i]);
+      if (d < bestDist) { bestDist = d; bestIdx = i; }
+    }
+    return bestIdx;
+  }
+
+  _astar(startIdx, goalIdx) {
+    var graph = this._waypointGraph;
+    var wps = this.waypoints;
+    var n = wps.length;
+    if (startIdx === goalIdx) return [startIdx];
+    if (!graph || n === 0) return [];
+
+    var gScore = new Float64Array(n).fill(Infinity);
+    var fScore = new Float64Array(n).fill(Infinity);
+    var cameFrom = new Int32Array(n).fill(-1);
+    var closed = new Uint8Array(n);
+
+    gScore[startIdx] = 0;
+    fScore[startIdx] = wps[startIdx].distanceTo(wps[goalIdx]);
+
+    var open = [startIdx];
+    var inOpen = new Uint8Array(n);
+    inOpen[startIdx] = 1;
+
+    while (open.length > 0) {
+      var bestI = 0;
+      for (var i = 1; i < open.length; i++) {
+        if (fScore[open[i]] < fScore[open[bestI]]) bestI = i;
+      }
+      var current = open[bestI];
+      open.splice(bestI, 1);
+      inOpen[current] = 0;
+
+      if (current === goalIdx) {
+        var path = [];
+        var node = goalIdx;
+        while (node !== -1) { path.push(node); node = cameFrom[node]; }
+        path.reverse();
+        return path;
+      }
+
+      closed[current] = 1;
+      var neighbors = graph[current];
+      for (var i = 0; i < neighbors.length; i++) {
+        var nb = neighbors[i].neighbor, cost = neighbors[i].cost;
+        if (closed[nb]) continue;
+        var tentG = gScore[current] + cost;
+        if (tentG < gScore[nb]) {
+          cameFrom[nb] = current;
+          gScore[nb] = tentG;
+          fScore[nb] = tentG + wps[nb].distanceTo(wps[goalIdx]);
+          if (!inOpen[nb]) { open.push(nb); inOpen[nb] = 1; }
+        }
+      }
+    }
+    return [];
+  }
+
+  _computePathToPlayer(playerPos) {
+    if (!this.waypoints || this.waypoints.length === 0) {
+      this._currentPath = [];
+      this._pathIndex = 0;
+      return;
+    }
+    var startIdx = this._findNearestWaypointIndex(this.position);
+    var goalIdx = this._findNearestWaypointIndex(playerPos);
+    var pathIndices = this._astar(startIdx, goalIdx);
+    this._currentPath = pathIndices.map(function (i) { return this.waypoints[i].clone(); }.bind(this));
+    this._pathIndex = 0;
   }
 
   get position() { return this.mesh.position; }
   get eyePos() {
-    const sy = (this.mesh && this.mesh.scale) ? this.mesh.scale.y : 1;
+    var sy = (this.mesh && this.mesh.scale) ? this.mesh.scale.y : 1;
     return this.mesh.position.clone().add(new THREE.Vector3(0, 1.6 * sy, 0));
   }
 
   takeDamage(amount) {
     if (!this.alive) return;
     this.health -= amount;
-    // record last time AI was damaged by player
     this.lastDamagedAt = performance.now();
-    if (this._healthFill) {
-      const pct = Math.max(0, Math.min(100, this.health)) + '%';
-      this._healthFill.style.width = pct;
-    }
     if (this.health <= 0) {
       this.alive = false;
       this.health = 0;
-      // Hide mesh and health bar
       this.mesh.visible = false;
-      if (this._healthRoot) this._healthRoot.style.display = 'none';
+      if (this._healthBarGroup) this._healthBarGroup.visible = false;
     }
   }
 
@@ -114,155 +222,148 @@ class AIOpponent {
     if (this.mesh && this.mesh.parent) {
       this.mesh.parent.remove(this.mesh);
     }
-    if (this._healthRoot && this._healthRoot.parentNode) {
-      this._healthRoot.parentNode.removeChild(this._healthRoot);
+    if (this._healthBarGroup) {
+      if (this._healthBarFill) { this._healthBarFill.geometry.dispose(); this._healthBarFill.material.dispose(); }
+      if (this._healthBarBg) { this._healthBarBg.geometry.dispose(); this._healthBarBg.material.dispose(); }
+      if (this._healthBarGroup.parent) this._healthBarGroup.parent.remove(this._healthBarGroup);
+      this._healthBarGroup = null;
+      this._healthBarFill = null;
+      this._healthBarBg = null;
     }
-    this._healthRoot = null;
-    this._healthFill = null;
   }
 
   update(dt, ctx) {
     if (!this.alive) return;
 
-    // Reload handling
-    const now = performance.now();
+    var now = performance.now();
+
+    // Reload
     if (this.weapon.reloading) {
-      if (performance.now() >= this.weapon.reloadEnd) {
+      if (now >= this.weapon.reloadEnd) {
         this.weapon.reloading = false;
         this.weapon.ammo = this.weapon.magSize;
       }
     }
 
-    // Movement: simplistic chase/strafe based on LOS
-    const playerPos = ctx.playerPos;
-    const solids = this.arena.solids;
-
-    const toPlayer = playerPos.clone().sub(this.position);
-    const dist = Math.max(0.001, toPlayer.length());
-    const dir = toPlayer.clone().divideScalar(dist);
-
-    const blocked = hasBlockingBetween(this.eyePos, playerPos, solids);
-    let moveVec = new THREE.Vector3();
+    // Movement
+    var playerPos = ctx.playerPos;
+    var solids = this.arena.solids;
+    var toPlayer = playerPos.clone().sub(this.position);
+    var dist = Math.max(0.001, toPlayer.length());
+    var dir = toPlayer.clone();
+    dir.y = 0; // flatten to XZ — AI should never move vertically
+    if (dir.lengthSq() > 1e-6) dir.normalize(); else dir.set(0, 0, -1);
+    var blocked = hasBlockingBetween(this.eyePos, playerPos, solids);
+    var moveVec = new THREE.Vector3();
 
     if (blocked) {
-      // Patrol toward waypoints while trying to approach the player
+      // A* navigation when no line of sight
       this._repathTimer -= dt;
-      const needNew =
-        !this._wpTarget ||
-        this._repathTimer <= 0 ||
-        this._wpTarget.distanceTo(this.position) < 1.0;
-
-      if (needNew) {
-        this._repathTimer = 1.0 + Math.random() * 1.0;
-        if (this.waypoints && this.waypoints.length) {
-          // Choose waypoint roughly toward the player (closer to player, not too far from AI)
-          let best = this.waypoints[0];
-          let bestScore = -Infinity;
-          for (let i = 0; i < this.waypoints.length; i++) {
-            const wp = this.waypoints[i];
-            const toPlayer = playerPos.clone().sub(wp).length();
-            const fromAI = wp.clone().sub(this.position).length();
-            const score = -toPlayer - 0.25 * fromAI;
-            if (score > bestScore) { bestScore = score; best = wp; }
-          }
-          this._wpTarget = best.clone();
-        } else {
-          this._wpTarget = playerPos.clone();
+      var atEnd = this._pathIndex >= this._currentPath.length;
+      if (!atEnd && this._currentPath[this._pathIndex] &&
+          this._currentPath[this._pathIndex].distanceTo(this.position) < 1.5) {
+        this._pathIndex++;
+      }
+      if (this._currentPath.length === 0 || this._pathIndex >= this._currentPath.length || this._repathTimer <= 0) {
+        this._repathTimer = 1.5 + Math.random();
+        this._computePathToPlayer(playerPos);
+      }
+      if (this._pathIndex < this._currentPath.length) {
+        var target = this._currentPath[this._pathIndex];
+        var toTarget = target.clone().sub(this.position);
+        toTarget.y = 0;
+        if (toTarget.lengthSq() > 1e-4) {
+          toTarget.normalize();
+          moveVec.add(toTarget.multiplyScalar(this.walkSpeed * 0.9));
+        }
+      } else {
+        var toP = playerPos.clone().sub(this.position);
+        toP.y = 0;
+        if (toP.lengthSq() > 1e-4) {
+          toP.normalize();
+          moveVec.add(toP.multiplyScalar(this.walkSpeed * 0.5));
         }
       }
-
-      const target = this._wpTarget || playerPos;
-      const toTarget = target.clone().sub(this.position);
-      toTarget.y = 0;
-      if (toTarget.lengthSq() > 1e-4) {
-        toTarget.normalize();
-        moveVec.add(toTarget.multiplyScalar(this.walkSpeed * 0.9));
-      }
     } else {
-      // Has LOS: keep some distance and strafe
-      const desired = 7.0;
+      // Has LOS — clear path, strafe and maintain distance
+      this._currentPath = [];
+      this._pathIndex = 0;
+      var desired = 7.0;
       if (dist > desired + 1.0) {
         moveVec.add(dir.multiplyScalar(this.walkSpeed * 0.85));
       } else if (dist < desired - 1.0) {
         moveVec.add(dir.clone().multiplyScalar(-this.walkSpeed * 0.85));
       }
-      // Strafe sideways
       this._strafeTimer -= dt;
       if (this._strafeTimer <= 0) {
         this._strafeTimer = 0.8 + Math.random() * 0.8;
         this._strafeSign *= -1;
       }
-      const right = new THREE.Vector3(-dir.z, 0, dir.x).normalize(); // perpendicular on XZ
+      var right = new THREE.Vector3(-dir.z, 0, dir.x).normalize();
       moveVec.add(right.multiplyScalar(this._strafeSign * this.walkSpeed * 0.7));
     }
 
-    // Integrate movement and resolve collisions (XZ only)
     if (moveVec.lengthSq() > 0) {
-      const delta = moveVec.multiplyScalar(dt);
-      this.position.add(delta);
+      moveVec.y = 0; // enforce XZ-only movement
+      var savedY = this.position.y;
+      this.position.add(moveVec.multiplyScalar(dt));
+      this.position.y = savedY; // restore Y — AI never moves vertically
       resolveCollisions2D(this.position, this.radius, this.arena.colliders);
     }
 
-    // Face toward player (y-rotation only)
-    const yaw = Math.atan2(toPlayer.x, toPlayer.z); // note: z axis forward in three.js screen space
+    // Face player
+    var yaw = Math.atan2(toPlayer.x, toPlayer.z);
     this.mesh.rotation.set(0, yaw, 0);
 
-    // Update health bar overlay position (project head position)
-    if (this._healthRoot) {
-      const sy = (this.mesh && this.mesh.scale) ? this.mesh.scale.y : 1;
-      const headPos = this.eyePos.clone().add(new THREE.Vector3(0, 0.35 * sy, 0));
-      const ndc = headPos.project(camera);
-      const w = window.innerWidth, h = window.innerHeight;
-      const onScreen =
-        ndc.z > 0 &&
-        ndc.x >= -1 && ndc.x <= 1 &&
-        ndc.y >= -1 && ndc.y <= 1;
+    // --- Update 3D Health Bar ---
+    if (this._healthBarGroup) {
+      var recentlyDamaged = this.lastDamagedAt > 0 && (now - this.lastDamagedAt) <= 5000;
+      var showBar = recentlyDamaged && this.alive && this.health < this.maxHealth;
+      this._healthBarGroup.visible = showBar;
 
-      // Visibility: cast a ray toward the AI center including both world solids and the AI mesh,
-      // and consider it visible ONLY if the nearest hit is the AI. This prevents "seeing through walls".
-      const bbox = new THREE.Box3().setFromObject(this.mesh);
-      const center = bbox.getCenter(new THREE.Vector3());
-      const toCenter = center.clone().sub(camera.position);
-      const distToCenter = Math.max(0.001, toCenter.length());
-      const dirToCenter = toCenter.clone().divideScalar(distToCenter);
-
-      let firstIsAI = false;
-      try {
-        const rc = new THREE.Raycaster(camera.position.clone(), dirToCenter, 0, distToCenter);
-        const hits = rc.intersectObjects(solids.concat(this.mesh), true) || [];
-        const first = hits[0];
-        if (first) {
-          // Walk up parents to see if the first hit belongs to this AI
-          let o = first.object;
-          while (o) {
-            if (o === this.mesh) { firstIsAI = true; break; }
-            o = o.parent;
-          }
+      if (showBar) {
+        // Billboard: counter parent rotation to face camera
+        var worldPos = new THREE.Vector3();
+        this._healthBarGroup.getWorldPosition(worldPos);
+        var lookDir = camera.position.clone().sub(worldPos);
+        lookDir.y = 0;
+        if (lookDir.lengthSq() > 1e-6) {
+          var worldYaw = Math.atan2(lookDir.x, lookDir.z);
+          this._healthBarGroup.rotation.y = worldYaw - this.mesh.rotation.y;
         }
-      } catch {}
 
-      // Only show if recently damaged by the player (last 5s)
-      const recentlyDamaged = (this.lastDamagedAt && (now - this.lastDamagedAt) <= 5000);
+        // Fill width + color
+        var pct = Math.max(0, Math.min(1, this.health / this.maxHealth));
+        this._healthBarFill.scale.x = Math.max(0.001, pct);
+        this._healthBarFill.position.x = -(1 - pct) * this._healthBarWidth * 0.5;
+        var r = pct < 0.5 ? 1.0 : 1.0 - (pct - 0.5) * 2.0;
+        var g = pct < 0.5 ? pct * 2.0 : 1.0;
+        this._healthBarFill.material.color.setRGB(r, g, 0);
 
-      if (onScreen && this.alive && firstIsAI && recentlyDamaged) {
-        const sx = (ndc.x * 0.5 + 0.5) * w;
-        const sy2 = (-ndc.y * 0.5 + 0.5) * h;
-        this._healthRoot.style.display = 'block';
-        // Center above the head; CSS handles transform offset
-        this._healthRoot.style.left = `${sx}px`;
-        this._healthRoot.style.top = `${sy2}px`;
-      } else {
-        this._healthRoot.style.display = 'none';
+        // Fade out in the last second
+        var timeSinceHit = now - this.lastDamagedAt;
+        if (timeSinceHit > 4000) {
+          var fadeAlpha = 1.0 - (timeSinceHit - 4000) / 1000;
+          this._healthBarFill.material.opacity = Math.max(0, fadeAlpha);
+          this._healthBarFill.material.transparent = true;
+          this._healthBarBg.material.opacity = Math.max(0, fadeAlpha);
+          this._healthBarBg.material.transparent = true;
+        } else {
+          this._healthBarFill.material.opacity = 1.0;
+          this._healthBarFill.material.transparent = false;
+          this._healthBarBg.material.opacity = 1.0;
+          this._healthBarBg.material.transparent = false;
+        }
       }
     }
 
-    // Shooting
+    // Shooting (only when has LOS and not reloading)
     if (!blocked && !this.weapon.reloading) {
-      const canShoot = (now - this.weapon.lastShotTime) >= this.weapon.cooldownMs;
+      var canShoot = (now - this.weapon.lastShotTime) >= this.weapon.cooldownMs;
       if (canShoot && this.weapon.ammo > 0) {
-        const origin = this.eyePos;
-        const baseDir = playerPos.clone().sub(origin).normalize();
-        const hit = fireHitscan(origin, baseDir, {
+        var origin = this.eyePos;
+        var baseDir = playerPos.clone().sub(origin).normalize();
+        var hit = fireHitscan(origin, baseDir, {
           spreadRad: this.weapon.spreadRad,
           solids: solids,
           playerTarget: { position: playerPos, radius: ctx.playerRadius || 0.35 },
@@ -276,16 +377,14 @@ class AIOpponent {
         this.weapon.lastShotTime = now;
         if (this.weapon.ammo <= 0) {
           this.weapon.reloading = true;
-          this.weapon.reloadEnd = performance.now() + this.weapon.reloadTimeSec * 1000;
+          this.weapon.reloadEnd = now + this.weapon.reloadTimeSec * 1000;
         }
       } else if (canShoot && this.weapon.ammo <= 0) {
-        // start reload if empty
         this.weapon.reloading = true;
-        this.weapon.reloadEnd = performance.now() + this.weapon.reloadTimeSec * 1000;
+        this.weapon.reloadEnd = now + this.weapon.reloadTimeSec * 1000;
       }
     }
   }
 }
 
-// Expose
 window.AIOpponent = AIOpponent;

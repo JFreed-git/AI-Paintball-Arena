@@ -69,13 +69,19 @@ function bindUI() {
   const gotoPaintball = document.getElementById('gotoPaintball');
   const backFromPaintball = document.getElementById('backFromPaintball');
 
-  if (gotoPaintball) gotoPaintball.addEventListener('click', () => showOnlyMenu('paintballMenu'));
+  if (gotoPaintball) gotoPaintball.addEventListener('click', () => {
+    showOnlyMenu('paintballMenu');
+    populateMapDropdown('paintballMapSelect');
+  });
   if (backFromPaintball) backFromPaintball.addEventListener('click', () => showOnlyMenu('mainMenu'));
 
   // LAN menu navigation
   const gotoLAN = document.getElementById('gotoLAN');
   const backFromLAN = document.getElementById('backFromLAN');
-  if (gotoLAN) gotoLAN.addEventListener('click', () => showOnlyMenu('lanMenu'));
+  if (gotoLAN) gotoLAN.addEventListener('click', () => {
+    showOnlyMenu('lanMenu');
+    populateMapDropdown('lanMapSelect');
+  });
   if (backFromLAN) backFromLAN.addEventListener('click', () => showOnlyMenu('mainMenu'));
 
   // Paintball (AI) start
@@ -84,7 +90,17 @@ function bindUI() {
     startPaintball.addEventListener('click', () => {
       const sel = document.getElementById('paintballDifficulty');
       const difficulty = sel ? sel.value : 'Easy';
-      if (typeof startPaintballGame === 'function') {
+      const mapSel = document.getElementById('paintballMapSelect');
+      const mapName = mapSel ? mapSel.value : '__default__';
+      if (typeof startPaintballGame !== 'function') return;
+
+      if (mapName && mapName !== '__default__' && typeof fetchMapData === 'function') {
+        fetchMapData(mapName).then(function (mapData) {
+          startPaintballGame({ difficulty, _mapData: mapData });
+        }).catch(function () {
+          startPaintballGame({ difficulty });
+        });
+      } else {
         startPaintballGame({ difficulty });
       }
     });
@@ -102,9 +118,12 @@ function bindUI() {
       const reloadTimeSec = parseFloat((document.getElementById('reloadTimeSec') || {}).value) || 2.5;
       const playerHealth = parseInt((document.getElementById('playerHealth') || {}).value, 10) || 100;
       const playerDamage = parseInt((document.getElementById('playerDamage') || {}).value, 10) || 20;
-      const settings = { fireCooldownMs, magSize, reloadTimeSec, playerHealth, playerDamage };
+      const roundsToWin = parseInt((document.getElementById('roundsToWin') || {}).value, 10) || 2;
+      const settings = { fireCooldownMs, magSize, reloadTimeSec, playerHealth, playerDamage, roundsToWin };
+      const mapSel = document.getElementById('lanMapSelect');
+      const mapName = mapSel ? mapSel.value : '__default__';
       if (typeof hostLanGame === 'function') {
-        hostLanGame(roomId, settings);
+        hostLanGame(roomId, settings, mapName);
       } else {
         alert('Multiplayer module not loaded.');
       }
@@ -141,6 +160,22 @@ function setHUDVisible(visible) {
   const crosshair = document.getElementById('crosshair');
   if (ui) ui.classList.toggle('hidden', !visible);
   if (crosshair) crosshair.classList.toggle('hidden', !visible);
+}
+
+function populateMapDropdown(selectId) {
+  var sel = document.getElementById(selectId);
+  if (!sel) return;
+  // Keep only the default option
+  sel.innerHTML = '<option value="__default__">Default Arena</option>';
+  if (typeof fetchMapList !== 'function') return;
+  fetchMapList().then(function (names) {
+    names.forEach(function (name) {
+      var opt = document.createElement('option');
+      opt.value = name;
+      opt.textContent = name;
+      sel.appendChild(opt);
+    });
+  }).catch(function () {});
 }
 
 function showOnlyMenu(idOrNull) {

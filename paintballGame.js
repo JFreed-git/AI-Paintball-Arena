@@ -1,46 +1,39 @@
 // Paintball (AI) mode
-// - Uses playerControls.js for inputs (getInputState, mouse look, sprint/reload keys).
-// - Uses physics.js for movement & collisions.
-// - Uses paintballEnvironment.js to build a symmetric arena.
-// - Uses projectiles.js for fast hitscan paintball shots.
-// - Uses aiOpponent.js for a simple AI enemy.
-// - Leaves aim trainer logic untouched.
+// Uses shared functions from gameShared.js for HUD, round flow, crosshair, and reload.
 
 (function () {
-  // Public flags
   window.paintballActive = false;
+  window.devSpectatorMode = false;
+
+  window.getPaintballState = function () { return state; };
 
   // Tunables
-  const WALK_SPEED = 4.5;
-  const SPRINT_SPEED = 8.5;
-  const PLAYER_RADIUS = 0.5;
+  var WALK_SPEED = 4.5;
+  var SPRINT_SPEED = 8.5;
+  var PLAYER_RADIUS = 0.5;
+  var FIRE_COOLDOWN_MS = 166;
+  var MAG_SIZE = 6;
+  var RELOAD_TIME_SEC = 2.5;
+  var SPRINT_SPREAD_BONUS_RAD = 0.012;
+  var BASE_CROSSHAIR_SPREAD_PX = 0;
+  var PLAYER_DAMAGE = 20;
 
-  const FIRE_COOLDOWN_MS = 166;
-  const MAG_SIZE = 6;
-  const RELOAD_TIME_SEC = 2.5;
-
-  const BASE_SPREAD_RAD = 0.0;      // no base spread when not sprinting
-  const SPRINT_SPREAD_BONUS_RAD = 0.012; // ~0.7 deg
-  const BASE_CROSSHAIR_SPREAD_PX = 0;
-  const SPRINT_CROSSHAIR_BONUS_PX = 10;
-
-  const PLAYER_DAMAGE = 20; // per hit to AI
-
-  // State
-  let state = null;
+  var state = null;
 
   function newState(difficulty) {
+    var roundsInput = document.getElementById('roundsToWinPaintball');
+    var toWin = roundsInput ? Math.max(1, Math.min(10, parseInt(roundsInput.value, 10) || 2)) : 2;
+
     return {
       difficulty: difficulty || 'Easy',
       arena: null,
       ai: null,
-      // Player
       player: {
         position: camera ? camera.position : new THREE.Vector3(0, 2, 5),
         walkSpeed: WALK_SPEED,
         sprintSpeed: SPRINT_SPEED,
         radius: PLAYER_RADIUS,
-        health: 60,
+        health: 100,
         alive: true,
         weapon: {
           magSize: MAG_SIZE,
@@ -51,175 +44,89 @@
           reloadTimeSec: RELOAD_TIME_SEC
         }
       },
-      // Match
-      match: {
-        playerWins: 0,
-        aiWins: 0,
-        toWin: 2,
-        roundActive: true,
-      },
-      // Spawns
+      match: { playerWins: 0, aiWins: 0, toWin: toWin, roundActive: true },
       spawns: { A: new THREE.Vector3(), B: new THREE.Vector3() },
-      // HUD elements
       hud: {
         healthContainer: document.getElementById('healthContainer'),
         healthFill: document.getElementById('healthFill'),
         ammoDisplay: document.getElementById('ammoDisplay'),
         reloadIndicator: document.getElementById('reloadIndicator'),
         sprintIndicator: document.getElementById('sprintIndicator'),
-        scoreEl: document.getElementById('score'),
-        timerEl: document.getElementById('timer'),
-        instructionsEl: document.getElementById('instructions'),
         bannerEl: document.getElementById('roundBanner'),
         countdownEl: document.getElementById('roundCountdown'),
+        enemyHealthContainer: document.getElementById('enemyHealthContainer'),
+        enemyHealthFill: document.getElementById('enemyHealthFill'),
       },
       inputArmed: false,
       inputEnabled: false,
-      countdownTimer: 0,
-      bannerTimer: 0,
+      countdownTimerRef: { id: 0 },
+      bannerTimerRef: { id: 0 },
       lastTs: 0,
       loopHandle: 0
     };
   }
 
-  // UI helpers
+  // HUD helpers — delegate to shared functions
   function showPaintballHUD(show) {
     if (!state) return;
     if (state.hud.healthContainer) state.hud.healthContainer.classList.toggle('hidden', !show);
-    if (state.hud.scoreEl) state.hud.scoreEl.classList.add('hidden'); // hide aim trainer score
-    if (state.hud.timerEl) state.hud.timerEl.classList.add('hidden'); // hide aim trainer timer
-    if (state.hud.instructionsEl) state.hud.instructionsEl.classList.add('hidden');
+    if (state.hud.enemyHealthContainer) state.hud.enemyHealthContainer.classList.toggle('hidden', !show);
   }
 
   function updateHUD() {
     if (!state) return;
-    const p = state.player;
-    if (state.hud.healthFill) {
-      const clamped = Math.max(0, Math.min(100, p.health));
-      state.hud.healthFill.style.width = `${clamped}%`;
-      // Optionally change color at low health (not required)
-    }
-    if (state.hud.ammoDisplay) {
-      state.hud.ammoDisplay.textContent = `${p.weapon.ammo}/${p.weapon.magSize}`;
+    var p = state.player;
+    sharedUpdateHealthBar(state.hud.healthFill, p.health, 100);
+    sharedUpdateAmmoDisplay(state.hud.ammoDisplay, p.weapon.ammo, p.weapon.magSize);
+    if (state.ai) {
+      sharedUpdateHealthBar(state.hud.enemyHealthFill, state.ai.health, state.ai.maxHealth || 100);
     }
   }
 
-  function setReloadingUI(isReloading) {
+  // Round/match flow — using shared countdown and banner
+  function showRoundBanner(text, ms) {
     if (!state) return;
-    if (state.hud.reloadIndicator) {
-      state.hud.reloadIndicator.classList.toggle('hidden', !isReloading);
-    }
-    setCrosshairDimmed(isReloading);
+    sharedShowRoundBanner(text, state.hud.bannerEl, state.bannerTimerRef, ms);
   }
 
-  function setSprintUI(sprinting) {
+  function startRoundCountdown(seconds) {
     if (!state) return;
-    if (state.hud.sprintIndicator) {
-      state.hud.sprintIndicator.classList.toggle('hidden', !sprinting);
-    }
-  }
-
-  function spreadRadToPx(spreadRad) {
-    const fov = (camera && camera.isPerspectiveCamera) ? camera.fov : 75;
-    const fovRad = fov * Math.PI / 180;
-    const focalPx = (window.innerHeight / 2) / Math.tan(fovRad / 2);
-    const px = Math.tan(Math.max(0, spreadRad)) * focalPx;
-    return Math.max(0, Math.min(60, px)); // clamp for readability
-  }
-  function setCrosshairBySprint(sprinting) {
-    const spread = sprinting ? SPRINT_SPREAD_BONUS_RAD : 0;
-    setCrosshairSpread(spreadRadToPx(spread));
-  }
-
-  // Round/match flow
-
-  // Round UI helpers
-  function showRoundBanner(text, ms = 1200) {
-    if (!state) return;
-    const el = state.hud.bannerEl;
-    if (!el) return;
-    el.textContent = text;
-    el.classList.remove('hidden');
-    if (state.bannerTimer) {
-      try { clearTimeout(state.bannerTimer); } catch {}
-      state.bannerTimer = 0;
-    }
-    state.bannerTimer = setTimeout(() => {
-      el.classList.add('hidden');
-    }, ms);
-  }
-
-  function startRoundCountdown(seconds = 3) {
-    if (!state) return;
-    // Lock input and round state during countdown
-    state.inputEnabled = false;
-    state.match.roundActive = false;
-    // Re-arm input and add small buffer to prevent any instant shots after countdown
-    state.inputArmed = false;
-    if (state.player && state.player.weapon) {
-      state.player.weapon.lastShotTime = performance.now() + 300;
-    }
-
-    const el = state.hud.countdownEl;
-    if (!el) {
-      setTimeout(() => {
-        state.inputEnabled = true;
-        state.match.roundActive = true;
-      }, seconds * 1000);
-      return;
-    }
-
-    let remain = Math.max(1, Math.floor(seconds));
-    el.classList.remove('hidden');
-    el.textContent = String(remain);
-
-    if (state.countdownTimer) {
-      try { clearInterval(state.countdownTimer); } catch {}
-      state.countdownTimer = 0;
-    }
-
-    state.countdownTimer = setInterval(() => {
-      remain -= 1;
-      if (remain > 0) {
-        el.textContent = String(remain);
-      } else {
-        // Show GO, then hide after 1s
-        el.textContent = 'GO!';
-        setTimeout(() => {
-          el.classList.add('hidden');
-        }, 1000);
-
-        try { clearInterval(state.countdownTimer); } catch {}
-        state.countdownTimer = 0;
-
-        // Enable input and round state
+    sharedStartRoundCountdown({
+      seconds: seconds || 3,
+      countdownEl: state.hud.countdownEl,
+      timerRef: state.countdownTimerRef,
+      onStart: function () {
+        state.inputEnabled = false;
+        state.match.roundActive = false;
+        state.inputArmed = false;
+        if (state.player && state.player.weapon) {
+          state.player.weapon.lastShotTime = performance.now() + 300;
+        }
+      },
+      onReady: function () {
         state.inputEnabled = true;
         state.match.roundActive = true;
       }
-    }, 1000);
+    });
   }
+
   function resetEntitiesForRound() {
-    const spawns = state.spawns;
-    // Place player & camera at spawn A
+    var spawns = state.spawns;
     camera.position.copy(spawns.A);
     camera.rotation.x = 0;
     camera.rotation.z = 0;
-    // Face toward B
     camera.lookAt(spawns.B);
-    // Ensure we are not spawning inside geometry
     if (typeof resolveCollisions2D === 'function') {
       try { resolveCollisions2D(camera.position, PLAYER_RADIUS, state.arena.colliders); } catch {}
     }
 
-    // Reset player stats
-    const p = state.player;
+    var p = state.player;
     p.health = 100;
     p.alive = true;
     p.weapon.ammo = p.weapon.magSize;
     p.weapon.reloading = false;
     p.weapon.lastShotTime = 0;
 
-    // Reset AI
     if (state.ai) state.ai.destroy();
     state.ai = new AIOpponent({
       difficulty: state.difficulty,
@@ -233,24 +140,20 @@
     if (winner === 'player') state.match.playerWins++;
     else if (winner === 'ai') state.match.aiWins++;
 
-    // Check match end
     if (state.match.playerWins >= state.match.toWin || state.match.aiWins >= state.match.toWin) {
-      // End of match
-      const finalScoreEl = document.getElementById('finalScore');
+      var finalScoreEl = document.getElementById('finalScore');
       if (finalScoreEl) {
-        finalScoreEl.textContent = `Player ${state.match.playerWins} - ${state.match.aiWins} AI`;
+        finalScoreEl.textContent = 'Player ' + state.match.playerWins + ' - ' + state.match.aiWins + ' AI';
       }
-      // Clean up and show results
-      stopPaintballInternal(false); // don't show main menu yet
+      stopPaintballInternal(false);
       setHUDVisible(false);
       showOnlyMenu('resultMenu');
       try { document.exitPointerLock(); } catch {}
       return;
     }
 
-    // Show who won, then prepare next round with a countdown
     showRoundBanner(winner === 'player' ? 'Player wins the round!' : 'AI wins the round!', 1200);
-    setTimeout(() => {
+    setTimeout(function () {
       resetEntitiesForRound();
       updateHUD();
       startRoundCountdown(3);
@@ -259,36 +162,29 @@
 
   // Combat
   function playerCanShoot(now) {
-    const w = state.player.weapon;
+    var w = state.player.weapon;
     if (w.reloading) return false;
     if (w.ammo <= 0) return false;
     return (now - w.lastShotTime) >= FIRE_COOLDOWN_MS;
   }
 
-  function startPlayerReload(now) {
-    const w = state.player.weapon;
-    if (w.reloading || w.ammo >= w.magSize) return;
-    w.reloading = true;
-    w.reloadEnd = now + RELOAD_TIME_SEC * 1000;
-    setReloadingUI(true);
-  }
-
   function handlePlayerShooting(input, now) {
-    const w = state.player.weapon;
+    var w = state.player.weapon;
 
     if (input.reloadPressed) {
-      startPlayerReload(now);
+      if (sharedStartReload(w, now)) {
+        sharedSetReloadingUI(true, state.hud.reloadIndicator);
+      }
       return;
     }
-
     if (w.reloading) return;
 
     if (input.fireDown && playerCanShoot(now)) {
-      const dir = new THREE.Vector3();
+      var dir = new THREE.Vector3();
       camera.getWorldDirection(dir);
-      const spread = input.sprint ? SPRINT_SPREAD_BONUS_RAD : 0;
+      var spread = input.sprint ? SPRINT_SPREAD_BONUS_RAD : 0;
 
-      const hit = fireHitscan(camera.position.clone(), dir, {
+      var hit = fireHitscan(camera.position.clone(), dir, {
         spreadRad: spread,
         solids: state.arena.solids,
         aiTarget: state.ai,
@@ -298,6 +194,7 @@
 
       if (hit.hit && state.ai && hit.hitType === 'ai') {
         state.ai.takeDamage(PLAYER_DAMAGE);
+        updateHUD();
         if (!state.ai.alive && state.match.roundActive) {
           endRound('player');
         }
@@ -308,17 +205,16 @@
       updateHUD();
 
       if (w.ammo <= 0) {
-        startPlayerReload(now);
+        if (sharedStartReload(w, now)) {
+          sharedSetReloadingUI(true, state.hud.reloadIndicator);
+        }
       }
     }
   }
 
   function updateReload(now) {
-    const w = state.player.weapon;
-    if (w.reloading && now >= w.reloadEnd) {
-      w.reloading = false;
-      w.ammo = w.magSize;
-      setReloadingUI(false);
+    if (sharedHandleReload(state.player.weapon, now)) {
+      sharedSetReloadingUI(false, state.hud.reloadIndicator);
       updateHUD();
     }
   }
@@ -327,27 +223,21 @@
   function tick(ts) {
     if (!window.paintballActive || !state) return;
 
-    const dt = state.lastTs ? Math.min(0.05, (ts - state.lastTs) / 1000) : 0;
+    var dt = state.lastTs ? Math.min(0.05, (ts - state.lastTs) / 1000) : 0;
     state.lastTs = ts;
 
-    // Read inputs
-    const input = window.getInputState ? window.getInputState() : { moveX: 0, moveZ: 0, sprint: false, fireDown: false, reloadPressed: false };
+    var input = window.getInputState ? window.getInputState() : { moveX: 0, moveZ: 0, sprint: false, fireDown: false, reloadPressed: false };
 
-    // Ignore any initial stuck fire until the first release after starting
-    if (state && !state.inputArmed) {
-      if (input.fireDown) {
-        input.fireDown = false;
-      } else {
-        state.inputArmed = true;
-      }
+    // Ignore initial stuck fire
+    if (!state.inputArmed) {
+      if (input.fireDown) { input.fireDown = false; }
+      else { state.inputArmed = true; }
     }
 
-    // Crosshair & sprint UI
-    setCrosshairBySprint(!!input.sprint);
-    setSprintUI(!!input.sprint);
+    sharedSetCrosshairBySprint(!!input.sprint);
+    sharedSetSprintUI(!!input.sprint, state.hud.sprintIndicator);
 
-    // Movement (XZ only) — disabled during countdown
-    if (state.inputEnabled) {
+    if (state.inputEnabled && !window.devSpectatorMode) {
       updateXZPhysics(
         state.player,
         { moveX: input.moveX || 0, moveZ: input.moveZ || 0, sprint: !!input.sprint },
@@ -356,19 +246,17 @@
       );
     }
 
-    // Shooting + reload
-    const now = performance.now();
+    var now = performance.now();
     if (state.inputEnabled) {
       handlePlayerShooting(input, now);
     }
     updateReload(now);
 
-    // AI update
     if (state.ai && state.match.roundActive) {
       state.ai.update(dt, {
         playerPos: camera.position.clone(),
         playerRadius: PLAYER_RADIUS,
-        onPlayerHit: (dmg) => {
+        onPlayerHit: function (dmg) {
           if (!state.player.alive) return;
           state.player.health = Math.max(0, state.player.health - dmg);
           updateHUD();
@@ -380,44 +268,38 @@
       });
     }
 
-    // Continue loop
+    updateHUD();
     state.loopHandle = requestAnimationFrame(tick);
   }
 
   // Public start/stop
-  window.startPaintballGame = function startPaintballGame(opts) {
+  window.startPaintballGame = function (opts) {
     if (window.paintballActive) {
       try { if (typeof stopPaintballInternal === 'function') stopPaintballInternal(); } catch {}
     }
-    // Stop standard Aim Trainer session if running to avoid stray targets and walls
     try { if (typeof stopGameInternal === 'function') stopGameInternal(); } catch {}
-    const difficulty = (opts && opts.difficulty) || 'Easy';
+    var difficulty = (opts && opts.difficulty) || 'Easy';
     state = newState(difficulty);
 
-    // Build arena
-    state.arena = buildPaintballArenaSymmetric();
+    var mapData = (opts && opts._mapData) ? opts._mapData : null;
+    state.arena = (mapData && typeof buildArenaFromMap === 'function')
+      ? buildArenaFromMap(mapData)
+      : (typeof buildArenaFromMap === 'function' ? buildArenaFromMap(getDefaultMapData()) : buildPaintballArenaSymmetric());
     state.spawns = state.arena.spawns;
-
-    // Reset for round 1
     resetEntitiesForRound();
 
-    // Show HUD and lock pointer
     setHUDVisible(true);
     showOnlyMenu(null);
     showPaintballHUD(true);
-    setCrosshairBySprint(false);
-    setReloadingUI(false);
+    sharedSetCrosshairBySprint(false);
+    sharedSetReloadingUI(false, state.hud.reloadIndicator);
     updateHUD();
 
-    // Request pointer lock
     if (renderer && renderer.domElement && renderer.domElement.requestPointerLock) {
       renderer.domElement.requestPointerLock();
     }
 
-    // Begin round countdown
     startRoundCountdown(3);
-
-    // Activate and run loop
     window.paintballActive = true;
     state.inputArmed = false;
     state.player.weapon.lastShotTime = performance.now() + 300;
@@ -425,42 +307,30 @@
     state.loopHandle = requestAnimationFrame(tick);
   };
 
-  window.stopPaintballInternal = function stopPaintballInternal(showMenu = true) {
-    // Stop loop
+  window.stopPaintballInternal = function (showMenu) {
+    if (showMenu === undefined) showMenu = true;
     if (state && state.loopHandle) {
       try { cancelAnimationFrame(state.loopHandle); } catch {}
       state.loopHandle = 0;
     }
-
-    // Remove AI
     if (state && state.ai) {
       try { state.ai.destroy(); } catch {}
       state.ai = null;
     }
-
-    // Remove arena
     if (state && state.arena && state.arena.group && state.arena.group.parent) {
       state.arena.group.parent.remove(state.arena.group);
     }
+    if (state) showPaintballHUD(false);
 
-    // Hide HUD
-    if (state) {
-      showPaintballHUD(false);
-    }
-
-    // Reset crosshair visuals
     setCrosshairDimmed(false);
     setCrosshairSpread(BASE_CROSSHAIR_SPREAD_PX);
 
     window.paintballActive = false;
-
     if (showMenu) {
-      // Return to main menu handled by caller (menuNavigation or pointer lock change)
       try { document.exitPointerLock(); } catch {}
       showOnlyMenu('mainMenu');
       setHUDVisible(false);
     }
-
     state = null;
   };
 })();

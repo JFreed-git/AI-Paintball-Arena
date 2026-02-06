@@ -13,6 +13,7 @@
  * Join from other device on LAN via: http://YOUR_LAN_IP:3000
  */
 const path = require('path');
+const fs = require('fs');
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
@@ -21,8 +22,80 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server, { cors: { origin: '*' } });
 
+// JSON body parsing for map API
+app.use(express.json({ limit: '1mb' }));
+
 // Serve static files from this directory
 app.use(express.static(__dirname));
+
+// ── Map REST API ──
+const MAPS_DIR = path.join(__dirname, 'maps');
+
+function sanitizeMapName(name) {
+  if (typeof name !== 'string') return null;
+  var clean = name.replace(/[^a-zA-Z0-9_-]/g, '').substring(0, 50);
+  return clean.length > 0 ? clean : null;
+}
+
+// Ensure maps/ directory exists
+function ensureMapsDir() {
+  if (!fs.existsSync(MAPS_DIR)) {
+    fs.mkdirSync(MAPS_DIR, { recursive: true });
+  }
+}
+
+// List all map names
+app.get('/api/maps', function (req, res) {
+  ensureMapsDir();
+  try {
+    var files = fs.readdirSync(MAPS_DIR).filter(function (f) { return f.endsWith('.json'); });
+    var names = files.map(function (f) { return f.replace(/\.json$/, ''); });
+    res.json(names);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to list maps' });
+  }
+});
+
+// Get a specific map
+app.get('/api/maps/:name', function (req, res) {
+  var name = sanitizeMapName(req.params.name);
+  if (!name) return res.status(400).json({ error: 'Invalid map name' });
+  var filePath = path.join(MAPS_DIR, name + '.json');
+  if (!fs.existsSync(filePath)) return res.status(404).json({ error: 'Map not found' });
+  try {
+    var data = fs.readFileSync(filePath, 'utf8');
+    res.type('json').send(data);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to read map' });
+  }
+});
+
+// Save a map
+app.post('/api/maps/:name', function (req, res) {
+  var name = sanitizeMapName(req.params.name);
+  if (!name) return res.status(400).json({ error: 'Invalid map name' });
+  ensureMapsDir();
+  try {
+    fs.writeFileSync(path.join(MAPS_DIR, name + '.json'), JSON.stringify(req.body, null, 2), 'utf8');
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to save map' });
+  }
+});
+
+// Delete a map
+app.delete('/api/maps/:name', function (req, res) {
+  var name = sanitizeMapName(req.params.name);
+  if (!name) return res.status(400).json({ error: 'Invalid map name' });
+  var filePath = path.join(MAPS_DIR, name + '.json');
+  if (!fs.existsSync(filePath)) return res.status(404).json({ error: 'Map not found' });
+  try {
+    fs.unlinkSync(filePath);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to delete map' });
+  }
+});
 
 // roomId -> { hostId: string, players: Set<string>, settings: object }
 const rooms = new Map();
@@ -170,7 +243,10 @@ function sanitizeSettings(s) {
     playerHealth: clampInt(s.playerHealth, 1, 1000, 100),
     // damage per hit
     playerDamage: clampInt(s.playerDamage, 1, 500, 20),
+    // rounds needed to win the match
+    roundsToWin: clampInt(s.roundsToWin, 1, 10, 2),
   };
+  if (s.mapName && typeof s.mapName === 'string') out.mapName = s.mapName.substring(0, 100);
   return out;
 }
 

@@ -96,7 +96,7 @@ function onPointerLockChange() {
     const focused = typeof document.hasFocus === 'function' ? document.hasFocus() : true;
     const visible = typeof document.visibilityState === 'string' ? (document.visibilityState === 'visible') : true;
 
-    if (focused && visible) {
+    if (focused && visible && !window.devConsoleOpen) {
       if (window.paintballActive) {
         try { if (typeof stopPaintballInternal === 'function') stopPaintballInternal(); } catch {}
         showOnlyMenu('mainMenu');
@@ -111,6 +111,7 @@ function onPointerLockChange() {
 }
 
 function onGlobalKeyDown(e) {
+  if (window.editorActive) return;
   if (e.key === 'Escape') {
     if (window.paintballActive) {
       try { if (typeof stopPaintballInternal === 'function') stopPaintballInternal(); } catch {}
@@ -134,6 +135,7 @@ function onGlobalKeyDown(e) {
 }
 
 function onGlobalKeyUp(e) {
+  if (window.editorActive) return;
   switch (e.code) {
     case 'KeyW': _w = false; recomputeMoveAxes(); break;
     case 'KeyA': _a = false; recomputeMoveAxes(); break;
