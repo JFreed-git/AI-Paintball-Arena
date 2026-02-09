@@ -1,0 +1,46 @@
+{
+  "id": "marksman",
+  "name": "Marksman",
+  "description": "Precise single-shot marker. High accuracy, moderate fire rate.",
+  "color": 6750156,
+  "maxHealth": 100,
+  "walkSpeed": 4.5,
+  "sprintSpeed": 8.5,
+  "jumpVelocity": 8.5,
+  "hitbox": {
+    "width": 0.8,
+    "height": 3.2,
+    "depth": 0.8
+  },
+  "modelType": "standard",
+  "weapon": {
+    "cooldownMs": 166,
+    "magSize": 6,
+    "reloadTimeSec": 2.5,
+    "damage": 20,
+    "spreadRad": 0,
+    "sprintSpreadRad": 0.012,
+    "maxRange": 200,
+    "pellets": 1,
+    "projectileSpeed": null,
+    "projectileGravity": 0,
+    "splashRadius": 0,
+    "scope": {
+      "type": "scope",
+      "zoomFOV": 35,
+      "overlay": null,
+      "spreadMultiplier": 0.15
+    },
+    "modelType": "rifle",
+    "tracerColor": 6750156,
+    "crosshair": {
+      "style": "cross",
+      "baseSpreadPx": 8,
+      "sprintSpreadPx": 20,
+      "color": "#00ffaa"
+    },
+    "abilities": []
+  },
+  "passives": [],
+  "abilities": []
+}

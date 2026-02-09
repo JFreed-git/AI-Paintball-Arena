@@ -285,11 +285,12 @@
 
   // ── Start / Stop ──
 
-  window.startTrainingRange = function () {
+  window.startTrainingRange = function (opts) {
     if (window.trainingRangeActive) {
       try { if (typeof stopTrainingRangeInternal === 'function') stopTrainingRangeInternal(); } catch (e) {}
     }
-    var hero = window.getHeroById ? window.getHeroById(window.getCurrentHeroId ? window.getCurrentHeroId() : 'marksman') : null;
+    var requestedHeroId = (opts && opts._heroId) || (window.getCurrentHeroId ? window.getCurrentHeroId() : 'marksman');
+    var hero = window.getHeroById ? window.getHeroById(requestedHeroId) : null;
     var weaponOpts = hero ? hero.weapon : {};
     var tracerColor = hero ? hero.color : 0x66ffcc;
     var heroId = hero ? hero.id : 'marksman';
@@ -323,6 +324,11 @@
       color: 0x66ffcc,
       weapon: new Weapon(weaponOpts)
     });
+
+    // Apply full hero config (stats, weapon model, crosshair, first-person viewmodel)
+    if (typeof window.applyHeroToPlayer === 'function') {
+      window.applyHeroToPlayer(player, heroId);
+    }
 
     player.resetForRound(arena.spawns.A);
     player.syncCameraFromPlayer();

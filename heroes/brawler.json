@@ -1,0 +1,46 @@
+{
+  "id": "brawler",
+  "name": "Brawler",
+  "description": "Devastating close-range shotgun. 8 pellets per blast.",
+  "color": 16746564,
+  "maxHealth": 120,
+  "walkSpeed": 4.2,
+  "sprintSpeed": 8,
+  "jumpVelocity": 8.5,
+  "hitbox": {
+    "width": 0.9,
+    "height": 3.2,
+    "depth": 0.9
+  },
+  "modelType": "standard",
+  "weapon": {
+    "cooldownMs": 600,
+    "magSize": 4,
+    "reloadTimeSec": 3,
+    "damage": 13,
+    "spreadRad": 0.06,
+    "sprintSpreadRad": 0.1,
+    "maxRange": 60,
+    "pellets": 8,
+    "projectileSpeed": null,
+    "projectileGravity": 0,
+    "splashRadius": 0,
+    "scope": {
+      "type": "ironsights",
+      "zoomFOV": 55,
+      "overlay": null,
+      "spreadMultiplier": 0.5
+    },
+    "modelType": "shotgun",
+    "tracerColor": 16746564,
+    "crosshair": {
+      "style": "circle",
+      "baseSpreadPx": 24,
+      "sprintSpreadPx": 40,
+      "color": "#ff8844"
+    },
+    "abilities": []
+  },
+  "passives": [],
+  "abilities": []
+}

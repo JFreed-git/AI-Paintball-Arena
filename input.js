@@ -67,7 +67,7 @@ function bindPlayerControls(renderer) {
 }
 
 function onMouseMove(event) {
-  if (!window.paintballActive && !window.multiplayerActive && !window.trainingRangeActive) return;
+  if (!window.paintballActive && !window.multiplayerActive && !window.trainingRangeActive && !window._splitScreenActive) return;
   if (window._heroSelectOpen) return;
 
   // Raycasting mouse coords (kept for completeness)
@@ -112,7 +112,9 @@ function onPointerLockChange() {
     const visible = typeof document.visibilityState === 'string' ? (document.visibilityState === 'visible') : true;
 
     if (focused && visible && !window.devConsoleOpen) {
-      if (window.paintballActive) {
+      if (window._splitScreenActive) {
+        try { if (typeof stopSplitScreen === 'function') stopSplitScreen(); } catch {}
+      } else if (window.paintballActive) {
         try { if (typeof stopPaintballInternal === 'function') stopPaintballInternal(); } catch {}
         showOnlyMenu('mainMenu');
         setHUDVisible(false);
@@ -132,7 +134,9 @@ function onPointerLockChange() {
 function onGlobalKeyDown(e) {
   if (window.editorActive) return;
   if (e.key === 'Escape') {
-    if (window.paintballActive) {
+    if (window._splitScreenActive) {
+      try { if (typeof stopSplitScreen === 'function') stopSplitScreen(); } catch {}
+    } else if (window.paintballActive) {
       try { if (typeof stopPaintballInternal === 'function') stopPaintballInternal(); } catch {}
     } else if (window.multiplayerActive) {
       try { if (typeof stopMultiplayerInternal === 'function') stopMultiplayerInternal(); } catch {}

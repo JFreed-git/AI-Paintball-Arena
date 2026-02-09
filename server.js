@@ -97,6 +97,56 @@ app.delete('/api/maps/:name', function (req, res) {
   }
 });
 
+// ── Hero REST API (read-only — editing happens in the Electron dev workbench) ──
+const HEROES_DIR = path.join(__dirname, 'heroes');
+
+function ensureHeroesDir() {
+  if (!fs.existsSync(HEROES_DIR)) {
+    fs.mkdirSync(HEROES_DIR, { recursive: true });
+  }
+}
+
+// Seed built-in heroes as JSON files if they don't already exist.
+// The canonical hero data lives in heroes.js (browser-side), so we duplicate
+// just enough here to bootstrap the files. The dev workbench is the editor.
+(function seedBuiltinHeroes() {
+  ensureHeroesDir();
+  var builtins = [
+    { id: 'marksman', name: 'Marksman', description: 'Precise single-shot marker. High accuracy, moderate fire rate.', color: 0x66ffcc, maxHealth: 100, walkSpeed: 4.5, sprintSpeed: 8.5, jumpVelocity: 8.5, hitbox: { width: 0.8, height: 3.2, depth: 0.8 }, modelType: 'standard', weapon: { cooldownMs: 166, magSize: 6, reloadTimeSec: 2.5, damage: 20, spreadRad: 0, sprintSpreadRad: 0.012, maxRange: 200, pellets: 1, projectileSpeed: null, projectileGravity: 0, splashRadius: 0, scope: { type: 'scope', zoomFOV: 35, overlay: null, spreadMultiplier: 0.15 }, modelType: 'rifle', tracerColor: 0x66ffcc, crosshair: { style: 'cross', baseSpreadPx: 8, sprintSpreadPx: 20, color: '#00ffaa' }, abilities: [] }, passives: [], abilities: [] },
+    { id: 'brawler', name: 'Brawler', description: 'Devastating close-range shotgun. 8 pellets per blast.', color: 0xff8844, maxHealth: 120, walkSpeed: 4.2, sprintSpeed: 8.0, jumpVelocity: 8.5, hitbox: { width: 0.9, height: 3.2, depth: 0.9 }, modelType: 'standard', weapon: { cooldownMs: 600, magSize: 4, reloadTimeSec: 3.0, damage: 8, spreadRad: 0.06, sprintSpreadRad: 0.10, maxRange: 60, pellets: 8, projectileSpeed: null, projectileGravity: 0, splashRadius: 0, scope: { type: 'ironsights', zoomFOV: 55, overlay: null, spreadMultiplier: 0.5 }, modelType: 'shotgun', tracerColor: 0xff8844, crosshair: { style: 'circle', baseSpreadPx: 24, sprintSpreadPx: 40, color: '#ff8844' }, abilities: [] }, passives: [], abilities: [] }
+  ];
+  builtins.forEach(function (hero) {
+    var filePath = path.join(HEROES_DIR, hero.id + '.json');
+    if (!fs.existsSync(filePath)) {
+      fs.writeFileSync(filePath, JSON.stringify(hero, null, 2), 'utf8');
+    }
+  });
+})();
+
+app.get('/api/heroes', function (req, res) {
+  ensureHeroesDir();
+  try {
+    var files = fs.readdirSync(HEROES_DIR).filter(function (f) { return f.endsWith('.json'); });
+    var names = files.map(function (f) { return f.replace(/\.json$/, ''); });
+    res.json(names);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to list heroes' });
+  }
+});
+
+app.get('/api/heroes/:id', function (req, res) {
+  var name = sanitizeMapName(req.params.id);
+  if (!name) return res.status(400).json({ error: 'Invalid hero id' });
+  var filePath = path.join(HEROES_DIR, name + '.json');
+  if (!fs.existsSync(filePath)) return res.status(404).json({ error: 'Hero not found' });
+  try {
+    var data = fs.readFileSync(filePath, 'utf8');
+    res.type('json').send(data);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to read hero' });
+  }
+});
+
 // roomId -> { hostId: string, players: Set<string>, settings: object }
 const rooms = new Map();
 

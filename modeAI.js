@@ -330,7 +330,13 @@
     sharedSetReloadingUI(false, state.hud.reloadIndicator);
     updateHUD();
 
-    startHeroSelectPhase();
+    // If a hero was pre-selected (e.g. dev workbench quick test), skip hero selection
+    if (opts && opts._heroId) {
+      applyHeroWeapon(opts._heroId);
+      startRoundCountdown(3);
+    } else {
+      startHeroSelectPhase();
+    }
     window.paintballActive = true;
     state.inputArmed = false;
     state.lastTs = 0;

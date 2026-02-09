@@ -7,8 +7,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Development Commands
 
 - **Node/npm path:** `/opt/homebrew/bin/node` and `/opt/homebrew/bin/npm` (Homebrew install — `npm`/`node` are NOT on the default shell PATH in this environment, so always use full paths)
-- **Start server:** `/opt/homebrew/bin/node server.js` (serves on `http://0.0.0.0:3000`)
-- **Install dependencies:** `/opt/homebrew/bin/npm install` (express, socket.io)
+- **Start game server:** `/opt/homebrew/bin/node server.js` (serves on `http://0.0.0.0:3000`)
+- **Start dev workbench:** `/opt/homebrew/bin/npm run dev` (launches Electron desktop app — no server needed)
+- **Install dependencies:** `/opt/homebrew/bin/npm install` (express, socket.io, electron)
 - **No build step, linter, or test suite** — vanilla JS loaded directly via `<script>` tags in index.html
 
 ## Architecture
@@ -36,7 +37,7 @@ All JS files use IIFEs `(function() { ... })()` for scope isolation. Public APIs
 | `crosshair.js` | Crosshair rendering and control. Supports multiple styles: 'cross' (4-bar, default) and 'circle' (ring + center dot, for spread weapons). `ensureCrosshair()`, `setCrosshairSpread(px)`, `setCrosshairDimmed(dim)`, `setCrosshairStyle(style, color)`, `sharedSetCrosshairBySprint(sprinting, baseSpreadRad, sprintSpreadRad)`. Converts weapon spread radians to screen pixels using FOV. Style/color set via CSS variables `--ch-color` and `--spread`. |
 | `hud.js` | Shared HUD management. Weapon state machine: `sharedHandleReload`, `sharedStartReload`, `sharedCanShoot`. HUD updates: `sharedSetReloadingUI`, `sharedSetSprintUI`, `sharedUpdateHealthBar`, `sharedUpdateAmmoDisplay`. Works with any Weapon instance. |
 | `roundFlow.js` | Round and match flow management. `sharedShowRoundBanner(text, durationMs)` and `sharedStartRoundCountdown(cb)` for 3-2-1-GO sequence. Uses `GAME_CONFIG` for timing. |
-| `heroes.js` | Hero registry and hero-to-player application. `HEROES` array (frozen) with expanded hero definitions: id, name, maxHealth, walkSpeed, sprintSpeed, jumpVelocity, hitbox {width, height, depth}, modelType, color, full weapon config, passives[], abilities[]. `applyHeroToPlayer(player, heroId)` sets weapon, stats, color, swaps weapon model, and for camera-attached players also updates crosshair style/color and first-person weapon viewmodel. Current heroes: Marksman (hitscan rifle, 100hp, cross crosshair), Brawler (8-pellet shotgun, 120hp, circle crosshair). **TODO:** Add more heroes, per-hero visual models, per-hero hitbox shapes. |
+| `heroes.js` | Hero registry and hero-to-player application. `HEROES` array with built-in hero defaults (Marksman, Brawler), overridden at runtime by `loadHeroesFromServer()` which loads from `heroes/` directory. `BUILTIN_HEROES` holds the hardcoded fallbacks. `applyHeroToPlayer(player, heroId)` sets weapon, stats, color, swaps weapon model, and for camera-attached players also updates crosshair style/color and first-person weapon viewmodel. `getHeroById(id)` looks up from the current `window.HEROES`. **TODO:** Add more heroes, per-hero visual models, per-hero hitbox shapes. |
 | `abilities.js` | Ability system runtime. `AbilityManager` class with `hasPassive()`, `getCooldownPercent()`, `isReady()`, `update(dt)`, `reset()`. Cooldown tracking and passive lookup are implemented; activation via input and effect callbacks are still TODO. Hero abilities (dash, double jump) go on the hero; weapon abilities (scope) go on the weapon. |
 | `heroSelectUI.js` | Hero selection overlay UI. Builds card-based overlay from `window.HEROES`, handles pre-round timed selection for competitive modes and untimed 'H' key toggle for training. Exports: `showPreRoundHeroSelect(opts)`, `closePreRoundHeroSelect()`, `showHeroSelectWaiting()`, `openHeroSelect()`, `closeHeroSelect()`, `isHeroSelectOpen()`, `getCurrentHeroId()`, `_heroSelectOpen`. Uses `GAME_CONFIG.HERO_SELECT_SECONDS` for timer. |
 
@@ -81,7 +82,22 @@ All JS files use IIFEs `(function() { ... })()` for scope isolation. Public APIs
 |------|---------|
 | `game.js` | Application bootstrap. Creates Three.js `scene`, `camera`, `renderer` as bare globals. Camera is added to scene so children render. Runs the master render loop. Manages first-person weapon viewmodel (camera-attached): `setFirstPersonWeapon(modelType)`, `clearFirstPersonWeapon()`. Viewmodel uses `depthTest:false` to render on top. |
 | `devConsole.js` | Password-protected developer console. God mode, unlimited ammo, spectator camera, kill enemy, heal player, hitbox visualization, AI state display, map editor access. Toggle with 'C' key. |
-| `server.js` | Node.js/Express + Socket.IO relay server. Serves static files, manages rooms (2 players per room), stores per-room settings (rounds to win), forwards messages. No game logic. Also serves map save/load/delete API endpoints. |
+| `server.js` | Node.js/Express + Socket.IO relay server. Serves static files, manages rooms (2 players per room), stores per-room settings (rounds to win), forwards messages. No game logic. Serves read-only REST API for maps and heroes (editing happens in the Electron dev workbench). Seeds built-in heroes to `heroes/` on startup. |
+
+### Dev Workbench (Electron App)
+
+Standalone **Electron desktop app** that loads the exact same game JS files — no copies, no server needed. Replaces `game.js` and `devConsole.js` with dev-specific bootstrap and tools. A bug found in the dev app is the same bug in the real game. Launch with `npm run dev`.
+
+| File | Purpose |
+|------|---------|
+| `electron-main.js` | Electron entry point. Creates BrowserWindow (1400x900), loads `dev.html` as a local file, sets up preload script. |
+| `electron-preload.js` | Electron preload script. Exposes `window.devAPI` via `contextBridge` with filesystem CRUD methods for `heroes/`, `weapon-models/`, and `maps/` directories. Same sanitization as server.js (`a-zA-Z0-9_-`, max 50 chars). |
+| `electron-fetch-shim.js` | Loaded as the first `<script>` in `dev.html`. When `window.devAPI` exists (Electron), monkey-patches `window.fetch` to intercept `/api/*` calls and route to filesystem via `devAPI`. Safe no-op when not in Electron. |
+| `dev.html` | Dev workbench HTML page with sidebar layout, panel DOM, split-screen HUD elements, map editor DOM (copied from index.html), and script includes. Loads all shared game JS files plus dev-specific files. |
+| `devApp.css` | Sidebar layout, panel styles, split-screen HUD, editor forms, weapon model builder parts UI. |
+| `devApp.js` | Dev workbench bootstrap. Creates `scene`/`camera`/`renderer` as bare globals (same as game.js). Sidebar navigation, panel switching, dropdown population, custom hero/weapon-model loading from filesystem, map editor integration, quick test mode launch, first-person weapon viewmodel management. Overrides `showOnlyMenu` to restore sidebar when game modes end. Exports: `getAllHeroes()`, `CUSTOM_HEROES`, `registerCustomWeaponModel()`. |
+| `devSplitScreen.js` | Split-screen two-player mode. Dual viewports via `renderer.setViewport/setScissor`. Tab key switches active player. Per-player cameras, weapon viewmodels, HUD, and crosshairs. Physics, shooting, and respawn for both players. Exports: `startSplitScreen(opts)`, `stopSplitScreen()`, `_splitScreenActive`. |
+| `devHeroEditor.js` | Hero/weapon stat editor with live 3D turntable preview. Form for all hero fields (stats, weapon, scope, crosshair, visual). Save/load/delete custom heroes via filesystem. Weapon Model Builder: compose models from box/cylinder parts with live orbit-camera 3D preview, register into `WEAPON_MODEL_REGISTRY`, save/load/delete via filesystem. Exports: `_initHeroEditorPreview()`, `_initWmbPreview()`, `_refreshWmbLoadList()`. |
 
 ### Other Files
 
@@ -104,6 +120,14 @@ mapFormat.js → mapEditor.js →
 projectiles.js → aiOpponent.js → trainingBot.js →
 modeAI.js → modeLAN.js → modeTraining.js →
 game.js → devConsole.js
+```
+
+dev.html (Electron) loads the same shared scripts but replaces game.js + devConsole.js, and swaps Socket.IO for the fetch shim:
+
+```
+Three.js (CDN) → electron-fetch-shim.js →
+[same shared scripts as index.html: config.js through modeTraining.js] →
+devSplitScreen.js → devHeroEditor.js → devApp.js
 ```
 
 ## Hero System
@@ -170,6 +194,48 @@ Movement is full 3D — horizontal XZ walking plus vertical gravity, jumping, an
 
 `createRoom`/`joinRoom` → room lifecycle. `input` → client sends to host each frame. `snapshot` → host broadcasts state at ~30Hz. `shot` → host relays tracer visuals. `startRound`/`roundResult`/`matchOver` → round lifecycle. `startHeroSelect` (host→client) / `heroSelect` (bidirectional) / `heroesConfirmed` (host→client) → pre-round hero selection. All payloads are plain objects with arrays for positions `[x,y,z]`.
 
+## Server REST API
+
+The game server (`server.js`) exposes read-only endpoints for maps and heroes. Write/delete operations for heroes and weapon-models happen only in the Electron dev workbench.
+
+```
+GET/POST/DELETE  /api/maps/:name          — Map JSON (read-write)
+GET              /api/maps                — List saved map names
+
+GET              /api/heroes/:id          — Hero config JSON (read-only)
+GET              /api/heroes              — List saved hero names
+```
+
+Names use sanitization (`a-zA-Z0-9_-`, max 50 chars). Storage dirs: `maps/`, `heroes/`. Built-in heroes are seeded to `heroes/` on server startup if not already present.
+
+The Electron dev workbench handles full CRUD for heroes and weapon-models via `window.devAPI` (filesystem access through `contextBridge`). Storage dirs: `heroes/`, `weapon-models/`.
+
 ## UI Flow
 
 Menu navigation is in `menuNavigation.js`. Menus are DOM elements toggled via CSS `hidden` class through `showOnlyMenu(id)`. HUD elements (health bar, ammo, reload indicator, sprint indicator, crosshair) are managed by `hud.js` and `crosshair.js`, shared between all game modes. Settings (sensitivity, FOV) persist in localStorage.
+
+## Dev Workbench
+
+The dev workbench is a standalone **Electron desktop app** (`npm run dev`). It loads all the same game JS files as `index.html` but replaces `game.js` (bootstrap) and `devConsole.js` with dev-specific files. No game server needed — filesystem access is provided directly via Electron's `contextBridge`.
+
+### Launch
+
+```bash
+# Dev workbench (standalone, no server needed):
+/opt/homebrew/bin/npm run dev
+
+# Game server (for players, no dev tools exposed):
+/opt/homebrew/bin/node server.js
+```
+
+### Features
+- **Split-Screen**: Two viewports side by side. Tab key switches which player you control. Both players use the same physics, shooting, and weapon systems as the real game.
+- **Hero Editor**: Edit all hero stats with a live 3D preview. Save/load custom heroes to filesystem. Custom heroes appear in all dropdowns alongside built-in heroes.
+- **Weapon Model Builder**: Compose weapon models from box/cylinder parts with a live orbit-camera 3D preview. Register models into `WEAPON_MODEL_REGISTRY` for use in-game.
+- **Map Editor**: Reuses the existing `mapEditor.js` unchanged — same DOM structure, same code.
+- **Quick Test**: Launch AI Match or Training Range directly with chosen hero/difficulty/map.
+
+### Key Architecture Decisions
+- `devApp.js` replaces `game.js` but provides the same globals (`scene`, `camera`, `renderer`) and the same functions (`setFirstPersonWeapon`, `clearFirstPersonWeapon`). It also overrides `showOnlyMenu` to restore the dev sidebar when game modes end via ESC. `input.js` checks `window._splitScreenActive` alongside the other mode flags for mouse look and ESC handling.
+- **Fetch interception**: `electron-fetch-shim.js` monkey-patches `window.fetch` when `window.devAPI` exists (Electron). All `/api/*` calls are intercepted and routed to the filesystem. When `devAPI` doesn't exist (web game), fetch works normally. This means **zero changes** to `mapFormat.js`, `devHeroEditor.js`, or `devApp.js`.
+- **Socket.IO**: Not loaded in `dev.html`. `modeLAN.js` is still included but only calls `io()` inside `ensureSocket()` which is never invoked at module load time. LAN mode is not available from the dev workbench.

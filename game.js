@@ -119,6 +119,11 @@ function init() {
   // Ensure HUD hidden on load and main menu visible
   setHUDVisible(false);
   showOnlyMenu('mainMenu');
+
+  // Load heroes from server (overrides built-in defaults with any edited versions)
+  if (typeof loadHeroesFromServer === 'function') {
+    loadHeroesFromServer();
+  }
 }
 
 // ------- Main loop -------

@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Paintball Arena — Dev Workbench</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="devApp.css">
+</head>
+<body>
+    <div id="devSidebar">
+        <div id="devSidebarHeader">
+            <h2>Dev Workbench</h2>
+        </div>
+        <nav id="devNav">
+            <button class="dev-nav-btn active" data-panel="splitScreen">Split Screen</button>
+            <button class="dev-nav-btn" data-panel="heroEditor">Hero Editor</button>
+            <button class="dev-nav-btn" data-panel="weaponModelBuilder">Model Builder</button>
+            <button class="dev-nav-btn" data-panel="mapEditor">Map Editor</button>
+            <button class="dev-nav-btn" data-panel="quickTest">Quick Test</button>
+        </nav>
+        <div id="devPanels">
+            <!-- Split Screen Panel -->
+            <div id="panelSplitScreen" class="dev-panel active">
+                <h3>Split-Screen Test</h3>
+                <div class="dev-field">
+                    <label>P1 Hero</label>
+                    <select id="ssHeroP1"></select>
+                </div>
+                <div class="dev-field">
+                    <label>P2 Hero</label>
+                    <select id="ssHeroP2"></select>
+                </div>
+                <div class="dev-field">
+                    <label>Map</label>
+                    <select id="ssMapSelect">
+                        <option value="__default__">Default Arena</option>
+                    </select>
+                </div>
+                <div class="dev-actions">
+                    <button id="ssStart" class="dev-btn-primary">Start</button>
+                    <button id="ssStop" class="dev-btn-secondary" disabled>Stop</button>
+                </div>
+                <div id="ssStatus" class="dev-status">Ready. Press Start to begin.</div>
+            </div>
+
+            <!-- Hero Editor Panel -->
+            <div id="panelHeroEditor" class="dev-panel">
+                <h3>Hero Editor</h3>
+                <div id="heroEditorList">
+                    <div class="dev-field">
+                        <label>Hero</label>
+                        <select id="heHeroSelect"></select>
+                    </div>
+                    <div class="dev-actions">
+                        <button id="heNew" class="dev-btn-secondary">New</button>
+                        <button id="heDelete" class="dev-btn-danger">Delete</button>
+                    </div>
+                </div>
+                <div id="heroEditorForm" class="dev-scrollable">
+                    <h4>Character</h4>
+                    <div class="dev-field"><label>ID</label><input type="text" id="heId" /></div>
+                    <div class="dev-field"><label>Name</label><input type="text" id="heName" /></div>
+                    <div class="dev-field"><label>Description</label><input type="text" id="heDesc" /></div>
+                    <div class="dev-field"><label>Color</label><input type="color" id="heColor" value="#66ffcc" /></div>
+
+                    <h4>Stats</h4>
+                    <div class="dev-field"><label>Max Health</label><input type="number" id="heMaxHealth" value="100" min="1" /></div>
+                    <div class="dev-field"><label>Walk Speed</label><input type="number" id="heWalkSpeed" value="4.5" step="0.1" /></div>
+                    <div class="dev-field"><label>Sprint Speed</label><input type="number" id="heSprintSpeed" value="8.5" step="0.1" /></div>
+                    <div class="dev-field"><label>Jump Velocity</label><input type="number" id="heJumpVelocity" value="8.5" step="0.5" /></div>
+
+                    <h4>Hitbox</h4>
+                    <div class="dev-field"><label>Width</label><input type="number" id="heHitW" value="0.8" step="0.1" /></div>
+                    <div class="dev-field"><label>Height</label><input type="number" id="heHitH" value="3.2" step="0.1" /></div>
+                    <div class="dev-field"><label>Depth</label><input type="number" id="heHitD" value="0.8" step="0.1" /></div>
+
+                    <h4>Weapon</h4>
+                    <div class="dev-field"><label>Cooldown (ms)</label><input type="number" id="heCooldownMs" value="166" min="1" /></div>
+                    <div class="dev-field"><label>Mag Size</label><input type="number" id="heMagSize" value="6" min="1" /></div>
+                    <div class="dev-field"><label>Reload (sec)</label><input type="number" id="heReloadTime" value="2.5" step="0.1" /></div>
+                    <div class="dev-field"><label>Damage</label><input type="number" id="heDamage" value="20" min="1" /></div>
+                    <div class="dev-field"><label>Spread (rad)</label><input type="number" id="heSpreadRad" value="0" step="0.005" min="0" /></div>
+                    <div class="dev-field"><label>Sprint Spread</label><input type="number" id="heSprintSpreadRad" value="0.012" step="0.005" min="0" /></div>
+                    <div class="dev-field"><label>Max Range</label><input type="number" id="heMaxRange" value="200" min="1" /></div>
+                    <div class="dev-field"><label>Pellets</label><input type="number" id="hePellets" value="1" min="1" /></div>
+
+                    <h4>Scope</h4>
+                    <div class="dev-field">
+                        <label>Type</label>
+                        <select id="heScopeType">
+                            <option value="none">None</option>
+                            <option value="scope">Scope</option>
+                            <option value="ironsights">Iron Sights</option>
+                        </select>
+                    </div>
+                    <div class="dev-field"><label>Zoom FOV</label><input type="number" id="heScopeFOV" value="35" min="10" max="90" /></div>
+                    <div class="dev-field"><label>Spread Mult</label><input type="number" id="heScopeSpreadMult" value="0.15" step="0.05" min="0" /></div>
+
+                    <h4>Crosshair</h4>
+                    <div class="dev-field">
+                        <label>Style</label>
+                        <select id="heCrosshairStyle">
+                            <option value="cross">Cross</option>
+                            <option value="circle">Circle</option>
+                        </select>
+                    </div>
+                    <div class="dev-field"><label>Color</label><input type="color" id="heCrosshairColor" value="#00ffaa" /></div>
+
+                    <h4>Visual</h4>
+                    <div class="dev-field">
+                        <label>Model Type</label>
+                        <select id="heModelType"></select>
+                    </div>
+                    <div class="dev-field"><label>Tracer Color</label><input type="color" id="heTracerColor" value="#66ffcc" /></div>
+
+                    <div class="dev-actions">
+                        <button id="heSave" class="dev-btn-primary">Save</button>
+                        <button id="heApplySS" class="dev-btn-secondary">Apply to P1</button>
+                    </div>
+                </div>
+                <div id="heroPreviewContainer">
+                    <canvas id="heroPreviewCanvas" width="280" height="260"></canvas>
+                </div>
+            </div>
+
+            <!-- Weapon Model Builder Panel -->
+            <div id="panelWeaponModelBuilder" class="dev-panel">
+                <h3>Weapon Model Builder</h3>
+                <div class="dev-field">
+                    <label>Model Name</label>
+                    <input type="text" id="wmbName" placeholder="custom_sniper" />
+                </div>
+                <div class="dev-field">
+                    <label>Load</label>
+                    <select id="wmbLoadSelect">
+                        <option value="">-- New --</option>
+                    </select>
+                </div>
+                <div id="wmbPartsList" class="dev-scrollable"></div>
+                <div class="dev-actions">
+                    <button id="wmbAddBox" class="dev-btn-secondary">+ Box</button>
+                    <button id="wmbAddCyl" class="dev-btn-secondary">+ Cylinder</button>
+                </div>
+                <div id="wmbPreviewContainer">
+                    <canvas id="wmbPreviewCanvas" width="280" height="200"></canvas>
+                </div>
+                <div class="dev-actions">
+                    <button id="wmbRegister" class="dev-btn-primary">Register</button>
+                    <button id="wmbSave" class="dev-btn-secondary">Save</button>
+                    <button id="wmbDelete" class="dev-btn-danger">Delete</button>
+                </div>
+            </div>
+
+            <!-- Map Editor Panel -->
+            <div id="panelMapEditor" class="dev-panel">
+                <h3>Map Editor</h3>
+                <p class="dev-hint">Opens the full map editor using the 3D viewport.</p>
+                <div class="dev-actions">
+                    <button id="meOpen" class="dev-btn-primary">Open Map Editor</button>
+                </div>
+            </div>
+
+            <!-- Quick Test Panel -->
+            <div id="panelQuickTest" class="dev-panel">
+                <h3>Quick Test</h3>
+                <div class="dev-field">
+                    <label>Hero</label>
+                    <select id="qtHero"></select>
+                </div>
+                <div class="dev-field">
+                    <label>Difficulty</label>
+                    <select id="qtDifficulty">
+                        <option value="Easy">Easy</option>
+                        <option value="Medium">Medium</option>
+                        <option value="Hard">Hard</option>
+                    </select>
+                </div>
+                <div class="dev-field">
+                    <label>Map</label>
+                    <select id="qtMapSelect">
+                        <option value="__default__">Default Arena</option>
+                    </select>
+                </div>
+                <div class="dev-actions">
+                    <button id="qtAIMatch" class="dev-btn-primary">AI Match</button>
+                    <button id="qtTraining" class="dev-btn-secondary">Training Range</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="devViewport">
+        <div id="gameContainer">
+            <!-- Round UI -->
+            <div id="roundBanner" class="hidden"></div>
+            <div id="roundCountdown" class="hidden"></div>
+            <div id="ui" class="hidden">
+                <div id="enemyHealthContainer" class="hidden">
+                    <div class="label">Enemy</div>
+                    <div id="enemyHealthBar">
+                        <div id="enemyHealthFill" style="width: 100%"></div>
+                    </div>
+                </div>
+                <div id="healthContainer" class="hidden">
+                    <div id="weaponNameDisplay" class="hidden"></div>
+                    <div id="sprintIndicator" class="hidden">SPRINTING</div>
+                    <div id="healthBar">
+                        <div id="healthFill" style="width: 100%"></div>
+                    </div>
+                    <div id="ammoRow">
+                        <span id="ammoDisplay">0/0</span>
+                        <span id="reloadIndicator" class="hidden">Reloading...</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Split-Screen HUD overlays -->
+            <div id="ssHudP1" class="ss-hud hidden">
+                <div class="ss-hud-label">P1</div>
+                <div class="ss-health-bar"><div class="ss-health-fill" id="ssHealthFillP1"></div></div>
+                <div class="ss-ammo"><span id="ssAmmoP1">6/6</span><span id="ssReloadP1" class="hidden">Reloading...</span></div>
+            </div>
+            <div id="ssHudP2" class="ss-hud hidden">
+                <div class="ss-hud-label">P2</div>
+                <div class="ss-health-bar"><div class="ss-health-fill" id="ssHealthFillP2"></div></div>
+                <div class="ss-ammo"><span id="ssAmmoP2">6/6</span><span id="ssReloadP2" class="hidden">Reloading...</span></div>
+            </div>
+            <div id="ssControlIndicator" class="hidden">CONTROLLING P1</div>
+
+            <!-- Crosshairs for split-screen -->
+            <div id="ssCrosshairP1" class="ss-crosshair hidden"><div class="ch-bar ch-left"></div><div class="ch-bar ch-right"></div><div class="ch-bar ch-top"></div><div class="ch-bar ch-bottom"></div></div>
+            <div id="ssCrosshairP2" class="ss-crosshair hidden"><div class="ch-bar ch-left"></div><div class="ch-bar ch-right"></div><div class="ch-bar ch-top"></div><div class="ch-bar ch-bottom"></div></div>
+
+            <!-- Menus (hidden, stubs for game mode compat) -->
+            <div id="mainMenu" class="menu hidden"></div>
+            <div id="paintballMenu" class="menu hidden">
+                <input type="number" id="roundsToWinPaintball" value="2" class="hidden" />
+                <select id="paintballDifficulty" class="hidden"><option value="Easy">Easy</option></select>
+                <select id="paintballMapSelect" class="hidden"></select>
+            </div>
+            <div id="trainingMenu" class="menu hidden"></div>
+            <div id="lanMenu" class="menu hidden">
+                <input type="text" id="roomId" class="hidden" />
+                <input type="number" id="roundsToWin" value="2" class="hidden" />
+                <select id="lanMapSelect" class="hidden"></select>
+            </div>
+            <div id="resultMenu" class="menu hidden">
+                <span id="finalScore">0</span>
+                <button id="backToMenu"></button>
+            </div>
+
+            <div id="trainingStats" class="hidden">
+                Shots: <span id="tsShotCount">0</span><br>
+                Hits: <span id="tsHitCount">0</span><br>
+                Kills: <span id="tsKillCount">0</span><br>
+                Accuracy: <span id="tsAccuracy">-</span>
+            </div>
+
+            <div id="heroSelectOverlay" class="hidden">
+                <div id="heroSelectTitle">SELECT HERO</div>
+                <div id="heroSelectTimer" class="hidden">15</div>
+                <div id="heroSelectWaiting" class="hidden">Waiting for opponent...</div>
+                <div id="heroSelectHint">Press H to close</div>
+            </div>
+
+            <!-- Map Editor UI (reused from index.html) -->
+            <div id="editorUI" class="hidden">
+                <div id="editorToolbar">
+                    <button class="editor-tool active" data-tool="select">Select</button>
+                    <button class="editor-tool" data-tool="box">Box</button>
+                    <button class="editor-tool" data-tool="cylinder">Cylinder</button>
+                    <button class="editor-tool" data-tool="halfCylinder">Half-Cyl</button>
+                    <button class="editor-tool" data-tool="ramp">Ramp</button>
+                    <span class="editor-sep"></span>
+                    <button class="editor-btn" id="editorMirrorToggle">Mirror: Off</button>
+                    <span class="editor-sep"></span>
+                    <button class="editor-btn" id="editorUndo">Undo</button>
+                    <button class="editor-btn" id="editorRedo">Redo</button>
+                    <span class="editor-sep"></span>
+                    <button class="editor-btn" id="editorSave">Save</button>
+                    <button class="editor-btn" id="editorLoad">Load</button>
+                    <button class="editor-btn" id="editorNew">New</button>
+                    <span class="editor-sep"></span>
+                    <button class="editor-btn" id="editorPlayerMode">Player</button>
+                    <button class="editor-btn" id="editorSettings">Settings</button>
+                    <button class="editor-btn editor-exit" id="editorExit">Exit</button>
+                </div>
+                <div id="editorPropsPanel" class="hidden">
+                    <button class="panel-close" id="epropClose">&times;</button>
+                    <h4>Properties</h4>
+                    <div class="eprop"><label>Type</label><span id="epropType">-</span></div>
+                    <div class="eprop"><label>X</label><input type="number" id="epropX" step="0.5" /></div>
+                    <div class="eprop"><label>Z</label><input type="number" id="epropZ" step="0.5" /></div>
+                    <div class="eprop"><label>Y</label><input type="number" id="epropY" step="0.5" /></div>
+                    <div class="eprop" id="epropSizeRow"><label>Size X</label><input type="number" id="epropSX" step="0.5" min="0.5" /></div>
+                    <div class="eprop" id="epropSYRow"><label>Height</label><input type="number" id="epropSY" step="0.5" min="0.5" /></div>
+                    <div class="eprop" id="epropSZRow"><label>Size Z</label><input type="number" id="epropSZ" step="0.5" min="0.5" /></div>
+                    <div class="eprop" id="epropRadiusRow"><label>Radius</label><input type="number" id="epropRadius" step="0.25" min="0.25" /></div>
+                    <div class="eprop"><label>Rotation</label><input type="number" id="epropRot" step="90" /></div>
+                    <div class="eprop"><label>Color</label><input type="color" id="epropColor" value="#6B5B4F" /></div>
+                    <button class="editor-btn" id="epropMirror">Mirror Copy</button>
+                    <button class="editor-btn editor-danger" id="epropDelete">Delete</button>
+                </div>
+                <div id="editorSettingsPanel" class="hidden">
+                    <button class="panel-close" id="esCloseX">&times;</button>
+                    <h4>Map Settings</h4>
+                    <div class="eprop"><label>Map Name</label><input type="text" id="esMapName" value="my-map" /></div>
+                    <div class="eprop"><label>Arena Width</label><input type="number" id="esArenaW" step="1" min="20" value="60" /></div>
+                    <div class="eprop"><label>Arena Length</label><input type="number" id="esArenaL" step="1" min="20" value="90" /></div>
+                    <div class="eprop"><label>Wall Height</label><input type="number" id="esWallH" step="0.5" min="1" value="3.5" /></div>
+                    <div class="eprop"><label>Spawn A X</label><input type="number" id="esSpawnAX" step="1" value="0" /></div>
+                    <div class="eprop"><label>Spawn A Z</label><input type="number" id="esSpawnAZ" step="1" value="-37" /></div>
+                    <div class="eprop"><label>Spawn B X</label><input type="number" id="esSpawnBX" step="1" value="0" /></div>
+                    <div class="eprop"><label>Spawn B Z</label><input type="number" id="esSpawnBZ" step="1" value="37" /></div>
+                    <button class="editor-btn" id="esApply">Apply</button>
+                    <button class="editor-btn" id="esClose">Close</button>
+                </div>
+                <div id="editorLoadPanel" class="hidden">
+                    <button class="panel-close" id="editorLoadCloseX">&times;</button>
+                    <h4>Load Map</h4>
+                    <select id="editorLoadSelect"></select>
+                    <button class="editor-btn" id="editorLoadConfirm">Load</button>
+                    <button class="editor-btn editor-danger" id="editorDeleteMap">Delete</button>
+                    <button class="editor-btn" id="editorLoadCancel">Cancel</button>
+                </div>
+                <div id="editorPlayerHint" class="hidden">Player Mode — Press P to return to editor</div>
+                <div id="editorStatusBar">
+                    <span id="editorToolLabel">Tool: Select</span>
+                    <span id="editorControlsHint">RMB+WASD: Fly | LMB: Select/Place</span>
+                    <span id="editorObjCount">Objects: 0</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- External libraries -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="electron-fetch-shim.js"></script>
+
+    <!-- Core systems (no game-mode dependencies) -->
+    <script src="config.js"></script>
+    <script src="weapon.js"></script>
+    <script src="weaponModels.js"></script>
+    <script src="physics.js"></script>
+    <script src="crosshair.js"></script>
+    <script src="hud.js"></script>
+    <script src="roundFlow.js"></script>
+    <script src="heroes.js"></script>
+    <script src="abilities.js"></script>
+    <script src="heroSelectUI.js"></script>
+
+    <!-- Input, UI, environment -->
+    <script src="menuNavigation.js"></script>
+    <script src="input.js"></script>
+    <script src="environment.js"></script>
+
+    <!-- Player and arenas -->
+    <script src="player.js"></script>
+    <script src="arenaBuilder.js"></script>
+    <script src="arenaCompetitive.js"></script>
+    <script src="arenaTraining.js"></script>
+    <script src="mapFormat.js"></script>
+    <script src="mapEditor.js"></script>
+
+    <!-- Combat and AI -->
+    <script src="projectiles.js"></script>
+    <script src="aiOpponent.js"></script>
+    <script src="trainingBot.js"></script>
+
+    <!-- Game modes (needed for Quick Test) -->
+    <script src="modeAI.js"></script>
+    <script src="modeLAN.js"></script>
+    <script src="modeTraining.js"></script>
+
+    <!-- Dev workbench (replaces game.js + devConsole.js) -->
+    <script src="devSplitScreen.js"></script>
+    <script src="devHeroEditor.js"></script>
+    <script src="devApp.js"></script>
+</body>
+</html>

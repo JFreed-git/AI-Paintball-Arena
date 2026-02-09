@@ -1,0 +1,532 @@
+/* devApp.css — Dev Workbench layout and panel styles */
+
+/* Layout: sidebar + viewport */
+body {
+    display: flex;
+    overflow: hidden;
+}
+
+#devSidebar {
+    width: 300px;
+    min-width: 300px;
+    height: 100vh;
+    background: rgba(10, 10, 10, 0.95);
+    border-right: 1px solid #333;
+    display: flex;
+    flex-direction: column;
+    z-index: 1000;
+    overflow: hidden;
+}
+
+#devSidebar.hidden {
+    display: none;
+}
+
+#devViewport {
+    flex: 1;
+    position: relative;
+    height: 100vh;
+    overflow: hidden;
+}
+
+#devViewport #gameContainer {
+    width: 100%;
+    height: 100%;
+}
+
+/* Sidebar header */
+#devSidebarHeader {
+    padding: 12px 16px;
+    border-bottom: 1px solid #333;
+}
+
+#devSidebarHeader h2 {
+    font-size: 16px;
+    color: #00ff88;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    margin: 0;
+}
+
+/* Navigation */
+#devNav {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 8px;
+    border-bottom: 1px solid #333;
+}
+
+.dev-nav-btn {
+    padding: 8px 12px;
+    background: transparent;
+    color: #aaa;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: bold;
+    text-align: left;
+    transition: background 0.15s, color 0.15s;
+}
+
+.dev-nav-btn:hover {
+    background: #222;
+    color: #ddd;
+}
+
+.dev-nav-btn.active {
+    background: rgba(0, 255, 136, 0.1);
+    color: #00ff88;
+    border-color: rgba(0, 255, 136, 0.3);
+}
+
+/* Panels container */
+#devPanels {
+    flex: 1;
+    overflow-y: auto;
+    padding: 12px;
+}
+
+.dev-panel {
+    display: none;
+}
+
+.dev-panel.active {
+    display: block;
+}
+
+.dev-panel h3 {
+    font-size: 15px;
+    color: #fff;
+    margin-bottom: 12px;
+}
+
+.dev-panel h4 {
+    font-size: 12px;
+    color: #00ff88;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin: 14px 0 6px;
+    padding-bottom: 4px;
+    border-bottom: 1px solid #333;
+}
+
+/* Fields */
+.dev-field {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin: 6px 0;
+}
+
+.dev-field label {
+    font-size: 12px;
+    color: #aaa;
+    min-width: 80px;
+    flex-shrink: 0;
+}
+
+.dev-field input[type="text"],
+.dev-field input[type="number"] {
+    flex: 1;
+    min-width: 0;
+    padding: 5px 8px;
+    background: #1a1a1a;
+    color: #fff;
+    border: 1px solid #444;
+    border-radius: 4px;
+    font-size: 12px;
+    outline: none;
+}
+
+.dev-field input[type="text"]:focus,
+.dev-field input[type="number"]:focus {
+    border-color: #00ff88;
+}
+
+.dev-field input[type="color"] {
+    width: 36px;
+    height: 24px;
+    border: 1px solid #444;
+    border-radius: 4px;
+    background: transparent;
+    cursor: pointer;
+    padding: 0;
+}
+
+.dev-field select {
+    flex: 1;
+    min-width: 0;
+    padding: 5px 8px;
+    background: #1a1a1a;
+    color: #fff;
+    border: 1px solid #444;
+    border-radius: 4px;
+    font-size: 12px;
+    outline: none;
+}
+
+.dev-field select:focus {
+    border-color: #00ff88;
+}
+
+/* Actions */
+.dev-actions {
+    display: flex;
+    gap: 8px;
+    margin: 10px 0;
+}
+
+.dev-btn-primary {
+    flex: 1;
+    padding: 8px 12px;
+    background: #00ff88;
+    color: #000;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: bold;
+    font-size: 13px;
+    transition: background 0.15s;
+}
+
+.dev-btn-primary:hover {
+    background: #00d977;
+}
+
+.dev-btn-primary:disabled {
+    background: #334;
+    color: #666;
+    cursor: default;
+}
+
+.dev-btn-secondary {
+    flex: 1;
+    padding: 8px 12px;
+    background: #222;
+    color: #ccc;
+    border: 1px solid #444;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: bold;
+    font-size: 13px;
+    transition: background 0.15s;
+}
+
+.dev-btn-secondary:hover {
+    background: #333;
+}
+
+.dev-btn-secondary:disabled {
+    color: #555;
+    cursor: default;
+}
+
+.dev-btn-danger {
+    flex: 1;
+    padding: 8px 12px;
+    background: #331111;
+    color: #ff6666;
+    border: 1px solid #cc3333;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: bold;
+    font-size: 13px;
+    transition: background 0.15s;
+}
+
+.dev-btn-danger:hover {
+    background: #441111;
+}
+
+/* Status */
+.dev-status {
+    margin-top: 8px;
+    padding: 6px 8px;
+    background: #111;
+    border-radius: 4px;
+    font-size: 11px;
+    color: #888;
+}
+
+.dev-hint {
+    font-size: 12px;
+    color: #888;
+    margin: 8px 0;
+    line-height: 1.5;
+}
+
+/* Scrollable form area */
+.dev-scrollable {
+    max-height: 400px;
+    overflow-y: auto;
+    padding-right: 4px;
+}
+
+/* Hero preview canvas */
+#heroPreviewContainer {
+    margin-top: 10px;
+    border: 1px solid #333;
+    border-radius: 6px;
+    overflow: hidden;
+    background: #111;
+}
+
+#heroPreviewCanvas {
+    display: block;
+    width: 100%;
+    height: auto;
+}
+
+/* Weapon model builder preview */
+#wmbPreviewContainer {
+    margin: 10px 0;
+    border: 1px solid #333;
+    border-radius: 6px;
+    overflow: hidden;
+    background: #111;
+}
+
+#wmbPreviewCanvas {
+    display: block;
+    width: 100%;
+    height: auto;
+}
+
+/* Weapon model part entry */
+.wmb-part {
+    background: #1a1a1a;
+    border: 1px solid #333;
+    border-radius: 6px;
+    padding: 8px;
+    margin: 6px 0;
+}
+
+.wmb-part-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 6px;
+}
+
+.wmb-part-header span {
+    font-size: 12px;
+    color: #00ff88;
+    font-weight: bold;
+}
+
+.wmb-part-remove {
+    background: transparent;
+    border: 1px solid #cc3333;
+    color: #ff6666;
+    border-radius: 4px;
+    padding: 2px 8px;
+    cursor: pointer;
+    font-size: 11px;
+}
+
+.wmb-part-remove:hover {
+    background: #331111;
+}
+
+.wmb-part .dev-field {
+    margin: 3px 0;
+}
+
+.wmb-part .dev-field label {
+    min-width: 50px;
+    font-size: 11px;
+}
+
+.wmb-part .dev-field input {
+    font-size: 11px;
+    padding: 3px 6px;
+}
+
+/* Split-Screen HUD */
+.ss-hud {
+    position: absolute;
+    bottom: 16px;
+    z-index: 160;
+    background: rgba(0, 0, 0, 0.6);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 8px;
+    padding: 8px 10px;
+    min-width: 160px;
+    backdrop-filter: blur(4px);
+}
+
+.ss-hud.hidden {
+    display: none;
+}
+
+#ssHudP1 {
+    left: 5%;
+}
+
+#ssHudP2 {
+    right: 5%;
+}
+
+.ss-hud-label {
+    font-size: 11px;
+    color: #00ff88;
+    font-weight: bold;
+    letter-spacing: 1px;
+    margin-bottom: 4px;
+}
+
+.ss-health-bar {
+    width: 100%;
+    height: 10px;
+    background: #1b1b1b;
+    border: 1px solid #333;
+    border-radius: 5px;
+    overflow: hidden;
+}
+
+.ss-health-fill {
+    height: 100%;
+    width: 100%;
+    background: linear-gradient(90deg, #24e66a, #0fb85a);
+    transition: width 0.15s ease;
+}
+
+.ss-ammo {
+    margin-top: 4px;
+    font-family: Consolas, 'Courier New', monospace;
+    font-size: 12px;
+    color: #fff;
+    display: flex;
+    justify-content: space-between;
+}
+
+.ss-ammo .hidden {
+    display: none;
+}
+
+/* Split-screen crosshairs */
+.ss-crosshair {
+    position: absolute;
+    pointer-events: none;
+    z-index: 160;
+    --spread: 10px;
+    --ch-color: #00ff88;
+}
+
+.ss-crosshair.hidden {
+    display: none;
+}
+
+#ssCrosshairP1 {
+    top: 50%;
+    left: 25%;
+    transform: translate(-50%, -50%);
+}
+
+#ssCrosshairP2 {
+    top: 50%;
+    left: 75%;
+    transform: translate(-50%, -50%);
+}
+
+.ss-crosshair .ch-bar {
+    position: absolute;
+    background: var(--ch-color, #00ff88);
+    filter: drop-shadow(0 0 6px var(--ch-color, #00ff88));
+    border-radius: 1px;
+}
+
+.ss-crosshair .ch-left,
+.ss-crosshair .ch-right {
+    top: 0;
+    height: 2px;
+    width: 14px;
+}
+
+.ss-crosshair .ch-left { left: calc(var(--spread) * -1 - 14px); }
+.ss-crosshair .ch-right { left: var(--spread); }
+
+.ss-crosshair .ch-top,
+.ss-crosshair .ch-bottom {
+    left: 0;
+    width: 2px;
+    height: 14px;
+}
+
+.ss-crosshair .ch-top { top: calc(var(--spread) * -1 - 14px); }
+.ss-crosshair .ch-bottom { top: var(--spread); }
+
+.ss-crosshair.dimmed .ch-bar {
+    opacity: 0.4;
+}
+
+.ss-crosshair .ch-ring {
+    position: absolute;
+    top: calc(var(--spread) * -1);
+    left: calc(var(--spread) * -1);
+    width: calc(var(--spread) * 2);
+    height: calc(var(--spread) * 2);
+    border: 2px solid var(--ch-color, #00ff88);
+    border-radius: 50%;
+    filter: drop-shadow(0 0 4px var(--ch-color, #00ff88));
+    min-width: 6px;
+    min-height: 6px;
+}
+
+.ss-crosshair .ch-dot {
+    position: absolute;
+    top: -2px;
+    left: -2px;
+    width: 4px;
+    height: 4px;
+    background: var(--ch-color, #00ff88);
+    border-radius: 50%;
+    filter: drop-shadow(0 0 3px var(--ch-color, #00ff88));
+}
+
+.ss-crosshair.dimmed .ch-ring,
+.ss-crosshair.dimmed .ch-dot {
+    opacity: 0.4;
+}
+
+/* Control indicator */
+#ssControlIndicator {
+    position: absolute;
+    top: 12px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 170;
+    background: rgba(0, 255, 136, 0.15);
+    border: 1px solid #00ff88;
+    border-radius: 6px;
+    padding: 6px 16px;
+    font-size: 13px;
+    font-weight: bold;
+    color: #00ff88;
+    letter-spacing: 1px;
+    pointer-events: none;
+}
+
+#ssControlIndicator.hidden {
+    display: none;
+}
+
+/* Split-screen viewport divider */
+#ssViewportDivider {
+    position: absolute;
+    top: 0;
+    left: 50%;
+    width: 2px;
+    height: 100%;
+    background: rgba(255, 255, 255, 0.2);
+    z-index: 155;
+    pointer-events: none;
+}
+
+/* Dimmed HUD for inactive player */
+.ss-hud.dimmed {
+    opacity: 0.4;
+}

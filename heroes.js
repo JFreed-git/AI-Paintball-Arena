@@ -157,18 +157,40 @@
     }
   ];
 
-  // Freeze hero objects to prevent accidental mutation during gameplay
-  Object.freeze(HEROES);
+  // These are the built-in defaults, used as fallbacks and for seeding.
+  var BUILTIN_HEROES = HEROES;
 
   /**
    * Look up a hero by its string id.
    * Returns the hero object or null if not found.
    */
   function getHeroById(id) {
-    for (var i = 0; i < HEROES.length; i++) {
-      if (HEROES[i].id === id) return HEROES[i];
+    var list = window.HEROES || BUILTIN_HEROES;
+    for (var i = 0; i < list.length; i++) {
+      if (list[i].id === id) return list[i];
     }
     return null;
+  }
+
+  /**
+   * Load all heroes from the server API and replace window.HEROES.
+   * Falls back to built-in heroes on failure.
+   * Returns a Promise that resolves when heroes are loaded.
+   */
+  function loadHeroesFromServer() {
+    return fetch('/api/heroes').then(function (r) { return r.json(); }).then(function (names) {
+      if (!names || !names.length) return;
+      var promises = names.map(function (name) {
+        return fetch('/api/heroes/' + encodeURIComponent(name)).then(function (r) { return r.json(); });
+      });
+      return Promise.all(promises);
+    }).then(function (heroes) {
+      if (heroes && heroes.length) {
+        window.HEROES = heroes;
+      }
+    }).catch(function () {
+      // Keep built-in heroes as fallback
+    });
   }
 
   /**
@@ -238,7 +260,9 @@
 
   // --- Expose ---
   window.HEROES = HEROES;
+  window.BUILTIN_HEROES = BUILTIN_HEROES;
   window.getHeroById = getHeroById;
   window.applyHeroToPlayer = applyHeroToPlayer;
+  window.loadHeroesFromServer = loadHeroesFromServer;
 
 })();
