@@ -1,5 +1,6 @@
 // Paintball (AI) mode
 // Uses shared functions from gameShared.js for HUD, round flow, crosshair, and reload.
+// Uses Player class for the local player entity.
 
 (function () {
   window.paintballActive = false;
@@ -12,12 +13,9 @@
   var WALK_SPEED = 4.5;
   var SPRINT_SPEED = 8.5;
   var PLAYER_RADIUS = 0.5;
-  var FIRE_COOLDOWN_MS = 166;
-  var MAG_SIZE = 6;
-  var RELOAD_TIME_SEC = 2.5;
-  var SPRINT_SPREAD_BONUS_RAD = 0.012;
+  var PLAYER_HEALTH = 100;
+  var ROUNDS_TO_WIN = 3;
   var BASE_CROSSHAIR_SPREAD_PX = 0;
-  var PLAYER_DAMAGE = 20;
 
   var state = null;
 
@@ -29,25 +27,7 @@
       difficulty: difficulty || 'Easy',
       arena: null,
       ai: null,
-      player: {
-        position: camera ? camera.position : new THREE.Vector3(0, 2, 5),
-        walkSpeed: WALK_SPEED,
-        sprintSpeed: SPRINT_SPEED,
-        radius: PLAYER_RADIUS,
-        feetY: GROUND_Y,
-        verticalVelocity: 0,
-        grounded: true,
-        health: 100,
-        alive: true,
-        weapon: {
-          magSize: MAG_SIZE,
-          ammo: MAG_SIZE,
-          reloading: false,
-          reloadEnd: 0,
-          lastShotTime: 0,
-          reloadTimeSec: RELOAD_TIME_SEC
-        }
-      },
+      player: null, // Player instance created after state
       match: { playerWins: 0, aiWins: 0, toWin: toWin, roundActive: true },
       spawns: { A: new THREE.Vector3(), B: new THREE.Vector3() },
       hud: {
@@ -80,7 +60,7 @@
   function updateHUD() {
     if (!state) return;
     var p = state.player;
-    sharedUpdateHealthBar(state.hud.healthFill, p.health, 100);
+    sharedUpdateHealthBar(state.hud.healthFill, p.health, PLAYER_HEALTH);
     sharedUpdateAmmoDisplay(state.hud.ammoDisplay, p.weapon.ammo, p.weapon.magSize);
     if (state.ai) {
       sharedUpdateHealthBar(state.hud.enemyHealthFill, state.ai.health, state.ai.maxHealth || 100);
@@ -116,24 +96,16 @@
 
   function resetEntitiesForRound() {
     var spawns = state.spawns;
-    camera.position.copy(spawns.A);
+
+    // Reset local player
+    state.player.resetForRound(spawns.A);
+    state.player.syncCameraFromPlayer();
     camera.rotation.x = 0;
     camera.rotation.z = 0;
     camera.lookAt(spawns.B);
     if (typeof resolveCollisions2D === 'function') {
-      try { resolveCollisions2D(camera.position, PLAYER_RADIUS, state.arena.colliders); } catch {}
+      try { resolveCollisions2D(camera.position, PLAYER_RADIUS, state.arena.colliders); } catch (e) { console.warn('resolveCollisions2D failed:', e); }
     }
-
-    var p = state.player;
-    p.health = 100;
-    p.alive = true;
-    p.feetY = GROUND_Y;
-    p.verticalVelocity = 0;
-    p.grounded = true;
-    camera.position.y = GROUND_Y + EYE_HEIGHT;
-    p.weapon.ammo = p.weapon.magSize;
-    p.weapon.reloading = false;
-    p.weapon.lastShotTime = 0;
 
     if (state.ai) state.ai.destroy();
     state.ai = new AIOpponent({
@@ -156,7 +128,7 @@
       stopPaintballInternal(false);
       setHUDVisible(false);
       showOnlyMenu('resultMenu');
-      try { document.exitPointerLock(); } catch {}
+      try { document.exitPointerLock(); } catch (e) { console.warn('exitPointerLock failed:', e); }
       return;
     }
 
@@ -171,9 +143,7 @@
   // Combat
   function playerCanShoot(now) {
     var w = state.player.weapon;
-    if (w.reloading) return false;
-    if (w.ammo <= 0) return false;
-    return (now - w.lastShotTime) >= FIRE_COOLDOWN_MS;
+    return sharedCanShoot(w, now, w.cooldownMs);
   }
 
   function handlePlayerShooting(input, now) {
@@ -190,18 +160,18 @@
     if (input.fireDown && playerCanShoot(now)) {
       var dir = new THREE.Vector3();
       camera.getWorldDirection(dir);
-      var spread = input.sprint ? SPRINT_SPREAD_BONUS_RAD : 0;
+      var spread = input.sprint ? w.sprintSpreadRad : w.spreadRad;
 
       var hit = fireHitscan(camera.position.clone(), dir, {
         spreadRad: spread,
         solids: state.arena.solids,
-        aiTarget: state.ai,
+        playerTarget: state.ai ? state.ai.player.getHitTarget() : null,
         tracerColor: 0x66ffcc,
-        maxDistance: 200
+        maxDistance: w.maxRange
       });
 
-      if (hit.hit && state.ai && hit.hitType === 'ai') {
-        state.ai.takeDamage(PLAYER_DAMAGE);
+      if (hit.hit && state.ai && hit.hitType === 'player') {
+        state.ai.takeDamage(w.damage);
         updateHUD();
         if (!state.ai.alive && state.match.roundActive) {
           endRound('player');
@@ -242,7 +212,7 @@
       else { state.inputArmed = true; }
     }
 
-    sharedSetCrosshairBySprint(!!input.sprint);
+    sharedSetCrosshairBySprint(!!input.sprint, state.player.weapon.sprintSpreadRad);
     sharedSetSprintUI(!!input.sprint, state.hud.sprintIndicator);
 
     if (state.inputEnabled && !window.devSpectatorMode) {
@@ -252,6 +222,9 @@
         { colliders: state.arena.colliders, solids: state.arena.solids },
         dt
       );
+      // Sync mesh and camera from physics
+      state.player._syncMeshPosition();
+      state.player.syncCameraFromPlayer();
     }
 
     var now = performance.now();
@@ -261,16 +234,19 @@
     updateReload(now);
 
     if (state.ai && state.match.roundActive) {
+      // In spectator mode, AI targets the stationary player position, not the free camera
+      var aiTargetPos = window.devSpectatorMode
+        ? state.player.getEyePos()
+        : camera.position.clone();
       state.ai.update(dt, {
-        playerPos: camera.position.clone(),
-        playerRadius: PLAYER_RADIUS,
+        playerPos: aiTargetPos,
+        playerRadius: state.player._hitRadius,
         onPlayerHit: function (dmg) {
           if (!state.player.alive) return;
           if (window.devGodMode) return;
-          state.player.health = Math.max(0, state.player.health - dmg);
+          state.player.takeDamage(dmg);
           updateHUD();
           if (state.player.health <= 0) {
-            state.player.alive = false;
             if (state.match.roundActive) endRound('ai');
           }
         }
@@ -284,9 +260,10 @@
   // Public start/stop
   window.startPaintballGame = function (opts) {
     if (window.paintballActive) {
-      try { if (typeof stopPaintballInternal === 'function') stopPaintballInternal(); } catch {}
+      try { if (typeof stopPaintballInternal === 'function') stopPaintballInternal(); } catch (e) { console.warn('stopPaintballInternal failed:', e); }
     }
-    try { if (typeof stopGameInternal === 'function') stopGameInternal(); } catch {}
+    try { if (typeof stopGameInternal === 'function') stopGameInternal(); } catch (e) { console.warn('stopGameInternal failed:', e); }
+    window.devSpectatorMode = false;
     var difficulty = (opts && opts.difficulty) || 'Easy';
     state = newState(difficulty);
 
@@ -295,6 +272,18 @@
       ? buildArenaFromMap(mapData)
       : (typeof buildArenaFromMap === 'function' ? buildArenaFromMap(getDefaultMapData()) : buildPaintballArenaSymmetric());
     state.spawns = state.arena.spawns;
+
+    // Create local Player instance (camera-attached, mesh hidden)
+    state.player = new Player({
+      cameraAttached: true,
+      walkSpeed: WALK_SPEED,
+      sprintSpeed: SPRINT_SPEED,
+      radius: PLAYER_RADIUS,
+      maxHealth: PLAYER_HEALTH,
+      color: 0x66ffcc,
+      weapon: new Weapon()
+    });
+
     resetEntitiesForRound();
 
     setHUDVisible(true);
@@ -311,7 +300,6 @@
     startRoundCountdown(3);
     window.paintballActive = true;
     state.inputArmed = false;
-    state.player.weapon.lastShotTime = performance.now() + 300;
     state.lastTs = 0;
     state.loopHandle = requestAnimationFrame(tick);
   };
@@ -319,12 +307,16 @@
   window.stopPaintballInternal = function (showMenu) {
     if (showMenu === undefined) showMenu = true;
     if (state && state.loopHandle) {
-      try { cancelAnimationFrame(state.loopHandle); } catch {}
+      try { cancelAnimationFrame(state.loopHandle); } catch (e) { console.warn('cancelAnimationFrame failed:', e); }
       state.loopHandle = 0;
     }
     if (state && state.ai) {
-      try { state.ai.destroy(); } catch {}
+      try { state.ai.destroy(); } catch (e) { console.warn('ai.destroy failed:', e); }
       state.ai = null;
+    }
+    if (state && state.player) {
+      try { state.player.destroy(); } catch (e) { console.warn('player.destroy failed:', e); }
+      state.player = null;
     }
     if (state && state.arena && state.arena.group && state.arena.group.parent) {
       state.arena.group.parent.remove(state.arena.group);
@@ -336,7 +328,7 @@
 
     window.paintballActive = false;
     if (showMenu) {
-      try { document.exitPointerLock(); } catch {}
+      try { document.exitPointerLock(); } catch (e) { console.warn('exitPointerLock failed:', e); }
       showOnlyMenu('mainMenu');
       setHUDVisible(false);
     }

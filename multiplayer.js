@@ -12,9 +12,6 @@
   var WALK_SPEED = 4.5;
   var SPRINT_SPEED = 8.5;
   var SNAPSHOT_RATE = 33;       // ms between snapshots (~30Hz)
-  var FIRE_COOLDOWN = 166;      // ms between shots
-  var MAG_SIZE = 6;             // default magazine size
-  var RELOAD_TIME = 2500;       // ms to reload (2.5s)
   var DEFAULT_HEALTH = 100;     // starting health
   var DEFAULT_DAMAGE = 20;      // damage per hit
   var ROUNDS_TO_WIN = 2;        // rounds needed to win
@@ -24,7 +21,6 @@
   var COUNTDOWN_SECONDS = 3;    // pre-round countdown
   var SHOT_DELAY_AFTER_COUNTDOWN = 300; // ms to delay firing after countdown starts
   var TRACER_LIFETIME = 70;     // ms tracer visual lasts
-  var MAX_HITSCAN_DIST = 200;   // max hitscan range
 
   var socket = null;
   var isHost = false;
@@ -33,10 +29,11 @@
   var state = null;
 
   function defaultSettings() {
+    var defWeapon = new Weapon();
     return {
-      fireCooldownMs: FIRE_COOLDOWN,
-      magSize: MAG_SIZE,
-      reloadTimeSec: RELOAD_TIME / 1000,
+      fireCooldownMs: defWeapon.cooldownMs,
+      magSize: defWeapon.magSize,
+      reloadTimeSec: defWeapon.reloadTimeSec,
       playerHealth: DEFAULT_HEALTH,
       playerDamage: DEFAULT_DAMAGE,
       roundsToWin: ROUNDS_TO_WIN,
@@ -108,13 +105,14 @@
     state.players.host.resetForRound(A);
     state.players.client.resetForRound(B);
 
-    // Re-apply weapon settings from room config
+    // Re-apply weapon settings from room config (overrides may differ from defaults)
     var s = state.settings;
     [state.players.host, state.players.client].forEach(function (p) {
-      p.weapon.magSize = s.magSize;
-      p.weapon.ammo = s.magSize;
-      p.weapon.reloadTimeSec = s.reloadTimeSec;
       p.weapon.cooldownMs = s.fireCooldownMs;
+      p.weapon.magSize = s.magSize;
+      p.weapon.reloadTimeSec = s.reloadTimeSec;
+      p.weapon.damage = s.playerDamage;
+      p.weapon.ammo = s.magSize;
     });
 
     // Set camera for local player
@@ -164,6 +162,12 @@
 
   function createPlayerInstance(opts) {
     var s = state.settings;
+    var w = new Weapon({
+      cooldownMs: s.fireCooldownMs,
+      magSize: s.magSize,
+      reloadTimeSec: s.reloadTimeSec,
+      damage: s.playerDamage
+    });
     var p = new Player({
       position: opts.position ? opts.position.clone() : new THREE.Vector3(),
       feetY: GROUND_Y,
@@ -173,15 +177,7 @@
       maxHealth: s.playerHealth,
       color: opts.color || 0xff5555,
       cameraAttached: !!opts.cameraAttached,
-      weapon: {
-        magSize: s.magSize,
-        ammo: s.magSize,
-        reloading: false,
-        reloadEnd: 0,
-        lastShotTime: 0,
-        reloadTimeSec: s.reloadTimeSec,
-        cooldownMs: s.fireCooldownMs
-      }
+      weapon: w
     });
     // Attach input object for multiplayer
     p.input = { moveX: 0, moveZ: 0, sprint: false, jump: false, fireDown: false, reloadPressed: false, forward: new THREE.Vector3(0, 0, -1) };
@@ -290,7 +286,7 @@
       solids: state.arena.solids,
       playerTarget: hitTarget,
       tracerColor: isLocalPlayer(p) ? 0x66ffcc : 0x66aaff,
-      maxDistance: MAX_HITSCAN_DIST
+      maxDistance: w.maxRange
     });
 
     if (isHost && socket && hit && hit.point) {
@@ -307,7 +303,7 @@
       if (window.devGodMode && isLocalPlayer(other)) {
         // God mode: skip damage for local player
       } else {
-        other.takeDamage(state.settings.playerDamage);
+        other.takeDamage(w.damage);
         if (isLocalPlayer(other)) updateHUDForPlayer(other);
         if (isHost && state.match && state.match.roundActive && !other.alive) {
           endRound((p === state.players.host) ? 'p1' : 'p2');

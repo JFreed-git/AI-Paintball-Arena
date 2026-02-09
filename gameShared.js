@@ -3,9 +3,7 @@
 
 (function () {
 
-  // -------- Crosshair / Spread --------
-
-  const SPRINT_SPREAD_BONUS_RAD = 0.012;
+  // ========== Crosshair / Spread UI ==========
 
   function spreadRadToPx(spreadRad) {
     const fov = (camera && camera.isPerspectiveCamera) ? camera.fov : 75;
@@ -15,12 +13,11 @@
     return Math.max(0, Math.min(60, px));
   }
 
-  window.sharedSetCrosshairBySprint = function (sprinting) {
-    const spread = sprinting ? SPRINT_SPREAD_BONUS_RAD : 0;
+  window.sharedSetCrosshairBySprint = function (sprinting, sprintSpreadRad) {
+    if (typeof sprintSpreadRad !== 'number') sprintSpreadRad = 0.012;
+    const spread = sprinting ? sprintSpreadRad : 0;
     setCrosshairSpread(spreadRadToPx(spread));
   };
-
-  // -------- HUD element toggles --------
 
   // Toggle reload indicator + crosshair dimming
   window.sharedSetReloadingUI = function (isReloading, reloadIndicatorEl) {
@@ -37,7 +34,7 @@
     }
   };
 
-  // -------- Round Banner --------
+  // ========== Round Flow & Timing ==========
 
   // Show a text banner for `ms` milliseconds.
   // bannerEl: the DOM element to show
@@ -48,16 +45,15 @@
     bannerEl.textContent = text;
     bannerEl.classList.remove('hidden');
     if (timerRef.id) {
-      try { clearTimeout(timerRef.id); } catch {}
+      try { clearTimeout(timerRef.id); } catch (e) { console.warn('clearTimeout failed:', e); }
       timerRef.id = 0;
     }
     timerRef.id = setTimeout(function () {
+      if (!timerRef || timerRef.id === null) return;
       bannerEl.classList.add('hidden');
       timerRef.id = 0;
     }, ms);
   };
-
-  // -------- Round Countdown --------
 
   // Runs a 3-2-1-GO countdown with callbacks.
   // opts.seconds       - countdown duration (default 3)
@@ -83,18 +79,19 @@
     el.textContent = String(remain);
 
     if (opts.timerRef && opts.timerRef.id) {
-      try { clearInterval(opts.timerRef.id); } catch {}
+      try { clearInterval(opts.timerRef.id); } catch (e) { console.warn('clearInterval failed:', e); }
       opts.timerRef.id = 0;
     }
 
     var timer = setInterval(function () {
+      if (opts.timerRef && opts.timerRef.id === null) return;
       remain -= 1;
       if (remain > 0) {
         el.textContent = String(remain);
       } else {
         el.textContent = 'GO!';
         setTimeout(function () { el.classList.add('hidden'); }, 1000);
-        try { clearInterval(timer); } catch {}
+        try { clearInterval(timer); } catch (e) { console.warn('clearInterval failed:', e); }
         if (opts.timerRef) opts.timerRef.id = 0;
         if (opts.onReady) opts.onReady();
       }
@@ -103,7 +100,7 @@
     if (opts.timerRef) opts.timerRef.id = timer;
   };
 
-  // -------- Weapon / Reload --------
+  // ========== Weapon State Machine ==========
 
   // Check if a reload just finished and reset weapon state. Returns true if reload completed.
   window.sharedHandleReload = function (weapon, now) {
@@ -123,11 +120,18 @@
     return true;
   };
 
-  // -------- HUD Updates --------
+  // Check whether a weapon is ready to fire (not reloading, has ammo, cooldown elapsed).
+  window.sharedCanShoot = function (weapon, now, cooldownMs) {
+    return !weapon.reloading && weapon.ammo > 0 && (now - weapon.lastShotTime) >= cooldownMs;
+  };
+
+  // ========== HUD Rendering ==========
 
   // Update a health bar fill element (width %) given current and max health.
   window.sharedUpdateHealthBar = function (fillEl, current, max) {
     if (!fillEl) return;
+    current = Number(current) || 0;
+    max = Number(max) || 1;
     var pct = Math.max(0, Math.min(100, (current / Math.max(1, max)) * 100));
     fillEl.style.width = pct + '%';
   };
