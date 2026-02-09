@@ -2,6 +2,8 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+**IMPORTANT:** Keep this file up to date. Whenever you make changes that affect architecture, networking, physics, module APIs, or other details documented below, update the relevant sections of this file as part of the same task.
+
 ## Development Commands
 
 - **Node/npm path:** `/opt/homebrew/bin/node` and `/opt/homebrew/bin/npm` (Homebrew install — `npm`/`node` are NOT on the default shell PATH in this environment, so always use full paths)
@@ -25,7 +27,7 @@ All JS files use IIFEs `(function() { ... })()` for scope isolation. Public APIs
 
 **Single-player AI** (`paintballGame.js` + `aiOpponent.js`): Self-contained game loop via `requestAnimationFrame`. The AI uses A* pathfinding on a 25-point waypoint graph and hitscan raycasting for combat. Controlled by `window.paintballActive`.
 
-**LAN Multiplayer** (`multiplayer.js`): Host-authoritative architecture. The host runs physics simulation for both players and broadcasts snapshots at ~20Hz. The client sends raw input each frame, applies client-side movement prediction locally, and reconciles with authoritative snapshots via lerp. The server (`server.js`) is a thin Socket.IO relay that manages rooms and forwards messages — it runs no game logic. Controlled by `window.multiplayerActive`.
+**LAN Multiplayer** (`multiplayer.js`): Host-authoritative architecture. The host runs physics simulation for both players and broadcasts snapshots at ~30Hz. The client sends raw input each frame, runs client-side prediction using the same `updateFullPhysics` as the host for accurate prediction, and gently reconciles with authoritative snapshots via lerp (`LERP_RATE = 0.15`). The remote player (opponent) is rendered using snapshot interpolation — buffering the last two snapshots and smoothly lerping between them each frame — rather than snapping to each snapshot. The server (`server.js`) is a thin Socket.IO relay that manages rooms and forwards messages — it runs no game logic. Controlled by `window.multiplayerActive`.
 
 **Shared game logic** (`gameShared.js`): Both modes call shared functions for HUD updates (`sharedUpdateHealthBar`, `sharedUpdateAmmoDisplay`), reload logic (`sharedHandleReload`, `sharedStartReload`), round flow (`sharedShowRoundBanner`, `sharedStartRoundCountdown`), and crosshair/sprint UI (`sharedSetCrosshairBySprint`, `sharedSetReloadingUI`, `sharedSetSprintUI`). Mode-specific logic (AI, networking) stays in their respective files.
 
@@ -37,7 +39,7 @@ Movement is full 3D — horizontal XZ walking plus vertical gravity, jumping, an
 
 ### Networking Protocol (Socket.IO events)
 
-`createRoom`/`joinRoom` → room lifecycle. `input` → client sends to host each frame. `snapshot` → host broadcasts state at 20Hz. `shot` → host relays tracer visuals. `startRound`/`roundResult`/`matchOver` → round lifecycle. All payloads are plain objects with arrays for positions `[x,y,z]`.
+`createRoom`/`joinRoom` → room lifecycle. `input` → client sends to host each frame. `snapshot` → host broadcasts state at ~30Hz. `shot` → host relays tracer visuals. `startRound`/`roundResult`/`matchOver` → round lifecycle. All payloads are plain objects with arrays for positions `[x,y,z]`.
 
 ### UI Flow
 

@@ -1,14 +1,30 @@
 /**
  * Multiplayer (LAN) module — host-authoritative 2-player mode.
  * Uses shared functions from gameShared.js for HUD, round flow, crosshair, and reload.
+ * Uses Player class for both local and remote players.
  */
 
 (function () {
   window.multiplayerActive = false;
+  window.getMultiplayerState = function () { return state; };
 
   var PLAYER_RADIUS = 0.5;
   var WALK_SPEED = 4.5;
   var SPRINT_SPEED = 8.5;
+  var SNAPSHOT_RATE = 33;       // ms between snapshots (~30Hz)
+  var FIRE_COOLDOWN = 166;      // ms between shots
+  var MAG_SIZE = 6;             // default magazine size
+  var RELOAD_TIME = 2500;       // ms to reload (2.5s)
+  var DEFAULT_HEALTH = 100;     // starting health
+  var DEFAULT_DAMAGE = 20;      // damage per hit
+  var ROUNDS_TO_WIN = 2;        // rounds needed to win
+  var MAX_DT = 0.05;            // max delta-time clamp (seconds)
+  var SNAP_THRESHOLD_SQ = 25;   // squared distance to snap instead of lerp
+  var ROUND_BANNER_MS = 1200;   // duration for round banners
+  var COUNTDOWN_SECONDS = 3;    // pre-round countdown
+  var SHOT_DELAY_AFTER_COUNTDOWN = 300; // ms to delay firing after countdown starts
+  var TRACER_LIFETIME = 70;     // ms tracer visual lasts
+  var MAX_HITSCAN_DIST = 200;   // max hitscan range
 
   var socket = null;
   var isHost = false;
@@ -18,12 +34,12 @@
 
   function defaultSettings() {
     return {
-      fireCooldownMs: 166,
-      magSize: 6,
-      reloadTimeSec: 2.5,
-      playerHealth: 100,
-      playerDamage: 20,
-      roundsToWin: 2,
+      fireCooldownMs: FIRE_COOLDOWN,
+      magSize: MAG_SIZE,
+      reloadTimeSec: RELOAD_TIME / 1000,
+      playerHealth: DEFAULT_HEALTH,
+      playerDamage: DEFAULT_DAMAGE,
+      roundsToWin: ROUNDS_TO_WIN,
     };
   }
 
@@ -64,18 +80,20 @@
       countdownEl: state.hud.countdownEl,
       timerRef: state.countdownTimerRef,
       onStart: function () {
+        if (!state) return;
         state.inputEnabled = false;
         if (state.match) state.match.roundActive = false;
         state.inputArmed = false;
         var now = performance.now();
         if (state.players && state.players.host && state.players.host.weapon) {
-          state.players.host.weapon.lastShotTime = now + 300;
+          state.players.host.weapon.lastShotTime = now + SHOT_DELAY_AFTER_COUNTDOWN;
         }
         if (state.players && state.players.client && state.players.client.weapon) {
-          state.players.client.weapon.lastShotTime = now + 300;
+          state.players.client.weapon.lastShotTime = now + SHOT_DELAY_AFTER_COUNTDOWN;
         }
       },
       onReady: function () {
+        if (!state) return;
         state.inputEnabled = true;
         if (state.match) state.match.roundActive = true;
       }
@@ -86,28 +104,30 @@
     if (!state) return;
     var A = state.spawns.A;
     var B = state.spawns.B;
-    var eyeY = GROUND_Y + EYE_HEIGHT;
 
-    state.players.host.position.copy(A); state.players.host.position.y = eyeY;
-    state.players.host.feetY = GROUND_Y; state.players.host.verticalVelocity = 0; state.players.host.grounded = true;
-    state.players.client.position.copy(B); state.players.client.position.y = eyeY;
-    state.players.client.feetY = GROUND_Y; state.players.client.verticalVelocity = 0; state.players.client.grounded = true;
+    state.players.host.resetForRound(A);
+    state.players.client.resetForRound(B);
 
-    camera.position.copy(A); camera.position.y = eyeY;
-    camera.rotation.set(0, 0, 0, 'YXZ');
-    camera.lookAt(B);
-
+    // Re-apply weapon settings from room config
     var s = state.settings;
     [state.players.host, state.players.client].forEach(function (p) {
-      p.health = s.playerHealth;
-      p.alive = true;
-      p.weapon.ammo = p.weapon.magSize;
-      p.weapon.reloading = false;
-      p.weapon.reloadEnd = 0;
-      p.weapon.lastShotTime = 0;
+      p.weapon.magSize = s.magSize;
+      p.weapon.ammo = s.magSize;
+      p.weapon.reloadTimeSec = s.reloadTimeSec;
+      p.weapon.cooldownMs = s.fireCooldownMs;
     });
 
-    updateHUDForPlayer(isHost ? state.players.host : state.players.client);
+    // Set camera for local player
+    var localPlayer = isHost ? state.players.host : state.players.client;
+    localPlayer.syncCameraFromPlayer();
+    camera.rotation.set(0, 0, 0, 'YXZ');
+    camera.lookAt(isHost ? B : A);
+
+    // Attach input objects back
+    state.players.host.input = state.players.host.input || { moveX: 0, moveZ: 0, sprint: false, jump: false, fireDown: false, reloadPressed: false, forward: new THREE.Vector3(0, 0, -1) };
+    state.players.client.input = state.players.client.input || { moveX: 0, moveZ: 0, sprint: false, jump: false, fireDown: false, reloadPressed: false, forward: new THREE.Vector3(0, 0, -1) };
+
+    updateHUDForPlayer(localPlayer);
   }
 
   function endRound(who) {
@@ -118,7 +138,7 @@
     else if (who === 'p2') state.match.player2Wins++;
 
     var wText = who === 'p1' ? 'Player 1 wins the round!' : 'Player 2 wins the round!';
-    showRoundBanner(wText, 1200);
+    showRoundBanner(wText, ROUND_BANNER_MS);
     if (socket) socket.emit('roundResult', { winner: who, score: { p1: state.match.player1Wins, p2: state.match.player2Wins } });
 
     if (state.match.player1Wins >= state.match.toWin || state.match.player2Wins >= state.match.toWin) {
@@ -134,28 +154,25 @@
     }
 
     setTimeout(function () {
+      if (!state) return;
       resetEntitiesForRound();
       updateHUDForPlayer(isHost ? state.players.host : state.players.client);
-      startRoundCountdown(3);
-      if (socket) socket.emit('startRound', { seconds: 3 });
-    }, 1200);
+      startRoundCountdown(COUNTDOWN_SECONDS);
+      if (socket) socket.emit('startRound', { seconds: COUNTDOWN_SECONDS });
+    }, ROUND_BANNER_MS);
   }
 
-  function newPlayer(opts) {
+  function createPlayerInstance(opts) {
     var s = state.settings;
-    return {
-      position: (opts && opts.position) ? opts.position.clone() : new THREE.Vector3(),
-      yaw: (opts && typeof opts.yaw === 'number') ? opts.yaw : 0,
-      pitch: (opts && typeof opts.pitch === 'number') ? opts.pitch : 0,
+    var p = new Player({
+      position: opts.position ? opts.position.clone() : new THREE.Vector3(),
+      feetY: GROUND_Y,
       walkSpeed: WALK_SPEED,
       sprintSpeed: SPRINT_SPEED,
       radius: PLAYER_RADIUS,
-      feetY: GROUND_Y,
-      verticalVelocity: 0,
-      grounded: true,
-      health: s.playerHealth,
-      alive: true,
-      input: { moveX: 0, moveZ: 0, sprint: false, jump: false, fireDown: false, reloadPressed: false, forward: new THREE.Vector3(0, 0, -1) },
+      maxHealth: s.playerHealth,
+      color: opts.color || 0xff5555,
+      cameraAttached: !!opts.cameraAttached,
       weapon: {
         magSize: s.magSize,
         ammo: s.magSize,
@@ -165,7 +182,13 @@
         reloadTimeSec: s.reloadTimeSec,
         cooldownMs: s.fireCooldownMs
       }
-    };
+    });
+    // Attach input object for multiplayer
+    p.input = { moveX: 0, moveZ: 0, sprint: false, jump: false, fireDown: false, reloadPressed: false, forward: new THREE.Vector3(0, 0, -1) };
+    // Store yaw/pitch for network sync
+    p.yaw = (opts && typeof opts.yaw === 'number') ? opts.yaw : 0;
+    p.pitch = (opts && typeof opts.pitch === 'number') ? opts.pitch : 0;
+    return p;
   }
 
   function newState(settingsFromServer) {
@@ -175,7 +198,6 @@
       arena: null,
       spawns: { A: new THREE.Vector3(), B: new THREE.Vector3() },
       players: { host: null, client: null },
-      otherMesh: null,
       hud: mkHudRefs(),
       lastTs: 0,
       loopHandle: 0,
@@ -188,53 +210,26 @@
       match: {
         player1Wins: 0,
         player2Wins: 0,
-        toWin: merged.roundsToWin || 2,
+        toWin: merged.roundsToWin || ROUNDS_TO_WIN,
         roundActive: false
       }
     };
   }
 
-  function ensureOtherPlayerMesh(color) {
-    color = color || 0x55aaff;
-    var group = new THREE.Group();
-    var bodyMat = new THREE.MeshLambertMaterial({ color: color });
-    var head = new THREE.Mesh(new THREE.SphereGeometry(0.25, 16, 16), bodyMat);
-    head.position.set(0, 1.6, 0);
-    var torso = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.3, 0.9, 16), bodyMat);
-    torso.position.set(0, 1.1, 0);
-    var gun = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.1, 0.1), new THREE.MeshLambertMaterial({ color: 0x333333 }));
-    gun.position.set(0.35, 1.4, -0.1);
-    group.add(head, torso, gun);
-    group.scale.set(1.5, 1.5, 1.5);
-    scene.add(group);
-    try {
-      group.position.set(0, 0, 0);
-      var bbox = new THREE.Box3().setFromObject(group);
-      group._meshFeetOffset = -bbox.min.y; // add to feetY to get mesh.position.y
-      group.position.y = GROUND_Y + group._meshFeetOffset;
-      // Compute hitbox from actual mesh geometry
-      var center = bbox.getCenter(new THREE.Vector3());
-      group._hitCenterY = center.y;
-      var size = bbox.getSize(new THREE.Vector3());
-      group._hitRadius = Math.max(size.x, size.z) * 0.5;
-    } catch {}
-    return group;
-  }
-
   function placePlayersAtSpawns() {
     var A = state.spawns.A;
     var B = state.spawns.B;
-    var eyeY = GROUND_Y + EYE_HEIGHT;
 
     if (isHost) {
-      state.players.host.position.copy(A); state.players.host.position.y = eyeY;
-      state.players.client.position.copy(B); state.players.client.position.y = eyeY;
-      camera.position.copy(A); camera.position.y = eyeY;
+      state.players.host.resetForRound(A);
+      state.players.client.resetForRound(B);
+      state.players.host.syncCameraFromPlayer();
       camera.rotation.set(0, 0, 0, 'YXZ');
-      camera.lookAt(new THREE.Vector3(B.x, eyeY, B.z));
+      camera.lookAt(new THREE.Vector3(B.x, GROUND_Y + EYE_HEIGHT, B.z));
     } else {
-      camera.position.copy(B);
-      camera.position.y = eyeY;
+      state.players.host.resetForRound(A);
+      state.players.client.resetForRound(B);
+      state.players.client.syncCameraFromPlayer();
       camera.rotation.set(0, Math.PI, 0, 'YXZ');
     }
   }
@@ -288,22 +283,14 @@
       : p.position.clone().add(dir.clone().multiplyScalar(0.2)).add(new THREE.Vector3(0, -0.05, 0));
     var other = (p === state.players.host) ? state.players.client : state.players.host;
 
-    // Use mesh-computed hitbox center and radius
-    var tarPos = null;
-    var hitRadius = 0.6;
-    if (other && state.otherMesh) {
-      var meshHitCenterY = (typeof state.otherMesh._hitCenterY === 'number') ? state.otherMesh._hitCenterY : (GROUND_Y + EYE_HEIGHT);
-      tarPos = new THREE.Vector3(other.position.x, meshHitCenterY, other.position.z);
-      hitRadius = (typeof state.otherMesh._hitRadius === 'number') ? state.otherMesh._hitRadius : 0.6;
-    } else if (other) {
-      tarPos = other.position.clone();
-    }
+    // Use Player's getHitTarget() for proper hitbox — fixes Y alignment bug
+    var hitTarget = other ? other.getHitTarget() : null;
 
     var hit = fireHitscan(origin, dir, {
       solids: state.arena.solids,
-      playerTarget: tarPos ? { position: tarPos, radius: hitRadius } : null,
+      playerTarget: hitTarget,
       tracerColor: isLocalPlayer(p) ? 0x66ffcc : 0x66aaff,
-      maxDistance: 200
+      maxDistance: MAX_HITSCAN_DIST
     });
 
     if (isHost && socket && hit && hit.point) {
@@ -313,17 +300,16 @@
           e: [hit.point.x, hit.point.y, hit.point.z],
           c: isLocalPlayer(p) ? 0x66ffcc : 0x66aaff
         });
-      } catch {}
+      } catch (e) { console.warn('multiplayer: shot emit failed:', e); }
     }
 
     if (hit.hit && hit.hitType === 'player' && other && other.alive) {
       if (window.devGodMode && isLocalPlayer(other)) {
         // God mode: skip damage for local player
       } else {
-        other.health = Math.max(0, other.health - state.settings.playerDamage);
+        other.takeDamage(state.settings.playerDamage);
         if (isLocalPlayer(other)) updateHUDForPlayer(other);
-        if (isHost && state.match && state.match.roundActive && other.health <= 0) {
-          other.alive = false;
+        if (isHost && state.match && state.match.roundActive && !other.alive) {
           endRound((p === state.players.host) ? 'p1' : 'p2');
         }
       }
@@ -340,6 +326,7 @@
   }
 
   function simulateHostTick(dt) {
+    if (!state.players.client) return;
     var localInput = window.getInputState ? window.getInputState() : { moveX: 0, moveZ: 0, sprint: false, jump: false, fireDown: false, reloadPressed: false };
     var enabledLocal = !!state.inputEnabled;
     state.players.host.input.moveX = enabledLocal ? (localInput.moveX || 0) : 0;
@@ -359,7 +346,8 @@
       { colliders: state.arena.colliders, solids: state.arena.solids },
       dt
     );
-    camera.position.copy(state.players.host.position);
+    state.players.host._syncMeshPosition();
+    state.players.host.syncCameraFromPlayer();
 
     // Remote input
     var ri = state.remoteInputLatest || {};
@@ -371,6 +359,7 @@
     state.players.client.input.fireDown = activeRound && !!ri.fireDown;
     if (activeRound && ri.reloadPressed) state.players.client.input.reloadPressed = true;
 
+    if (!state.players.client || !state.players.client.input) return;
     if (ri.forward && Array.isArray(ri.forward) && ri.forward.length === 3) {
       state.players.client.input.forward = new THREE.Vector3(ri.forward[0], ri.forward[1], ri.forward[2]);
     }
@@ -404,15 +393,11 @@
     handleReload(state.players.host, now);
     handleReload(state.players.client, now);
 
-    // Update other mesh position using feetY
-    if (state.otherMesh) {
-      state.otherMesh.position.x = state.players.client.position.x;
-      state.otherMesh.position.z = state.players.client.position.z;
-      var meshOffset = (typeof state.otherMesh._meshFeetOffset === 'number') ? state.otherMesh._meshFeetOffset : 0;
-      state.otherMesh.position.y = state.players.client.feetY + meshOffset;
-      var toHost = state.players.host.position.clone().sub(state.players.client.position);
-      state.otherMesh.rotation.set(0, Math.atan2(toHost.x, toHost.z), 0);
-    }
+    // Update remote player mesh position and facing
+    var remotePlayer = state.players.client;
+    remotePlayer._syncMeshPosition();
+    remotePlayer.faceToward(state.players.host.position);
+    remotePlayer.update3DHealthBar(camera.position, state.arena.solids, { checkLOS: true });
 
     maybeSendSnapshot(now);
   }
@@ -420,7 +405,7 @@
   var lastSnapshotMs = 0;
   function maybeSendSnapshot(nowMs) {
     if (!socket) return;
-    if ((nowMs - lastSnapshotMs) < 50) return;
+    if ((nowMs - lastSnapshotMs) < SNAPSHOT_RATE) return;
     lastSnapshotMs = nowMs;
     socket.emit('snapshot', {
       roomId: currentRoomId,
@@ -448,17 +433,43 @@
   var _predictedFeetY = GROUND_Y;
   var _predictedVVel = 0;
   var _predictedGrounded = true;
-  var LERP_RATE = 0.3; // how aggressively to snap toward server position per snapshot
+  var _lastSnapshotTime = 0;
+  var LERP_RATE = 0.15; // how aggressively to snap toward server position per snapshot
+
+  // Remote player interpolation state (smooth opponent movement on client)
+  var _remoteFrom = null;  // {pos: THREE.Vector3, feetY: number, receiveTime: number}
+  var _remoteTo = null;    // same shape
 
   function applySnapshotOnClient(snap) {
     if (!snap) return;
+    // Skip stale snapshots
+    if (snap.t && _lastSnapshotTime && snap.t < _lastSnapshotTime) return;
+    _lastSnapshotTime = snap.t || 0;
+
+    // Buffer remote player snapshots for smooth interpolation
     var H = snap.host;
-    if (H && state.otherMesh) {
-      state.otherMesh.position.x = H.pos[0];
-      state.otherMesh.position.z = H.pos[2];
-      var meshOffset = (typeof state.otherMesh._meshFeetOffset === 'number') ? state.otherMesh._meshFeetOffset : 0;
-      var hostFeetY = (typeof H.feetY === 'number') ? H.feetY : GROUND_Y;
-      state.otherMesh.position.y = hostFeetY + meshOffset;
+    if (H && state.players.host) {
+      var newRemoteSnap = {
+        pos: new THREE.Vector3(H.pos[0], H.pos[1], H.pos[2]),
+        feetY: (typeof H.feetY === 'number') ? H.feetY : GROUND_Y,
+        receiveTime: performance.now()
+      };
+      _remoteFrom = _remoteTo;
+      _remoteTo = newRemoteSnap;
+
+      // Apply health immediately (no interpolation needed)
+      state.players.host.health = H.health;
+      state.players.host.lastDamagedAt = (H.health < state.settings.playerHealth) ? performance.now() : state.players.host.lastDamagedAt;
+
+      // If first snapshot, snap directly
+      if (!_remoteFrom) {
+        state.players.host.position.copy(newRemoteSnap.pos);
+        state.players.host.feetY = newRemoteSnap.feetY;
+        state.players.host._syncMeshPosition();
+        if (state.players.client) {
+          state.players.host.faceToward(camera.position);
+        }
+      }
     }
 
     var C = snap.client;
@@ -470,7 +481,7 @@
 
       if (_predictedPos) {
         var diff = serverPos.clone().sub(_predictedPos);
-        if (diff.lengthSq() > 25) {
+        if (diff.lengthSq() > SNAP_THRESHOLD_SQ) {
           // Too far off — snap directly
           _predictedPos.copy(serverPos);
           _predictedFeetY = serverFeetY;
@@ -480,7 +491,10 @@
           // Smooth correction
           _predictedPos.lerp(serverPos, LERP_RATE);
           _predictedFeetY += (serverFeetY - _predictedFeetY) * LERP_RATE;
+          // Reconcile eye position Y with feet
+          _predictedPos.y = _predictedFeetY + EYE_HEIGHT;
           _predictedGrounded = serverGrounded;
+          if (serverGrounded) _predictedVVel = 0;
         }
         camera.position.copy(_predictedPos);
       } else {
@@ -491,8 +505,11 @@
         camera.position.copy(serverPos);
       }
 
+      // Sync local player state
       var localP = state.players.client;
       if (localP) {
+        localP.position.copy(_predictedPos);
+        localP.feetY = _predictedFeetY;
         localP.health = C.health;
         localP.weapon.ammo = C.ammo;
         localP.weapon.reloading = !!C.reloading;
@@ -506,7 +523,7 @@
   function tick(ts) {
     if (!window.multiplayerActive || !state) return;
 
-    var dt = state.lastTs ? Math.min(0.05, (ts - state.lastTs) / 1000) : 0;
+    var dt = state.lastTs ? Math.min(MAX_DT, (ts - state.lastTs) / 1000) : 0;
     state.lastTs = ts;
 
     if (isHost) {
@@ -516,53 +533,61 @@
       var forward = new THREE.Vector3();
       if (camera && camera.getWorldDirection) camera.getWorldDirection(forward);
 
-      // Client-side prediction: apply movement + vertical physics locally
+      // Client-side prediction: use same full physics as host for accurate prediction
       if (_predictedPos && state.inputEnabled) {
-        var fwd = forward.clone();
-        fwd.y = 0;
-        if (fwd.lengthSq() < 1e-6) fwd.set(0, 0, -1);
-        fwd.normalize();
-        var right = new THREE.Vector3().crossVectors(fwd, new THREE.Vector3(0, 1, 0)).normalize();
-        var moveDir = new THREE.Vector3();
-        moveDir.addScaledVector(fwd, input.moveZ || 0);
-        moveDir.addScaledVector(right, input.moveX || 0);
-        if (moveDir.lengthSq() > 1e-6) moveDir.normalize(); else moveDir.set(0, 0, 0);
+        var localP = state.players.client;
+        if (localP) {
+          // Sync prediction state into player object
+          localP.position.copy(_predictedPos);
+          localP.feetY = _predictedFeetY;
+          localP.verticalVelocity = _predictedVVel;
+          localP.grounded = _predictedGrounded;
 
-        var speed = input.sprint ? SPRINT_SPEED : WALK_SPEED;
-        _predictedPos.x += moveDir.x * speed * dt;
-        _predictedPos.z += moveDir.z * speed * dt;
+          // Compute world-space movement direction from camera forward
+          var fwd = forward.clone();
+          fwd.y = 0;
+          if (fwd.lengthSq() < 1e-6) fwd.set(0, 0, -1);
+          fwd.normalize();
+          var right = new THREE.Vector3().crossVectors(fwd, new THREE.Vector3(0, 1, 0)).normalize();
+          var moveDir = new THREE.Vector3();
+          moveDir.addScaledVector(fwd, input.moveZ || 0);
+          moveDir.addScaledVector(right, input.moveX || 0);
+          if (moveDir.lengthSq() > 1e-6) moveDir.normalize(); else moveDir.set(0, 0, 0);
 
-        // Vertical physics prediction
-        var solids = (state.arena && state.arena.solids) ? state.arena.solids : [];
-        var groundH = getGroundHeight(_predictedPos, solids, _predictedFeetY, _predictedGrounded);
+          // Run the same full physics the host uses
+          updateFullPhysics(
+            localP,
+            { worldMoveDir: moveDir, sprint: input.sprint, jump: input.jump },
+            { colliders: state.arena.colliders, solids: state.arena.solids },
+            dt
+          );
 
-        if (input.jump && _predictedGrounded) {
-          _predictedVVel = JUMP_VELOCITY;
-          _predictedGrounded = false;
+          // Read back prediction state
+          _predictedPos.copy(localP.position);
+          _predictedFeetY = localP.feetY;
+          _predictedVVel = localP.verticalVelocity;
+          _predictedGrounded = localP.grounded;
+
+          camera.position.copy(_predictedPos);
         }
-        if (!_predictedGrounded) {
-          _predictedVVel += GRAVITY * dt;
-          _predictedFeetY += _predictedVVel * dt;
-          if (_predictedFeetY <= groundH) {
-            _predictedFeetY = groundH;
-            _predictedVVel = 0;
-            _predictedGrounded = true;
-          }
-        } else {
-          if (groundH < _predictedFeetY - MAX_STEP_HEIGHT) {
-            _predictedGrounded = false;
-            _predictedVVel = 0;
-          } else {
-            _predictedFeetY = groundH;
-          }
-        }
+      }
 
-        _predictedPos.y = _predictedFeetY + EYE_HEIGHT;
-
-        if (state.arena && state.arena.colliders) {
-          resolveCollisions2D(_predictedPos, PLAYER_RADIUS, state.arena.colliders, _predictedFeetY);
+      // Interpolate remote player (host) for smooth opponent movement
+      if (_remoteFrom && _remoteTo && state.players.host) {
+        var interpDuration = _remoteTo.receiveTime - _remoteFrom.receiveTime;
+        if (interpDuration > 0) {
+          var interpElapsed = performance.now() - _remoteFrom.receiveTime;
+          var interpT = Math.min(interpElapsed / interpDuration, 1.0);
+          var hostP = state.players.host;
+          hostP.position.lerpVectors(_remoteFrom.pos, _remoteTo.pos, interpT);
+          hostP.feetY = _remoteFrom.feetY + (_remoteTo.feetY - _remoteFrom.feetY) * interpT;
+          hostP.position.y = hostP.feetY + EYE_HEIGHT;
+          hostP._syncMeshPosition();
+          hostP.faceToward(camera.position);
+          hostP.update3DHealthBar(camera.position, state.arena ? state.arena.solids : [], { checkLOS: true });
         }
-        camera.position.copy(_predictedPos);
+      } else if (_remoteTo && state.players.host) {
+        state.players.host.update3DHealthBar(camera.position, state.arena ? state.arena.solids : [], { checkLOS: true });
       }
 
       if (socket) {
@@ -589,8 +614,8 @@
   // Public starts
   window.hostLanGame = function (roomId, settings, mapName) {
     if (!roomId || typeof roomId !== 'string') { alert('Please enter a Room ID'); return; }
-    if (window.paintballActive) { try { stopPaintballInternal(); } catch {} }
-    if (window.multiplayerActive) { try { stopMultiplayerInternal(); } catch {} }
+    if (window.paintballActive) { try { stopPaintballInternal(); } catch (e) { console.warn('multiplayer: stopPaintballInternal failed:', e); } }
+    if (window.multiplayerActive) { try { stopMultiplayerInternal(); } catch (e) { console.warn('multiplayer: stopMultiplayerInternal failed:', e); } }
 
     // Include mapName in settings so client receives it
     if (mapName && mapName !== '__default__') {
@@ -616,8 +641,8 @@
 
   window.joinLanGame = function (roomId) {
     if (!roomId || typeof roomId !== 'string') { alert('Please enter a Room ID'); return; }
-    if (window.paintballActive) { try { stopPaintballInternal(); } catch {} }
-    if (window.multiplayerActive) { try { stopMultiplayerInternal(); } catch {} }
+    if (window.paintballActive) { try { stopPaintballInternal(); } catch (e) { console.warn('multiplayer: stopPaintballInternal failed:', e); } }
+    if (window.multiplayerActive) { try { stopMultiplayerInternal(); } catch (e) { console.warn('multiplayer: stopMultiplayerInternal failed:', e); } }
 
     ensureSocket();
     socket.emit('joinRoom', roomId, function (res) {
@@ -657,22 +682,23 @@
 
     socket.on('clientLeft', function () {
       if (isHost) {
-        showRoundBanner('Player 2 left', 1200);
+        showRoundBanner('Player 2 left', ROUND_BANNER_MS);
         if (state) state.inputEnabled = false;
       }
     });
 
     socket.on('clientJoined', function () {
       if (!isHost || !state) return;
-      showRoundBanner('Player 2 joined', 1000);
+      showRoundBanner('Player 2 joined', ROUND_BANNER_MS);
       resetEntitiesForRound();
       updateHUDForPlayer(state.players.host);
-      startRoundCountdown(3);
-      socket.emit('startRound', { seconds: 3 });
+      startRoundCountdown(COUNTDOWN_SECONDS);
+      socket.emit('startRound', { seconds: COUNTDOWN_SECONDS });
     });
 
     socket.on('input', function (payload) {
       if (!isHost) return;
+      if (!state || !state.players || !state.players.client) return;
       state.remoteInputLatest = payload || {};
     });
 
@@ -688,13 +714,13 @@
     });
 
     socket.on('startRound', function (payload) {
-      startRoundCountdown((payload && payload.seconds) || 3);
+      startRoundCountdown((payload && payload.seconds) || COUNTDOWN_SECONDS);
     });
 
     socket.on('roundResult', function (payload) {
       var winner = payload && payload.winner;
       if (!winner) return;
-      showRoundBanner(winner === 'p1' ? 'Player 1 wins the round!' : 'Player 2 wins the round!', 1200);
+      showRoundBanner(winner === 'p1' ? 'Player 1 wins the round!' : 'Player 2 wins the round!', ROUND_BANNER_MS);
     });
 
     socket.on('matchOver', function (payload) {
@@ -714,7 +740,7 @@
       var e = new THREE.Vector3(payload.e[0], payload.e[1], payload.e[2]);
       var color = (typeof payload.c === 'number') ? payload.c : 0x66ffcc;
       if (typeof spawnTracer === 'function') {
-        try { spawnTracer(o, e, color, 70); } catch {}
+        try { spawnTracer(o, e, color, TRACER_LIFETIME); } catch (e) { console.warn('multiplayer: spawnTracer failed:', e); }
       }
     });
   }
@@ -726,11 +752,17 @@
       : (typeof buildArenaFromMap === 'function' ? buildArenaFromMap(getDefaultMapData()) : buildPaintballArenaSymmetric());
     state.spawns = state.arena.spawns;
 
-    var eyeY = GROUND_Y + EYE_HEIGHT;
-    var posA = state.spawns.A.clone(); posA.y = eyeY;
-    var posB = state.spawns.B.clone(); posB.y = eyeY;
-    state.players.host = newPlayer({ position: posA });
-    state.players.client = newPlayer({ position: posB });
+    var posA = state.spawns.A.clone();
+    var posB = state.spawns.B.clone();
+
+    // Create Player instances: local gets cameraAttached, remote gets visible mesh
+    if (isHost) {
+      state.players.host = createPlayerInstance({ position: posA, color: 0x66ffcc, cameraAttached: true });
+      state.players.client = createPlayerInstance({ position: posB, color: 0x55aaff, cameraAttached: false });
+    } else {
+      state.players.host = createPlayerInstance({ position: posA, color: 0xffaa55, cameraAttached: false });
+      state.players.client = createPlayerInstance({ position: posB, color: 0x66ffcc, cameraAttached: true });
+    }
 
     setHUDVisible(true);
     showOnlyMenu(null);
@@ -743,13 +775,15 @@
       renderer.domElement.requestPointerLock();
     }
 
-    state.otherMesh = ensureOtherPlayerMesh(isHost ? 0x55aaff : 0xffaa55);
     placePlayersAtSpawns();
 
     // Initialize client-side prediction position
+    _lastSnapshotTime = 0;
+    _remoteFrom = null;
+    _remoteTo = null;
     if (!isHost) {
       _predictedPos = state.spawns.B.clone();
-      _predictedPos.y = eyeY;
+      _predictedPos.y = GROUND_Y + EYE_HEIGHT;
       _predictedFeetY = GROUND_Y;
       _predictedVVel = 0;
       _predictedGrounded = true;
@@ -758,7 +792,7 @@
     }
 
     state.playerNumber = playerNumber || (isHost ? 1 : 2);
-    showRoundBanner('You are Player ' + state.playerNumber, 1200);
+    showRoundBanner('You are Player ' + state.playerNumber, ROUND_BANNER_MS);
 
     if (isHost) {
       showRoundBanner('Waiting for Player 2...', 999999);
@@ -770,13 +804,23 @@
   }
 
   window.stopMultiplayerInternal = function () {
-    try { if (socket && currentRoomId) socket.emit('leaveRoom'); } catch {}
+    try { if (socket && currentRoomId) socket.emit('leaveRoom'); } catch (e) { console.warn('multiplayer: leaveRoom emit failed:', e); }
     if (state && state.loopHandle) {
-      try { cancelAnimationFrame(state.loopHandle); } catch {}
+      try { cancelAnimationFrame(state.loopHandle); } catch (e) { console.warn('multiplayer: cancelAnimationFrame failed:', e); }
       state.loopHandle = 0;
     }
     if (state) {
-      if (state.otherMesh && state.otherMesh.parent) state.otherMesh.parent.remove(state.otherMesh);
+      if (state.bannerTimerRef && state.bannerTimerRef.id) {
+        clearTimeout(state.bannerTimerRef.id);
+        state.bannerTimerRef.id = null;
+      }
+      if (state.countdownTimerRef && state.countdownTimerRef.id) {
+        clearTimeout(state.countdownTimerRef.id);
+        state.countdownTimerRef.id = null;
+      }
+      // Destroy Player instances
+      if (state.players.host) { try { state.players.host.destroy(); } catch (e) { console.warn('multiplayer: host.destroy failed:', e); } }
+      if (state.players.client) { try { state.players.client.destroy(); } catch (e) { console.warn('multiplayer: client.destroy failed:', e); } }
       if (state.arena && state.arena.group && state.arena.group.parent) state.arena.group.parent.remove(state.arena.group);
       showMultiplayerHUD(false);
       setCrosshairDimmed(false);
@@ -786,6 +830,9 @@
     _predictedFeetY = GROUND_Y;
     _predictedVVel = 0;
     _predictedGrounded = true;
+    _lastSnapshotTime = 0;
+    _remoteFrom = null;
+    _remoteTo = null;
     window.multiplayerActive = false;
     state = null;
   };
