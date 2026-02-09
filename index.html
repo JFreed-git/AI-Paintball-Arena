@@ -23,6 +23,7 @@
 
             <!-- Paintball HUD -->
             <div id="healthContainer" class="hidden">
+                <div id="weaponNameDisplay" class="hidden"></div>
                 <div id="sprintIndicator" class="hidden">SPRINTING</div>
                 <div id="healthBar">
                     <div id="healthFill" style="width: 100%"></div>
@@ -49,6 +50,7 @@
             <div class="actions">
                 <button id="gotoPaintball">Play Paintball</button>
                 <button id="gotoLAN">Play LAN</button>
+                <button id="gotoTraining">Training Range</button>
             </div>
         </div>
 
@@ -81,6 +83,14 @@
             </div>
         </div>
 
+        <div id="trainingMenu" class="menu hidden">
+            <h2>Training Range</h2>
+            <div class="actions">
+                <button id="startTraining">Start Training</button>
+                <button class="secondary" id="backFromTraining">Back</button>
+            </div>
+        </div>
+
         <div id="lanMenu" class="menu hidden">
             <h2>LAN Multiplayer</h2>
             <div class="field">
@@ -94,33 +104,6 @@
                     <select id="lanMapSelect">
                         <option value="__default__" selected>Default Arena</option>
                     </select>
-                </label>
-            </div>
-
-            <h3>Room Settings (host can configure)</h3>
-            <div class="field">
-                <label>Fire Cooldown (ms)
-                    <input type="number" id="fireCooldownMs" min="50" max="2000" step="1" value="166" />
-                </label>
-            </div>
-            <div class="field">
-                <label>Magazine Size
-                    <input type="number" id="magSize" min="1" max="200" step="1" value="6" />
-                </label>
-            </div>
-            <div class="field">
-                <label>Reload Time (sec)
-                    <input type="number" id="reloadTimeSec" min="0.2" max="10" step="0.1" value="2.5" />
-                </label>
-            </div>
-            <div class="field">
-                <label>Player Health
-                    <input type="number" id="playerHealth" min="1" max="1000" step="1" value="100" />
-                </label>
-            </div>
-            <div class="field">
-                <label>Player Damage
-                    <input type="number" id="playerDamage" min="1" max="500" step="1" value="20" />
                 </label>
             </div>
 
@@ -217,6 +200,20 @@
             </div>
         </div>
 
+        <div id="trainingStats" class="hidden">
+            Shots: <span id="tsShotCount">0</span><br>
+            Hits: <span id="tsHitCount">0</span><br>
+            Kills: <span id="tsKillCount">0</span><br>
+            Accuracy: <span id="tsAccuracy">-</span>
+        </div>
+
+        <div id="heroSelectOverlay" class="hidden">
+            <div id="heroSelectTitle">SELECT HERO</div>
+            <div id="heroSelectTimer" class="hidden">15</div>
+            <div id="heroSelectWaiting" class="hidden">Waiting for opponent...</div>
+            <div id="heroSelectHint">Press H to close</div>
+        </div>
+
         <div id="devConsole" class="hidden">
             <div id="devPassword">
                 <h3>Dev Console</h3>
@@ -238,24 +235,46 @@
         </div>
     </div>
 
+    <!-- External libraries -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="/socket.io/socket.io.js"></script>
-    <script src="gameShared.js"></script>
+
+    <!-- Core systems (no game-mode dependencies) -->
+    <script src="config.js"></script>
     <script src="weapon.js"></script>
+    <script src="weaponModels.js"></script>
     <script src="physics.js"></script>
-    <script src="multiplayer.js"></script>
+    <script src="crosshair.js"></script>
+    <script src="hud.js"></script>
+    <script src="roundFlow.js"></script>
+    <script src="heroes.js"></script>
+    <script src="abilities.js"></script>
+    <script src="heroSelectUI.js"></script>
+
+    <!-- Input, UI, environment -->
     <script src="menuNavigation.js"></script>
-    <script src="playerControls.js"></script>
+    <script src="input.js"></script>
     <script src="environment.js"></script>
-    <script src="playerModels.js"></script>
+
+    <!-- Player and arenas -->
     <script src="player.js"></script>
-    <script src="paintballEnvironment.js"></script>
+    <script src="arenaBuilder.js"></script>
+    <script src="arenaCompetitive.js"></script>
+    <script src="arenaTraining.js"></script>
     <script src="mapFormat.js"></script>
     <script src="mapEditor.js"></script>
-    <!-- Paintball mode scripts -->
+
+    <!-- Combat and AI -->
     <script src="projectiles.js"></script>
     <script src="aiOpponent.js"></script>
-    <script src="paintballGame.js"></script>
+    <script src="trainingBot.js"></script>
+
+    <!-- Game modes -->
+    <script src="modeAI.js"></script>
+    <script src="modeLAN.js"></script>
+    <script src="modeTraining.js"></script>
+
+    <!-- Bootstrap and dev tools (must be last) -->
     <script src="game.js"></script>
     <script src="devConsole.js"></script>
 </body>

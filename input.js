@@ -1,10 +1,17 @@
 /**
- * Player controls and input handlers
- * Camera defaults/reset are defined here to keep input + camera behavior together.
+ * input.js — Keyboard/mouse input handling and pointer lock management
+ *
+ * PURPOSE: Captures WASD movement, mouse look, sprint, reload, jump, and fire
+ *          inputs. Manages pointer lock lifecycle and camera defaults/reset.
+ * EXPORTS (window): getInputState, resetCameraToDefaults
+ * EXPORTS (bare global): bindPlayerControls, DEFAULT_CAMERA_POS
+ * DEPENDENCIES: THREE (r128), camera/renderer globals (game.js),
+ *               mouseSensitivity (menuNavigation.js), showOnlyMenu/setHUDVisible (menuNavigation.js)
+ * TODO (future): Ability keybind support, ADS (right-click) input
  */
 
 // Camera defaults and reset live with player controls
-const DEFAULT_CAMERA_POS = new THREE.Vector3(0, (typeof GROUND_Y !== 'undefined' ? GROUND_Y : -1) + (typeof EYE_HEIGHT !== 'undefined' ? EYE_HEIGHT : 3.0), 5);
+const DEFAULT_CAMERA_POS = new THREE.Vector3(0, (typeof GROUND_Y !== 'undefined' ? GROUND_Y : -1) + (typeof EYE_HEIGHT !== 'undefined' ? EYE_HEIGHT : 2.0), 5);
 const DEFAULT_CAMERA_YAW = 0;   // facing -Z
 const DEFAULT_CAMERA_PITCH = 0; // level
 function resetCameraToDefaults() {
@@ -60,7 +67,8 @@ function bindPlayerControls(renderer) {
 }
 
 function onMouseMove(event) {
-  if (!window.paintballActive && !window.multiplayerActive) return;
+  if (!window.paintballActive && !window.multiplayerActive && !window.trainingRangeActive) return;
+  if (window._heroSelectOpen) return;
 
   // Raycasting mouse coords (kept for completeness)
   mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
@@ -94,6 +102,9 @@ function onPointerLockChange() {
   const locked = document.pointerLockElement === canvas;
 
   if (!locked) {
+    // Hero select overlay opened — don't treat as ESC
+    if (window._heroSelectOpen) return;
+
     // Heuristic:
     // - If the document is focused and visible, treat pointer unlock as explicit ESC.
     // - If focus/visibility was lost (Alt-Tab), do nothing; clicking will re-lock.
@@ -109,6 +120,10 @@ function onPointerLockChange() {
         try { if (typeof stopMultiplayerInternal === 'function') stopMultiplayerInternal(); } catch {}
         showOnlyMenu('mainMenu');
         setHUDVisible(false);
+      } else if (window.trainingRangeActive) {
+        try { if (typeof stopTrainingRangeInternal === 'function') stopTrainingRangeInternal(); } catch {}
+        showOnlyMenu('mainMenu');
+        setHUDVisible(false);
       }
     }
   }
@@ -121,6 +136,8 @@ function onGlobalKeyDown(e) {
       try { if (typeof stopPaintballInternal === 'function') stopPaintballInternal(); } catch {}
     } else if (window.multiplayerActive) {
       try { if (typeof stopMultiplayerInternal === 'function') stopMultiplayerInternal(); } catch {}
+    } else if (window.trainingRangeActive) {
+      try { if (typeof stopTrainingRangeInternal === 'function') stopTrainingRangeInternal(); } catch {}
     }
     showOnlyMenu('mainMenu');
     setHUDVisible(false);

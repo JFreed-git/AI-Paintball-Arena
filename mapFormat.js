@@ -1,5 +1,28 @@
-// Map format: JSON-based arena builder + server API helpers.
-// Shared by game modes and the map editor.
+/**
+ * mapFormat.js — Map data serialization and arena construction from map data
+ *
+ * PURPOSE: Defines the JSON map format, builds arenas from map data objects,
+ * provides the default map, and handles server API calls for saving/loading maps.
+ * Shared by game modes (modeAI, modeLAN) and the map editor.
+ *
+ * EXPORTS (window):
+ *   buildArenaFromMap(mapData) — construct a playable arena from map JSON
+ *   getDefaultMapData()        — returns the built-in default map
+ *   saveMapToServer(name, mapData) — POST map to server
+ *   deleteMapFromServer(name)      — DELETE map from server
+ *   fetchMapList()                 — GET map list from server
+ *   fetchMapData(name)             — GET map from server
+ *   recalcNextMirrorPairId(mapData) — recompute mirror pair IDs
+ *   computeColliderForMesh(mesh)    — compute Box3 collider for a mesh
+ *
+ * DEPENDENCIES: Three.js, game.js (scene global), physics.js (GROUND_Y)
+ *
+ * TODO (future):
+ *   - Map validation (ensure spawns exist, arena is enclosed, etc.)
+ *   - Map versioning (handle format changes gracefully)
+ *   - Standalone map editor app (instead of in-game editor)
+ *   - Map thumbnail generation for selection UI
+ */
 
 (function () {
 
@@ -38,7 +61,7 @@
       });
   };
 
-  // ── Default map data (transcribed from paintballEnvironment.js) ──
+  // ── Default map data (transcribed from arenaCompetitive.js) ──
 
   window.getDefaultMapData = function () {
     var objects = [];
@@ -305,8 +328,9 @@
     addGoldSpawnRing(spawnA);
     addGoldSpawnRing(spawnB);
 
-    // Auto-generate waypoints: grid ~10-unit spacing, filter inside colliders
-    var wpSpacing = 10;
+    // Auto-generate waypoints: grid ~7-unit spacing, Y-aware via raycast
+    var wpSpacing = 7;
+    var wpRaycaster = new THREE.Raycaster();
     for (var wx = -halfW + wpSpacing; wx < halfW; wx += wpSpacing) {
       for (var wz = -halfL + wpSpacing; wz < halfL; wz += wpSpacing) {
         var wp = new THREE.Vector3(wx, 0, wz);
@@ -314,7 +338,48 @@
         for (var c = 0; c < colliders.length; c++) {
           if (colliders[c].containsPoint(wp)) { inside = true; break; }
         }
-        if (!inside) waypoints.push(wp);
+        if (!inside) {
+          // Raycast down to find actual ground height
+          wpRaycaster.set(new THREE.Vector3(wx, 20, wz), new THREE.Vector3(0, -1, 0));
+          wpRaycaster.far = 40;
+          var wpHits = wpRaycaster.intersectObjects(solids, true);
+          var groundY = GROUND_Y;
+          for (var h = 0; h < wpHits.length; h++) {
+            if (wpHits[h].point.y > groundY) groundY = wpHits[h].point.y;
+          }
+          // Filter out waypoints with no ground (groundY stayed at extreme low)
+          if (groundY >= GROUND_Y - 0.5) {
+            wp.y = groundY;
+            waypoints.push(wp);
+          }
+        }
+      }
+    }
+
+    // Add spawn-adjacent waypoints for immediate pathing out of spawn
+    var spawnOffsets = [
+      new THREE.Vector3(3, 0, 0), new THREE.Vector3(-3, 0, 0),
+      new THREE.Vector3(0, 0, 3), new THREE.Vector3(0, 0, -3)
+    ];
+    var spawnPositions = [spawnA, spawnB];
+    for (var si = 0; si < spawnPositions.length; si++) {
+      for (var oi = 0; oi < spawnOffsets.length; oi++) {
+        var swp = spawnPositions[si].clone().add(spawnOffsets[oi]);
+        var sInside = false;
+        for (var c = 0; c < colliders.length; c++) {
+          if (colliders[c].containsPoint(swp)) { sInside = true; break; }
+        }
+        if (!sInside && Math.abs(swp.x) < halfW && Math.abs(swp.z) < halfL) {
+          wpRaycaster.set(new THREE.Vector3(swp.x, 20, swp.z), new THREE.Vector3(0, -1, 0));
+          wpRaycaster.far = 40;
+          var sHits = wpRaycaster.intersectObjects(solids, true);
+          var sGroundY = GROUND_Y;
+          for (var h = 0; h < sHits.length; h++) {
+            if (sHits[h].point.y > sGroundY) sGroundY = sHits[h].point.y;
+          }
+          swp.y = sGroundY;
+          waypoints.push(swp);
+        }
       }
     }
 
@@ -358,6 +423,10 @@
     });
 
     scene.add(group);
+
+    // Ensure all world matrices are up-to-date so raycasts (LOS, hitscans)
+    // against these solids work correctly before the first render pass.
+    group.updateMatrixWorld(true);
 
     return {
       group: group,

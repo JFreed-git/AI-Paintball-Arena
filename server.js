@@ -2,7 +2,7 @@
  * Simple LAN relay server for Paintball Arena multiplayer (2 players per room).
  * - Serves static files from this directory
  * - Socket.IO for signaling: create/join rooms, relay client inputs to host, host snapshots to clients
- * - Stores per-room settings (fire rate, mag size, reload time, player health, player damage)
+ * - Stores per-room settings (rounds to win)
  *
  * Run:
  *   npm init -y
@@ -159,23 +159,24 @@ io.on('connection', (socket) => {
   });
 
   // Host-triggered round control relays
-  socket.on('startRound', (payload) => {
-    const room = rooms.get(currentRoom);
-    if (!room || socket.id !== room.hostId) return;
-    // forward to non-hosts
-    socket.to(currentRoom).emit('startRound', payload);
-  });
+  function relayHostEvent(eventName) {
+    socket.on(eventName, function (payload) {
+      var room = rooms.get(currentRoom);
+      if (!room || socket.id !== room.hostId) return;
+      socket.to(currentRoom).emit(eventName, payload);
+    });
+  }
+  relayHostEvent('startRound');
+  relayHostEvent('roundResult');
+  relayHostEvent('matchOver');
+  relayHostEvent('startHeroSelect');
+  relayHostEvent('heroesConfirmed');
 
-  socket.on('roundResult', (payload) => {
-    const room = rooms.get(currentRoom);
-    if (!room || socket.id !== room.hostId) return;
-    socket.to(currentRoom).emit('roundResult', payload);
-  });
-
-  socket.on('matchOver', (payload) => {
-    const room = rooms.get(currentRoom);
-    if (!room || socket.id !== room.hostId) return;
-    socket.to(currentRoom).emit('matchOver', payload);
+  // heroSelect — bidirectional relay (either player to the other)
+  socket.on('heroSelect', function (payload) {
+    var room = rooms.get(currentRoom);
+    if (!room) return;
+    socket.to(currentRoom).emit('heroSelect', payload);
   });
 
   // Relay shot visual events from host to clients (for tracers)
@@ -199,11 +200,11 @@ io.on('connection', (socket) => {
       io.to(currentRoom).emit('roomClosed');
       rooms.delete(currentRoom);
       // Host implicitly leaves via disconnect or socket.leave
-      try { socket.leave(currentRoom); } catch {}
+      try { socket.leave(currentRoom); } catch (e) { console.warn('socket.leave failed:', e); }
     } else {
       // Client leaving: remove from room and notify host
       room.players.delete(socket.id);
-      try { socket.leave(currentRoom); } catch {}
+      try { socket.leave(currentRoom); } catch (e) { console.warn('socket.leave failed:', e); }
       io.to(room.hostId).emit('clientLeft', { clientId: socket.id });
     }
     currentRoom = null;
@@ -233,17 +234,6 @@ io.on('connection', (socket) => {
 function sanitizeSettings(s) {
   s = s || {};
   const out = {
-    // ms between shots (fire cooldown)
-    fireCooldownMs: clampInt(s.fireCooldownMs, 50, 2000, 166),
-    // bullets per magazine
-    magSize: clampInt(s.magSize, 1, 200, 6),
-    // seconds to reload
-    reloadTimeSec: clampNumber(s.reloadTimeSec, 0.2, 10, 2.5),
-    // starting/max health
-    playerHealth: clampInt(s.playerHealth, 1, 1000, 100),
-    // damage per hit
-    playerDamage: clampInt(s.playerDamage, 1, 500, 20),
-    // rounds needed to win the match
     roundsToWin: clampInt(s.roundsToWin, 1, 10, 2),
   };
   if (s.mapName && typeof s.mapName === 'string') out.mapName = s.mapName.substring(0, 100);

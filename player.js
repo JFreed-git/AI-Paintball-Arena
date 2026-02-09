@@ -1,6 +1,27 @@
-// Unified Player class — used by all game modes (AI, single-player, LAN).
-// Holds position/physics, health, weapon, 3D mesh, 3D health bar, and hitbox.
-// Compatible with updateFullPhysics() (same property shape).
+/**
+ * player.js — Unified Player class
+ *
+ * PURPOSE: Shared player entity used by all game modes (AI, LAN, Training Range).
+ * Holds position/physics, health, weapon, 3D mesh, 3D health bar, and hitbox.
+ * Compatible with updateFullPhysics() (same property shape).
+ *
+ * EXPORTS (window):
+ *   Player — constructor function
+ *
+ * DEPENDENCIES: Three.js (THREE), game.js (scene global),
+ *   physics.js (GROUND_Y, EYE_HEIGHT), weapon.js (Weapon),
+ *   weaponModels.js (buildWeaponModel — optional, fallback if absent)
+ *
+ * WEAPON ATTACHMENT SYSTEM:
+ *   The player mesh uses a swappable weapon attachment point (_weaponAttachPoint),
+ *   a THREE.Group positioned where the gun is held. The active weapon model is a
+ *   child of this group. When heroes.js applies a new hero, it calls
+ *   swapWeaponModel(modelType) to replace the weapon mesh without rebuilding the
+ *   entire player. If weaponModels.js is not loaded, a simple gray box fallback
+ *   is used instead. Body-part meshes (head, torso) are tagged with
+ *   userData.isBodyPart = true so that heroes.js can recolor them without
+ *   accidentally recoloring the weapon.
+ */
 
 (function () {
 
@@ -30,6 +51,9 @@
     } else {
       this.weapon = new Weapon();
     }
+
+    // --- Jump velocity (overridable by heroes.js) ---
+    this._jumpVelocity = (typeof JUMP_VELOCITY !== 'undefined') ? JUMP_VELOCITY : 8.5;
 
     // --- Camera attachment ---
     this.cameraAttached = !!opts.cameraAttached;
@@ -61,20 +85,34 @@
 
   Player.prototype._buildMesh = function () {
     var bodyMat = new THREE.MeshLambertMaterial({ color: this._color });
+
     var head = new THREE.Mesh(new THREE.SphereGeometry(0.25, 16, 16), bodyMat);
     head.position.set(0, 1.6, 0);
+    head.userData.isBodyPart = true;
     this._headMesh = head;
 
     var torso = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.3, 0.9, 16), bodyMat);
     torso.position.set(0, 1.1, 0);
+    torso.userData.isBodyPart = true;
 
-    var gun = new THREE.Mesh(
-      new THREE.BoxGeometry(0.6, 0.1, 0.1),
-      new THREE.MeshLambertMaterial({ color: 0x333333 })
-    );
-    gun.position.set(0.35, 1.4, -0.1);
+    // Weapon attachment point — swappable weapon model sits here
+    this._weaponAttachPoint = new THREE.Group();
+    this._weaponAttachPoint.position.set(0.35, 1.4, -0.1);
 
-    this._meshGroup.add(head, torso, gun);
+    // Build initial weapon model (fall back to gray box if weaponModels.js not loaded)
+    if (typeof buildWeaponModel === 'function') {
+      var modelType = (this.weapon && this.weapon.modelType) ? this.weapon.modelType : 'default';
+      var weaponModel = buildWeaponModel(modelType);
+      this._weaponAttachPoint.add(weaponModel);
+    } else {
+      var fallbackGun = new THREE.Mesh(
+        new THREE.BoxGeometry(0.6, 0.1, 0.1),
+        new THREE.MeshLambertMaterial({ color: 0x333333 })
+      );
+      this._weaponAttachPoint.add(fallbackGun);
+    }
+
+    this._meshGroup.add(head, torso, this._weaponAttachPoint);
     this._meshGroup.scale.set(2.0, 2.0, 2.0);
   };
 
@@ -99,6 +137,40 @@
       this._meshFeetOffset = 0;
       this._hitCenterRelative = EYE_HEIGHT * 0.5;
       this._hitRadius = 0.6;
+    }
+  };
+
+  // --- Weapon Model Swap ---
+
+  /**
+   * Replace the current weapon model in the attachment point with a new one.
+   * @param {string} modelType — key into WEAPON_MODEL_REGISTRY (e.g. 'rifle', 'shotgun')
+   */
+  Player.prototype.swapWeaponModel = function (modelType) {
+    if (!this._weaponAttachPoint) return;
+
+    // Remove and dispose old weapon children
+    while (this._weaponAttachPoint.children.length > 0) {
+      var old = this._weaponAttachPoint.children[0];
+      this._weaponAttachPoint.remove(old);
+      if (old.traverse) {
+        old.traverse(function (c) {
+          if (c.geometry) c.geometry.dispose();
+          if (c.material) c.material.dispose();
+        });
+      }
+    }
+
+    // Build and attach new model (fallback to gray box if weaponModels.js not loaded)
+    if (typeof buildWeaponModel === 'function') {
+      var weaponModel = buildWeaponModel(modelType || 'default');
+      this._weaponAttachPoint.add(weaponModel);
+    } else {
+      var fallbackGun = new THREE.Mesh(
+        new THREE.BoxGeometry(0.6, 0.1, 0.1),
+        new THREE.MeshLambertMaterial({ color: 0x333333 })
+      );
+      this._weaponAttachPoint.add(fallbackGun);
     }
   };
 

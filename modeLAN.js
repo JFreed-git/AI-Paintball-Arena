@@ -1,7 +1,20 @@
 /**
- * Multiplayer (LAN) module — host-authoritative 2-player mode.
- * Uses shared functions from gameShared.js for HUD, round flow, crosshair, and reload.
- * Uses Player class for both local and remote players.
+ * modeLAN.js — LAN multiplayer mode
+ *
+ * PURPOSE: Host-authoritative 2-player LAN multiplayer. The host runs physics
+ *          for both players and broadcasts snapshots at ~30Hz. The client sends
+ *          raw input each frame, runs client-side prediction, and reconciles
+ *          with authoritative snapshots via lerp. Includes hero selection phase
+ *          coordination between host and client.
+ * EXPORTS (window): multiplayerActive, getMultiplayerState, hostLanGame,
+ *                   joinLanGame, stopMultiplayerInternal
+ * DEPENDENCIES: THREE (r128), Socket.IO, scene/camera/renderer globals (game.js),
+ *               hud.js, roundFlow.js, crosshair.js, physics.js, projectiles.js,
+ *               weapon.js, heroes.js, heroSelectUI.js, input.js,
+ *               arenaCompetitive.js, player.js (Player),
+ *               mapFormat.js (buildArenaFromMap, getDefaultMapData),
+ *               menuNavigation.js (showOnlyMenu, setHUDVisible)
+ * NOTE: Mode flag is still window.multiplayerActive (for backward compat, rename later)
  */
 
 (function () {
@@ -29,13 +42,7 @@
   var state = null;
 
   function defaultSettings() {
-    var defWeapon = new Weapon();
     return {
-      fireCooldownMs: defWeapon.cooldownMs,
-      magSize: defWeapon.magSize,
-      reloadTimeSec: defWeapon.reloadTimeSec,
-      playerHealth: DEFAULT_HEALTH,
-      playerDamage: DEFAULT_DAMAGE,
       roundsToWin: ROUNDS_TO_WIN,
     };
   }
@@ -55,7 +62,7 @@
   // HUD helpers — delegate to shared
   function updateHUDForPlayer(p) {
     if (!state) return;
-    sharedUpdateHealthBar(state.hud.healthFill, p.health, state.settings.playerHealth);
+    sharedUpdateHealthBar(state.hud.healthFill, p.health, DEFAULT_HEALTH);
     sharedUpdateAmmoDisplay(state.hud.ammoDisplay, p.weapon.ammo, p.weapon.magSize);
   }
 
@@ -105,16 +112,6 @@
     state.players.host.resetForRound(A);
     state.players.client.resetForRound(B);
 
-    // Re-apply weapon settings from room config (overrides may differ from defaults)
-    var s = state.settings;
-    [state.players.host, state.players.client].forEach(function (p) {
-      p.weapon.cooldownMs = s.fireCooldownMs;
-      p.weapon.magSize = s.magSize;
-      p.weapon.reloadTimeSec = s.reloadTimeSec;
-      p.weapon.damage = s.playerDamage;
-      p.weapon.ammo = s.magSize;
-    });
-
     // Set camera for local player
     var localPlayer = isHost ? state.players.host : state.players.client;
     localPlayer.syncCameraFromPlayer();
@@ -155,26 +152,133 @@
       if (!state) return;
       resetEntitiesForRound();
       updateHUDForPlayer(isHost ? state.players.host : state.players.client);
-      startRoundCountdown(COUNTDOWN_SECONDS);
-      if (socket) socket.emit('startRound', { seconds: COUNTDOWN_SECONDS });
+      if (isHost) {
+        startHeroSelectPhase();
+      }
+      // Client will receive startHeroSelect event from host
     }, ROUND_BANNER_MS);
   }
 
-  function createPlayerInstance(opts) {
-    var s = state.settings;
-    var w = new Weapon({
-      cooldownMs: s.fireCooldownMs,
-      magSize: s.magSize,
-      reloadTimeSec: s.reloadTimeSec,
-      damage: s.playerDamage
+  // ── Hero Selection Phase (LAN) ──
+
+  function startHeroSelectPhase() {
+    if (!state) return;
+    state.heroSelections = { host: null, client: null };
+
+    // Tell client to show hero select
+    if (socket) socket.emit('startHeroSelect', { seconds: 15 });
+
+    // Show overlay for host
+    window.showPreRoundHeroSelect({
+      seconds: 15,
+      onConfirmed: function (heroId) {
+        state.heroSelections.host = heroId;
+        if (socket) socket.emit('heroSelect', { heroId: heroId });
+        checkBothHeroesPicked();
+      },
+      onTimeout: function (heroId) {
+        state.heroSelections.host = heroId;
+        if (socket) socket.emit('heroSelect', { heroId: heroId });
+        checkBothHeroesPicked();
+      }
     });
+
+    // Host-side fallback timer: after 16s force-finish if not done
+    if (state.heroSelectTimerRef.id) clearTimeout(state.heroSelectTimerRef.id);
+    state.heroSelectTimerRef.id = setTimeout(function () {
+      if (!state) return;
+      finishHeroSelect();
+    }, 16000);
+  }
+
+  function checkBothHeroesPicked() {
+    if (!state) return;
+    if (state.heroSelections.host && state.heroSelections.client) {
+      finishHeroSelect();
+    }
+  }
+
+  function finishHeroSelect() {
+    if (!state) return;
+    // Clear fallback timer
+    if (state.heroSelectTimerRef.id) {
+      clearTimeout(state.heroSelectTimerRef.id);
+      state.heroSelectTimerRef.id = 0;
+    }
+
+    // Fill defaults for any null selections
+    if (!state.heroSelections.host) state.heroSelections.host = 'marksman';
+    if (!state.heroSelections.client) state.heroSelections.client = 'marksman';
+
+    // Apply weapons from hero choices
+    applyHeroWeapon(state.players.host, state.heroSelections.host);
+    applyHeroWeapon(state.players.client, state.heroSelections.client);
+
+    // Emit confirmed heroes to client
+    if (socket) socket.emit('heroesConfirmed', {
+      host: state.heroSelections.host,
+      client: state.heroSelections.client
+    });
+
+    window.closePreRoundHeroSelect();
+    updateHUDForPlayer(isHost ? state.players.host : state.players.client);
+    startRoundCountdown(COUNTDOWN_SECONDS);
+    if (socket) socket.emit('startRound', { seconds: COUNTDOWN_SECONDS });
+  }
+
+  function applyHeroWeapon(player, heroId) {
+    if (!player) return;
+    if (typeof window.applyHeroToPlayer === 'function') {
+      window.applyHeroToPlayer(player, heroId);
+    } else {
+      var hero = (typeof window.getHeroById === 'function' && window.getHeroById(heroId)) || window.HEROES[0];
+      player.weapon = new Weapon(hero.weapon);
+    }
+    player.weapon.reset();
+  }
+
+  // Client-side hero select handlers (called from socket events)
+  function clientStartHeroSelect(payload) {
+    if (!state) return;
+    var seconds = (payload && payload.seconds) || 15;
+    window.showPreRoundHeroSelect({
+      seconds: seconds,
+      onConfirmed: function (heroId) {
+        if (socket) socket.emit('heroSelect', { heroId: heroId });
+        window.showHeroSelectWaiting();
+      },
+      onTimeout: function (heroId) {
+        if (socket) socket.emit('heroSelect', { heroId: heroId });
+        window.showHeroSelectWaiting();
+      }
+    });
+  }
+
+  function clientHeroesConfirmed(payload) {
+    if (!state) return;
+    // Apply own weapon from hero choice
+    var myHeroId = (payload && payload.client) || 'marksman';
+    applyHeroWeapon(state.players.client, myHeroId);
+    // Also apply host's hero for correct damage in snapshots
+    var hostHeroId = (payload && payload.host) || 'marksman';
+    applyHeroWeapon(state.players.host, hostHeroId);
+
+    window.closePreRoundHeroSelect();
+    updateHUDForPlayer(state.players.client);
+    // startRound event will also arrive to trigger countdown
+  }
+
+  function createPlayerInstance(opts) {
+    var heroId = (opts && opts.heroId) || 'marksman';
+    var hero = (typeof window.getHeroById === 'function' && window.getHeroById(heroId)) || window.HEROES[0];
+    var w = new Weapon(hero.weapon);
     var p = new Player({
       position: opts.position ? opts.position.clone() : new THREE.Vector3(),
       feetY: GROUND_Y,
       walkSpeed: WALK_SPEED,
       sprintSpeed: SPRINT_SPEED,
       radius: PLAYER_RADIUS,
-      maxHealth: s.playerHealth,
+      maxHealth: DEFAULT_HEALTH,
       color: opts.color || 0xff5555,
       cameraAttached: !!opts.cameraAttached,
       weapon: w
@@ -203,6 +307,8 @@
       playerNumber: 0,
       bannerTimerRef: { id: 0 },
       countdownTimerRef: { id: 0 },
+      heroSelections: { host: null, client: null },
+      heroSelectTimerRef: { id: 0 },
       match: {
         player1Wins: 0,
         player2Wins: 0,
@@ -281,40 +387,41 @@
 
     // Use Player's getHitTarget() for proper hitbox — fixes Y alignment bug
     var hitTarget = other ? other.getHitTarget() : null;
+    var tracerColor = isLocalPlayer(p) ? 0x66ffcc : 0x66aaff;
 
-    var hit = fireHitscan(origin, dir, {
+    var result = sharedFireWeapon(w, origin, dir, {
+      sprinting: !!inp.sprint,
       solids: state.arena.solids,
-      playerTarget: hitTarget,
-      tracerColor: isLocalPlayer(p) ? 0x66ffcc : 0x66aaff,
-      maxDistance: w.maxRange
-    });
-
-    if (isHost && socket && hit && hit.point) {
-      try {
-        socket.emit('shot', {
-          o: [origin.x, origin.y, origin.z],
-          e: [hit.point.x, hit.point.y, hit.point.z],
-          c: isLocalPlayer(p) ? 0x66ffcc : 0x66aaff
-        });
-      } catch (e) { console.warn('multiplayer: shot emit failed:', e); }
-    }
-
-    if (hit.hit && hit.hitType === 'player' && other && other.alive) {
-      if (window.devGodMode && isLocalPlayer(other)) {
-        // God mode: skip damage for local player
-      } else {
-        other.takeDamage(w.damage);
-        if (isLocalPlayer(other)) updateHUDForPlayer(other);
-        if (isHost && state.match && state.match.roundActive && !other.alive) {
-          endRound((p === state.players.host) ? 'p1' : 'p2');
+      targets: hitTarget ? [hitTarget] : [],
+      tracerColor: tracerColor,
+      onHit: function (target) {
+        if (other && other.alive) {
+          if (window.devGodMode && isLocalPlayer(other)) {
+            return; // God mode: skip damage for local player
+          }
+          other.takeDamage(w.damage);
+          if (isLocalPlayer(other)) updateHUDForPlayer(other);
+          if (isHost && state.match && state.match.roundActive && !other.alive) {
+            endRound((p === state.players.host) ? 'p1' : 'p2');
+            return false; // stop pellet loop
+          }
+        }
+      },
+      onPelletFired: function (pelletResult) {
+        if (isHost && socket && pelletResult && pelletResult.point) {
+          try {
+            socket.emit('shot', {
+              o: [origin.x, origin.y, origin.z],
+              e: [pelletResult.point.x, pelletResult.point.y, pelletResult.point.z],
+              c: tracerColor
+            });
+          } catch (e) { console.warn('multiplayer: shot emit failed:', e); }
         }
       }
-    }
+    });
 
-    w.ammo--;
-    w.lastShotTime = now;
     if (isLocalPlayer(p)) updateHUDForPlayer(p);
-    if (w.ammo <= 0) {
+    if (result.magazineEmpty) {
       if (sharedStartReload(w, now)) {
         if (isLocalPlayer(p)) sharedSetReloadingUI(true, state.hud.reloadIndicator);
       }
@@ -332,7 +439,7 @@
     state.players.host.input.fireDown = enabledLocal && !!localInput.fireDown;
     if (enabledLocal && localInput.reloadPressed) state.players.host.input.reloadPressed = true;
 
-    sharedSetCrosshairBySprint(!!localInput.sprint);
+    sharedSetCrosshairBySprint(!!localInput.sprint, state.players.host.weapon.spreadRad, state.players.host.weapon.sprintSpreadRad);
     sharedSetSprintUI(!!localInput.sprint, state.hud.sprintIndicator);
 
     // Host player physics via updateFullPhysics
@@ -455,7 +562,7 @@
 
       // Apply health immediately (no interpolation needed)
       state.players.host.health = H.health;
-      state.players.host.lastDamagedAt = (H.health < state.settings.playerHealth) ? performance.now() : state.players.host.lastDamagedAt;
+      state.players.host.lastDamagedAt = (H.health < state.players.host.maxHealth) ? performance.now() : state.players.host.lastDamagedAt;
 
       // If first snapshot, snap directly
       if (!_remoteFrom) {
@@ -600,7 +707,7 @@
         });
       }
 
-      sharedSetCrosshairBySprint(!!input.sprint);
+      sharedSetCrosshairBySprint(!!input.sprint, state.players.client.weapon.spreadRad, state.players.client.weapon.sprintSpreadRad);
       sharedSetSprintUI(!!input.sprint, state.hud.sprintIndicator);
     }
 
@@ -688,8 +795,30 @@
       showRoundBanner('Player 2 joined', ROUND_BANNER_MS);
       resetEntitiesForRound();
       updateHUDForPlayer(state.players.host);
-      startRoundCountdown(COUNTDOWN_SECONDS);
-      socket.emit('startRound', { seconds: COUNTDOWN_SECONDS });
+      // Start hero selection phase instead of immediate countdown
+      setTimeout(function () {
+        if (!state) return;
+        startHeroSelectPhase();
+      }, ROUND_BANNER_MS);
+    });
+
+    // Hero selection events
+    socket.on('startHeroSelect', function (payload) {
+      if (isHost) return; // Only client handles this
+      clientStartHeroSelect(payload);
+    });
+
+    socket.on('heroSelect', function (payload) {
+      if (!isHost || !state) return; // Only host handles incoming heroSelect from client
+      if (payload && payload.heroId) {
+        state.heroSelections.client = payload.heroId;
+        checkBothHeroesPicked();
+      }
+    });
+
+    socket.on('heroesConfirmed', function (payload) {
+      if (isHost) return; // Only client handles this
+      clientHeroesConfirmed(payload);
     });
 
     socket.on('input', function (payload) {
@@ -710,6 +839,10 @@
     });
 
     socket.on('startRound', function (payload) {
+      // Close hero select overlay if still open (defensive — heroesConfirmed should close it first)
+      if (window._heroSelectOpen && typeof window.closePreRoundHeroSelect === 'function') {
+        window.closePreRoundHeroSelect();
+      }
       startRoundCountdown((payload && payload.seconds) || COUNTDOWN_SECONDS);
     });
 
@@ -805,6 +938,8 @@
       try { cancelAnimationFrame(state.loopHandle); } catch (e) { console.warn('multiplayer: cancelAnimationFrame failed:', e); }
       state.loopHandle = 0;
     }
+    // Close hero select overlay if open
+    try { if (typeof window.closePreRoundHeroSelect === 'function') window.closePreRoundHeroSelect(); } catch (e) {}
     if (state) {
       if (state.bannerTimerRef && state.bannerTimerRef.id) {
         clearTimeout(state.bannerTimerRef.id);
@@ -814,6 +949,10 @@
         clearTimeout(state.countdownTimerRef.id);
         state.countdownTimerRef.id = null;
       }
+      if (state.heroSelectTimerRef && state.heroSelectTimerRef.id) {
+        clearTimeout(state.heroSelectTimerRef.id);
+        state.heroSelectTimerRef.id = 0;
+      }
       // Destroy Player instances
       if (state.players.host) { try { state.players.host.destroy(); } catch (e) { console.warn('multiplayer: host.destroy failed:', e); } }
       if (state.players.client) { try { state.players.client.destroy(); } catch (e) { console.warn('multiplayer: client.destroy failed:', e); } }
@@ -821,6 +960,7 @@
       showMultiplayerHUD(false);
       setCrosshairDimmed(false);
       setCrosshairSpread(0);
+      if (typeof clearFirstPersonWeapon === 'function') clearFirstPersonWeapon();
     }
     _predictedPos = null;
     _predictedFeetY = GROUND_Y;

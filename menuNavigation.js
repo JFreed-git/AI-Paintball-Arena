@@ -1,4 +1,25 @@
-// Menu navigation and HUD helpers (Paintball-only)
+/**
+ * menuNavigation.js — Menu DOM management and settings
+ *
+ * PURPOSE: Handles menu toggling (main menu, settings, LAN lobby, result screen),
+ * settings persistence (sensitivity, FOV), game mode launch buttons, and HUD
+ * visibility toggling. Bridges the DOM menu system with game mode start functions.
+ *
+ * EXPORTS (window):
+ *   bindUI()               — initialize menu event listeners (called by game.js)
+ *   showOnlyMenu(id)       — show one menu, hide all others
+ *   setHUDVisible(visible) — toggle all HUD elements
+ *
+ * DEPENDENCIES: modeAI.js, modeLAN.js, modeTraining.js (start/stop functions)
+ *
+ * TODO (future):
+ *   - Hero stats preview in lobby
+ *   - Map selection UI with thumbnails
+ *   - Audio settings (volume, mute)
+ *   - Key rebinding menu
+ *   - Server browser for LAN (auto-discover rooms)
+ */
+
 
 function bindUI() {
   // Sensitivity: load, display, and wire
@@ -7,7 +28,7 @@ function bindUI() {
 
   if (sensInput && sensValue) {
     let saved = null;
-    try { saved = localStorage.getItem('mouseSensitivity'); } catch {}
+    try { saved = localStorage.getItem('mouseSensitivity'); } catch (e) { console.warn('menuNavigation: failed to read mouseSensitivity from localStorage', e); }
 
     if (saved !== null) {
       mouseSensitivity = parseFloat(saved) || 1.0;
@@ -22,7 +43,7 @@ function bindUI() {
       sensValue.textContent = String(mouseSensitivity.toFixed(1));
       try {
         localStorage.setItem('mouseSensitivity', String(mouseSensitivity));
-      } catch {}
+      } catch (e) { console.warn('menuNavigation: failed to save mouseSensitivity to localStorage', e); }
     });
   }
 
@@ -32,7 +53,7 @@ function bindUI() {
 
   if (fovInput && fovValue) {
     let savedFov = null;
-    try { savedFov = localStorage.getItem('fov'); } catch {}
+    try { savedFov = localStorage.getItem('fov'); } catch (e) { console.warn('menuNavigation: failed to read fov from localStorage', e); }
 
     // Default to current camera FOV if available, else 75
     let fov = (typeof camera !== 'undefined' && camera && camera.isPerspectiveCamera) ? camera.fov : 75;
@@ -61,7 +82,7 @@ function bindUI() {
         camera.fov = newFov;
         camera.updateProjectionMatrix();
       }
-      try { localStorage.setItem('fov', String(newFov)); } catch {}
+      try { localStorage.setItem('fov', String(newFov)); } catch (e) { console.warn('menuNavigation: failed to save fov to localStorage', e); }
     });
   }
 
@@ -74,6 +95,21 @@ function bindUI() {
     populateMapDropdown('paintballMapSelect');
   });
   if (backFromPaintball) backFromPaintball.addEventListener('click', () => showOnlyMenu('mainMenu'));
+
+  // Training Range navigation
+  const gotoTraining = document.getElementById('gotoTraining');
+  const backFromTraining = document.getElementById('backFromTraining');
+  const startTraining = document.getElementById('startTraining');
+
+  if (gotoTraining) gotoTraining.addEventListener('click', () => showOnlyMenu('trainingMenu'));
+  if (backFromTraining) backFromTraining.addEventListener('click', () => showOnlyMenu('mainMenu'));
+  if (startTraining) {
+    startTraining.addEventListener('click', () => {
+      if (typeof window.startTrainingRange === 'function') {
+        window.startTrainingRange();
+      }
+    });
+  }
 
   // LAN menu navigation
   const gotoLAN = document.getElementById('gotoLAN');
@@ -91,7 +127,7 @@ function bindUI() {
       const sel = document.getElementById('paintballDifficulty');
       const difficulty = sel ? sel.value : 'Easy';
       const mapSel = document.getElementById('paintballMapSelect');
-      const mapName = mapSel ? mapSel.value : '__default__';
+      const mapName = (mapSel && mapSel.value) ? mapSel.value : '__default__';
       if (typeof startPaintballGame !== 'function') return;
 
       if (mapName && mapName !== '__default__' && typeof fetchMapData === 'function') {
@@ -113,15 +149,10 @@ function bindUI() {
     hostLanBtn.addEventListener('click', () => {
       const roomIdEl = document.getElementById('roomId');
       const roomId = roomIdEl ? String(roomIdEl.value || '').trim() : '';
-      const fireCooldownMs = parseInt((document.getElementById('fireCooldownMs') || {}).value, 10) || 166;
-      const magSize = parseInt((document.getElementById('magSize') || {}).value, 10) || 6;
-      const reloadTimeSec = parseFloat((document.getElementById('reloadTimeSec') || {}).value) || 2.5;
-      const playerHealth = parseInt((document.getElementById('playerHealth') || {}).value, 10) || 100;
-      const playerDamage = parseInt((document.getElementById('playerDamage') || {}).value, 10) || 20;
       const roundsToWin = parseInt((document.getElementById('roundsToWin') || {}).value, 10) || 2;
-      const settings = { fireCooldownMs, magSize, reloadTimeSec, playerHealth, playerDamage, roundsToWin };
+      const settings = { roundsToWin };
       const mapSel = document.getElementById('lanMapSelect');
-      const mapName = mapSel ? mapSel.value : '__default__';
+      const mapName = (mapSel && mapSel.value) ? mapSel.value : '__default__';
       if (typeof hostLanGame === 'function') {
         hostLanGame(roomId, settings, mapName);
       } else {
@@ -148,7 +179,7 @@ function bindUI() {
       // If paintball is running, stop it
       try {
         if (typeof stopPaintballInternal === 'function') stopPaintballInternal();
-      } catch {}
+      } catch (e) { console.warn('menuNavigation: failed to stop paintball game', e); }
       showOnlyMenu('mainMenu');
       setHUDVisible(false);
     });
@@ -175,7 +206,7 @@ function populateMapDropdown(selectId) {
       opt.textContent = name;
       sel.appendChild(opt);
     });
-  }).catch(function () {});
+  }).catch(function (e) { console.warn('menuNavigation: failed to fetch map list', e); });
 }
 
 function showOnlyMenu(idOrNull) {

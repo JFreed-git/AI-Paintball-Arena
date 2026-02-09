@@ -1,6 +1,19 @@
-// Paintball (AI) mode
-// Uses shared functions from gameShared.js for HUD, round flow, crosshair, and reload.
-// Uses Player class for the local player entity.
+/**
+ * modeAI.js — Single-player AI game mode
+ *
+ * PURPOSE: Runs the single-player vs AI game loop, round flow, shooting, and
+ *          hero selection phase. Manages the local player entity and delegates
+ *          AI behavior to aiOpponent.js.
+ * EXPORTS (window): paintballActive, devSpectatorMode, getPaintballState,
+ *                   endPaintballRound, startPaintballGame, stopPaintballInternal
+ * DEPENDENCIES: THREE (r128), scene/camera/renderer globals (game.js),
+ *               hud.js, roundFlow.js, crosshair.js, physics.js, projectiles.js,
+ *               weapon.js, heroes.js, heroSelectUI.js, aiOpponent.js,
+ *               input.js, arenaCompetitive.js, player.js (Player),
+ *               mapFormat.js (buildArenaFromMap, getDefaultMapData),
+ *               menuNavigation.js (showOnlyMenu, setHUDVisible)
+ * NOTE: Mode flag is still window.paintballActive (for backward compat, rename later)
+ */
 
 (function () {
   window.paintballActive = false;
@@ -115,6 +128,34 @@
     });
   }
 
+  function startHeroSelectPhase() {
+    if (!state) return;
+    window.showPreRoundHeroSelect({
+      seconds: 15,
+      onConfirmed: function (heroId) {
+        applyHeroWeapon(heroId);
+        window.closePreRoundHeroSelect();
+        startRoundCountdown(3);
+      },
+      onTimeout: function (heroId) {
+        applyHeroWeapon(heroId);
+        window.closePreRoundHeroSelect();
+        startRoundCountdown(3);
+      }
+    });
+  }
+
+  function applyHeroWeapon(heroId) {
+    if (!state || !state.player) return;
+    if (typeof window.applyHeroToPlayer === 'function') {
+      window.applyHeroToPlayer(state.player, heroId);
+    } else {
+      var hero = window.getHeroById(heroId) || HEROES[0];
+      state.player.weapon = new Weapon(hero.weapon);
+    }
+    updateHUD();
+  }
+
   function endRound(winner) {
     state.match.roundActive = false;
     if (winner === 'player') state.match.playerWins++;
@@ -136,7 +177,7 @@
     setTimeout(function () {
       resetEntitiesForRound();
       updateHUD();
-      startRoundCountdown(3);
+      startHeroSelectPhase();
     }, 1200);
   }
 
@@ -160,29 +201,25 @@
     if (input.fireDown && playerCanShoot(now)) {
       var dir = new THREE.Vector3();
       camera.getWorldDirection(dir);
-      var spread = input.sprint ? w.sprintSpreadRad : w.spreadRad;
+      var playerTarget = state.ai ? state.ai.player.getHitTarget() : null;
 
-      var hit = fireHitscan(camera.position.clone(), dir, {
-        spreadRad: spread,
+      var result = sharedFireWeapon(w, camera.position.clone(), dir, {
+        sprinting: !!input.sprint,
         solids: state.arena.solids,
-        playerTarget: state.ai ? state.ai.player.getHitTarget() : null,
+        targets: playerTarget ? [playerTarget] : [],
         tracerColor: 0x66ffcc,
-        maxDistance: w.maxRange
-      });
-
-      if (hit.hit && state.ai && hit.hitType === 'player') {
-        state.ai.takeDamage(w.damage);
-        updateHUD();
-        if (!state.ai.alive && state.match.roundActive) {
-          endRound('player');
+        onHit: function () {
+          state.ai.takeDamage(w.damage);
+          updateHUD();
+          if (!state.ai.alive && state.match.roundActive) {
+            endRound('player');
+            return false;
+          }
         }
-      }
-
-      w.ammo--;
-      w.lastShotTime = now;
+      });
       updateHUD();
 
-      if (w.ammo <= 0) {
+      if (result.magazineEmpty) {
         if (sharedStartReload(w, now)) {
           sharedSetReloadingUI(true, state.hud.reloadIndicator);
         }
@@ -212,7 +249,7 @@
       else { state.inputArmed = true; }
     }
 
-    sharedSetCrosshairBySprint(!!input.sprint, state.player.weapon.sprintSpreadRad);
+    sharedSetCrosshairBySprint(!!input.sprint, state.player.weapon.spreadRad, state.player.weapon.sprintSpreadRad);
     sharedSetSprintUI(!!input.sprint, state.hud.sprintIndicator);
 
     if (state.inputEnabled && !window.devSpectatorMode) {
@@ -262,7 +299,6 @@
     if (window.paintballActive) {
       try { if (typeof stopPaintballInternal === 'function') stopPaintballInternal(); } catch (e) { console.warn('stopPaintballInternal failed:', e); }
     }
-    try { if (typeof stopGameInternal === 'function') stopGameInternal(); } catch (e) { console.warn('stopGameInternal failed:', e); }
     window.devSpectatorMode = false;
     var difficulty = (opts && opts.difficulty) || 'Easy';
     state = newState(difficulty);
@@ -274,6 +310,7 @@
     state.spawns = state.arena.spawns;
 
     // Create local Player instance (camera-attached, mesh hidden)
+    var defaultHero = window.getHeroById('marksman') || HEROES[0];
     state.player = new Player({
       cameraAttached: true,
       walkSpeed: WALK_SPEED,
@@ -281,7 +318,7 @@
       radius: PLAYER_RADIUS,
       maxHealth: PLAYER_HEALTH,
       color: 0x66ffcc,
-      weapon: new Weapon()
+      weapon: new Weapon(defaultHero.weapon)
     });
 
     resetEntitiesForRound();
@@ -293,11 +330,7 @@
     sharedSetReloadingUI(false, state.hud.reloadIndicator);
     updateHUD();
 
-    if (renderer && renderer.domElement && renderer.domElement.requestPointerLock) {
-      renderer.domElement.requestPointerLock();
-    }
-
-    startRoundCountdown(3);
+    startHeroSelectPhase();
     window.paintballActive = true;
     state.inputArmed = false;
     state.lastTs = 0;
@@ -306,6 +339,8 @@
 
   window.stopPaintballInternal = function (showMenu) {
     if (showMenu === undefined) showMenu = true;
+    // Close hero select overlay if open
+    try { if (typeof window.closePreRoundHeroSelect === 'function') window.closePreRoundHeroSelect(); } catch (e) {}
     if (state && state.loopHandle) {
       try { cancelAnimationFrame(state.loopHandle); } catch (e) { console.warn('cancelAnimationFrame failed:', e); }
       state.loopHandle = 0;
@@ -325,6 +360,7 @@
 
     setCrosshairDimmed(false);
     setCrosshairSpread(BASE_CROSSHAIR_SPREAD_PX);
+    if (typeof clearFirstPersonWeapon === 'function') clearFirstPersonWeapon();
 
     window.paintballActive = false;
     if (showMenu) {

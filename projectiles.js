@@ -1,4 +1,43 @@
-// Projectiles and hitscan utilities for Paintball mode (fast, no drop)
+/**
+ * projectiles.js — Weapon firing, hitscan raycasting, and tracer visuals
+ *
+ * PURPOSE: Handles all weapon firing logic. Currently implements hitscan (instant
+ * raycast) weapons. All game modes call sharedFireWeapon() to fire — it handles
+ * the pellet loop, spread cone, multi-target sphere raycasting, tracer spawning,
+ * and ammo management. Mode-specific behavior (damage, networking) is expressed
+ * through onHit and onPelletFired callbacks.
+ *
+ * EXPORTS (window):
+ *   applySpread(dir, spreadRad)    — apply random cone spread to a direction
+ *   rayHitsSphere(...)             — sphere intersection test for hitboxes
+ *   spawnTracer(origin, end, ...)  — visual tracer from origin to endpoint
+ *   fireHitscan(origin, dir, opts) — single-ray hitscan (low-level)
+ *   sharedFireWeapon(weapon, origin, dir, opts) — unified multi-pellet firing
+ *
+ * DEPENDENCIES: Three.js (scene, THREE), weapon.js (Weapon instance for stats)
+ *
+ * DESIGN NOTES:
+ *   - sharedFireWeapon checks weapon.projectileSpeed. If null/undefined, it uses
+ *     hitscan (current behavior). When projectileSpeed is a number, the projectile
+ *     path should be used instead (not yet implemented).
+ *   - Tracers are visual-only (small spheres that animate from origin to hit point).
+ *     They don't affect gameplay and self-clean after their lifetime.
+ *   - The raycaster checks world solids first, then sphere hitboxes. A hit is only
+ *     registered if no world geometry blocks the path to the target.
+ *
+ * TODO (future):
+ *   - Projectile-speed weapon path: spawn a moving entity per shot, check collision
+ *     each frame, apply projectileGravity for drop, despawn on hit or max range
+ *   - Splash damage: on projectile impact, find all targets within splashRadius
+ *     and apply damage falloff by distance
+ *   - Headshot detection: check which hitbox segment (head/torso/legs) was hit
+ *     and apply damage multiplier
+ *   - Bullet penetration (shoot through thin walls)
+ *   - Tracer visual customization per weapon (size, trail, glow)
+ *   - Muzzle flash particle effect at origin
+ */
+
+// Projectiles and hitscan utilities
 
 (function () {
   const DEFAULT_MAX_DIST = 200;
@@ -27,8 +66,12 @@
     return out;
   }
 
-  // Quick LOS test for player hit: distance from ray to point <= radius
+  // Ray-sphere intersection: distance from ray to center <= radius
   function rayHitsSphere(origin, dir, center, radius, maxDist) {
+    // Ensure dir is normalized for correct distance calculations
+    if (Math.abs(dir.lengthSq() - 1.0) > 0.01) {
+      dir = dir.clone().normalize();
+    }
     const oc = center.clone().sub(origin);
     const t = oc.dot(dir);
     if (t < 0 || t > maxDist) return false;
@@ -63,25 +106,23 @@
           requestAnimationFrame(step);
         } else {
           scene.remove(bullet);
-          try { geom.dispose(); mat.dispose(); } catch {}
+          try { geom.dispose(); mat.dispose(); } catch(e) { console.warn('projectiles: tracer cleanup error', e); }
         }
       }
       requestAnimationFrame(step);
-    } catch {}
+    } catch(e) { console.warn('projectiles: tracer spawn error', e); }
   }
 
   // Fire a single hitscan shot.
   // options:
   //  - spreadRad: radians of inaccuracy cone
   //  - solids: array<Object3D> to raycast against for blocking world
-  //  - aiTarget: { mesh: Object3D } target AI (optional)
-  //  - playerTarget: { position: Vector3, radius: number } player capsule approx (optional)
+  //  - playerTarget: { position: Vector3, radius: number } sphere hitbox (optional)
   //  - maxDistance: number
   //  - tracerColor: hex
   function fireHitscan(origin, baseDir, options = {}) {
     const spreadRad = options.spreadRad || 0;
     const solids = Array.isArray(options.solids) ? options.solids : [];
-    const aiTarget = options.aiTarget || null;
     const playerTarget = options.playerTarget || null;
     const maxDist = options.maxDistance || DEFAULT_MAX_DIST;
     const tracerColor = options.tracerColor || 0xffee66;
@@ -89,42 +130,31 @@
     const dir = applySpread(baseDir, spreadRad);
     const raycaster = new THREE.Raycaster(origin, dir, 0, maxDist);
 
-    // Build raycast set: solids + (optionally) AI mesh
-    const raycastObjects = solids.slice();
-    if (aiTarget && aiTarget.mesh) {
-      raycastObjects.push(aiTarget.mesh);
-    }
-
     let hitInfo = { hit: false, hitType: null, object: null, point: origin.clone().add(dir.clone().multiplyScalar(maxDist)), distance: maxDist };
 
-    // Raycast against world and AI
+    // Raycast against world solids
     let intersects = [];
     try {
-      intersects = raycaster.intersectObjects(raycastObjects, true);
-    } catch {
+      intersects = raycaster.intersectObjects(solids, true);
+    } catch(e) {
+      console.warn('projectiles: raycast error', e);
       intersects = [];
     }
 
-    // Determine nearest hit among world/AI
     if (intersects.length > 0) {
       const first = intersects[0];
       hitInfo.hit = true;
       hitInfo.point = first.point.clone();
       hitInfo.distance = first.distance;
       hitInfo.object = first.object;
-      // Classify
-      if (aiTarget && aiTarget.mesh && (first.object === aiTarget.mesh || aiTarget.mesh.children.includes(first.object))) {
-        hitInfo.hitType = 'ai';
-      } else {
-        hitInfo.hitType = 'world';
-      }
+      hitInfo.hitType = 'world';
     }
 
-    // Check player hit if requested and not already blocked before reaching player
+    // Check player/AI hit via sphere test
     if (playerTarget && playerTarget.position && playerTarget.radius != null) {
       const playerHit = rayHitsSphere(origin, dir, playerTarget.position, playerTarget.radius, maxDist);
       if (playerHit) {
-        // Also ensure no world blocker before the player
+        // Ensure no world blocker before the player
         let blocked = false;
         if (solids.length > 0) {
           const distToPlayer = playerTarget.position.clone().sub(origin).dot(dir);
@@ -133,10 +163,8 @@
           blocked = worldHits && worldHits.length > 0;
         }
         if (!blocked) {
-          // Compute where the ray gets closest to the player's center to draw tracer end
           const t = playerTarget.position.clone().sub(origin).dot(dir);
           const pointOnRay = origin.clone().add(dir.clone().multiplyScalar(Math.min(t, maxDist)));
-          // If previous world/AI hit was further than player, override to player
           if (!hitInfo.hit || (pointOnRay.distanceTo(origin) < hitInfo.distance)) {
             hitInfo.hit = true;
             hitInfo.hitType = 'player';
@@ -154,7 +182,116 @@
     return hitInfo;
   }
 
+  // Unified weapon firing: pellet loop, spread, multi-target raycast, tracers, ammo.
+  // All game modes call this instead of inline pellet loops.
+  //
+  // opts:
+  //   sprinting     - boolean, use sprintSpreadRad instead of spreadRad
+  //   spreadOverride - number, overrides automatic spread (e.g. for AI aim error)
+  //   solids        - Array<Object3D> world geometry for raycast
+  //   targets       - Array<{position, radius, ...}> sphere hitboxes (extra fields flow to onHit)
+  //   tracerColor   - hex color for tracers
+  //   onHit(target, point, dist, pelletIdx) - called per pellet-target hit; return false to stop
+  //   onPelletFired(result, pelletIdx)      - called per pellet after raycast
+  //   skipAmmo      - boolean, skip ammo/lastShotTime management
+  //
+  // Returns { pelletsFired, hits, results[], magazineEmpty }
+  function sharedFireWeapon(weapon, origin, baseDir, opts) {
+    opts = opts || {};
+    var pelletCount = weapon.pellets || 1;
+    var spread = (typeof opts.spreadOverride === 'number')
+      ? opts.spreadOverride
+      : (opts.sprinting ? weapon.sprintSpreadRad : weapon.spreadRad);
+    var maxDist = weapon.maxRange || DEFAULT_MAX_DIST;
+    var solids = Array.isArray(opts.solids) ? opts.solids : [];
+    var targets = Array.isArray(opts.targets) ? opts.targets : [];
+    var tracerColor = (typeof opts.tracerColor === 'number') ? opts.tracerColor : 0xffee66;
+    var onHit = opts.onHit || null;
+    var onPelletFired = opts.onPelletFired || null;
+
+    var hits = 0;
+    var results = [];
+    var stopped = false;
+
+    for (var p = 0; p < pelletCount; p++) {
+      if (stopped) break;
+
+      var dir = applySpread(baseDir, spread);
+      var raycaster = new THREE.Raycaster(origin, dir, 0, maxDist);
+
+      // Find wall hit distance
+      var wallDist = maxDist;
+      var endPoint = origin.clone().add(dir.clone().multiplyScalar(maxDist));
+      try {
+        var worldHits = raycaster.intersectObjects(solids, true);
+        if (worldHits.length > 0) {
+          wallDist = worldHits[0].distance;
+          endPoint = worldHits[0].point.clone();
+        }
+      } catch (e) {}
+
+      // Check all targets for closest hit before wall
+      var closestDist = wallDist;
+      var closestTarget = null;
+      var closestPoint = endPoint;
+
+      for (var t = 0; t < targets.length; t++) {
+        var tgt = targets[t];
+        if (!tgt || !tgt.position) continue;
+        var r = tgt.radius || 0.35;
+        if (rayHitsSphere(origin, dir, tgt.position, r, closestDist)) {
+          var d = tgt.position.clone().sub(origin).dot(dir);
+          if (d > 0 && d < closestDist) {
+            closestDist = d;
+            closestTarget = tgt;
+            closestPoint = origin.clone().add(dir.clone().multiplyScalar(d));
+          }
+        }
+      }
+
+      // Tracer
+      spawnTracer(origin.clone(), closestPoint.clone(), tracerColor, 70);
+
+      var result = {
+        hit: !!closestTarget,
+        hitTarget: closestTarget,
+        point: closestPoint,
+        distance: closestDist,
+        wallDist: wallDist,
+        dir: dir
+      };
+      results.push(result);
+
+      // Hit callback
+      if (closestTarget && onHit) {
+        hits++;
+        var cont = onHit(closestTarget, closestPoint, closestDist, p);
+        if (cont === false) stopped = true;
+      } else if (closestTarget) {
+        hits++;
+      }
+
+      // Per-pellet callback
+      if (onPelletFired) {
+        onPelletFired(result, p);
+      }
+    }
+
+    // Ammo management
+    var magazineEmpty = false;
+    if (!opts.skipAmmo) {
+      weapon.ammo--;
+      weapon.lastShotTime = performance.now();
+      if (weapon.ammo <= 0) magazineEmpty = true;
+    }
+
+    return { pelletsFired: stopped ? results.length : pelletCount, hits: hits, results: results, magazineEmpty: magazineEmpty };
+  }
+
   // Expose
+  window.applySpread = applySpread;
+  window.rayHitsSphere = rayHitsSphere;
   window.spawnTracer = spawnTracer;
   window.fireHitscan = fireHitscan;
+  window.sharedFireWeapon = sharedFireWeapon;
 })();

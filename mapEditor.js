@@ -1,5 +1,30 @@
-// Map Editor — 3D spectator-mode editor for creating custom arenas.
-// Gated behind devAuthenticated (devConsole.js password).
+/**
+ * mapEditor.js — In-game 3D map editor
+ *
+ * PURPOSE: Spectator-mode editor for creating and modifying arena layouts. Allows
+ * placing cover blocks, ramps, spawn points, and waypoints. Gated behind the dev
+ * console password. Maps are saved/loaded via server API (mapFormat.js).
+ *
+ * EXPORTS (window):
+ *   editorActive — boolean flag
+ *   (Various editor functions exposed on window for devConsole.js integration)
+ *
+ * DEPENDENCIES: Three.js, mapFormat.js, devConsole.js (authentication gate)
+ *
+ * DESIGN NOTES:
+ *   - Currently runs as an in-game overlay. The long-term plan is to extract this
+ *     into a standalone app so only the developer can edit and upload maps.
+ *   - Uses free-camera controls (WASD + mouse) separate from game input.
+ *
+ * TODO (future):
+ *   - Extract to standalone app (separate from game client)
+ *   - Copy/paste/mirror selection
+ *   - Snap-to-grid with configurable grid size
+ *   - Prop placement (barrels, crates, scenery)
+ *   - Lighting placement and preview
+ *   - Map testing mode (play the map without reloading)
+ *   - Export to file (download JSON) instead of only server save
+ */
 
 (function () {
   var editorActive = false;
@@ -125,6 +150,10 @@
 
     // Use the existing Three.js renderer + scene
     editorScene = scene;
+    if (typeof renderer === 'undefined' || !renderer) {
+      console.warn('mapEditor: renderer not initialized');
+      return;
+    }
     editorRenderer = renderer;
 
     // Clear scene children that are arena groups
@@ -953,7 +982,7 @@
     if (playerMode) return;
     if (flyMode) {
       flyMode = false;
-      try { document.exitPointerLock(); } catch (ex) {}
+      try { document.exitPointerLock(); } catch (ex) { console.warn('mapEditor: exitPointerLock failed', ex); }
     }
 
     playerMode = true;
@@ -994,7 +1023,7 @@
     if (!playerMode) return;
     playerMode = false;
 
-    try { document.exitPointerLock(); } catch (ex) {}
+    try { document.exitPointerLock(); } catch (ex) { console.warn('mapEditor: exitPointerLock failed', ex); }
 
     // Restore spectator camera state
     if (savedSpectatorPos) {
@@ -1105,6 +1134,7 @@
   var _uiListeners = [];
 
   function bindEditorEvents() {
+    unbindEditorEvents(); // Clear any existing listeners first
     var canvas = editorRenderer.domElement;
 
     _boundHandlers.mousedown = function (e) { onMouseDown(e); };
@@ -1328,7 +1358,7 @@
   function onMouseUp(e) {
     if (e.button === 2 && flyMode) {
       flyMode = false;
-      try { document.exitPointerLock(); } catch (ex) {}
+      try { document.exitPointerLock(); } catch (ex) { console.warn('mapEditor: exitPointerLock failed', ex); }
       return;
     }
     if (isResizing) {

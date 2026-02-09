@@ -1,11 +1,58 @@
-// Dev Console — password-protected cheat menu
+/**
+ * devConsole.js — Developer tools and cheat console
+ *
+ * PURPOSE: Password-protected developer console with debug tools: god mode,
+ * unlimited ammo, spectator camera, kill enemy, heal player, hitbox visualization,
+ * AI state display, and map editor access. Toggled with the 'C' key.
+ *
+ * EXPORTS (window):
+ *   devAuthenticated, devGodMode, devShowHitboxes, devConsoleOpen, devSpectatorMode
+ *
+ * DEPENDENCIES: Three.js, modeAI.js (getPaintballState, AI state),
+ *   player.js (Player), mapEditor.js (editor functions),
+ *   game.js (scene, camera, renderer globals)
+ *
+ * TODO (future):
+ *   - Network debug overlay (ping, packet loss, snapshot rate)
+ *   - Ability cooldown reset
+ *   - Spawn bot commands
+ *   - Teleport to coordinates
+ *   - Performance profiler
+ */
+
 (function () {
   var PASSWORD = 'devpower5';
   var authenticated = false;
   window.devAuthenticated = false;
   window.devGodMode = false;
+  window.devShowHitboxes = false;
+
+  // Helper: get the active game state (works for both AI and LAN modes)
+  function getActiveState() {
+    if (window.paintballActive && window.getPaintballState) return window.getPaintballState();
+    if (window.multiplayerActive && window.getMultiplayerState) return window.getMultiplayerState();
+    return null;
+  }
+
+  // Helper: get the local player from whichever mode is active
+  function getLocalPlayer() {
+    var state = getActiveState();
+    if (!state) return null;
+    // AI mode: state.player is the local Player
+    if (state.player) return state.player;
+    // LAN mode: state.players.host or .client depending on which is local (cameraAttached)
+    if (state.players) {
+      if (state.players.host && state.players.host.cameraAttached) return state.players.host;
+      if (state.players.client && state.players.client.cameraAttached) return state.players.client;
+    }
+    return null;
+  }
 
   var consoleEl = document.getElementById('devConsole');
+  if (!consoleEl) {
+    console.warn('devConsole: DOM elements not found, skipping initialization');
+    return; // exit the IIFE early
+  }
   var passwordView = document.getElementById('devPassword');
   var commandsView = document.getElementById('devCommands');
   var passwordInput = document.getElementById('devPasswordInput');
@@ -16,11 +63,19 @@
   var cheats = {
     godMode: false,
     unlimitedAmmo: false,
-    spectator: false
+    spectator: false,
+    showHitboxes: false,
+    showAIState: false
   };
 
   var spectatorSavedY = null;
   var spectatorKeys = { w: false, a: false, s: false, d: false, space: false, shift: false };
+
+  // Hitbox visualization state
+  var hitboxVisuals = [];
+
+  // AI state label element
+  var aiStateLabel = null;
 
   // Toggle console visibility
   function isConsoleOpen() {
@@ -31,7 +86,7 @@
     if (!consoleEl) return;
     window.devConsoleOpen = true;
     consoleEl.classList.remove('hidden');
-    try { document.exitPointerLock(); } catch (e) {}
+    try { document.exitPointerLock(); } catch (e) { console.warn('devConsole: exitPointerLock failed', e); }
     if (authenticated) {
       passwordView.classList.add('hidden');
       commandsView.classList.remove('hidden');
@@ -50,7 +105,7 @@
     consoleEl.classList.add('hidden');
     // Re-engage pointer lock if in game
     if ((window.paintballActive || window.multiplayerActive) && renderer && renderer.domElement) {
-      try { renderer.domElement.requestPointerLock(); } catch (e) {}
+      try { renderer.domElement.requestPointerLock(); } catch (e) { console.warn('devConsole: requestPointerLock failed', e); }
     }
   }
 
@@ -89,16 +144,18 @@
     }
   }
 
-  passwordSubmit.addEventListener('click', tryPassword);
-  passwordInput.addEventListener('keydown', function (e) {
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      tryPassword();
-    }
-    e.stopPropagation();
-  });
-  // Prevent key events in password input from reaching the game
-  passwordInput.addEventListener('keyup', function (e) { e.stopPropagation(); });
+  if (passwordSubmit) passwordSubmit.addEventListener('click', tryPassword);
+  if (passwordInput) {
+    passwordInput.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        tryPassword();
+      }
+      e.stopPropagation();
+    });
+    // Prevent key events in password input from reaching the game
+    passwordInput.addEventListener('keyup', function (e) { e.stopPropagation(); });
+  }
 
   // Command buttons
   var cmdButtons = commandsView.querySelectorAll('.dev-cmd');
@@ -112,7 +169,8 @@
   }
 
   function handleCommand(cmd, btn) {
-    var state = window.getPaintballState ? window.getPaintballState() : null;
+    var state = getActiveState();
+    var localPlayer = getLocalPlayer();
 
     if (cmd === 'godMode') {
       cheats.godMode = !cheats.godMode;
@@ -128,11 +186,40 @@
       btn.textContent = 'Spectator Camera: ' + (cheats.spectator ? 'ON' : 'OFF');
       btn.classList.toggle('active', cheats.spectator);
       window.devSpectatorMode = cheats.spectator;
+
       if (cheats.spectator) {
+        // Enter spectator: show player mesh, detach camera
         spectatorSavedY = camera ? camera.position.y : 2;
-      } else if (camera && spectatorSavedY !== null) {
-        camera.position.y = spectatorSavedY;
+        if (localPlayer) {
+          localPlayer.cameraAttached = false;
+          localPlayer.setVisible(true);
+          localPlayer._syncMeshPosition();
+        }
+      } else {
+        // Exit spectator: hide player mesh, re-attach camera
+        if (localPlayer) {
+          localPlayer.cameraAttached = true;
+          localPlayer.setVisible(false);
+          localPlayer.syncCameraFromPlayer();
+        } else if (camera && spectatorSavedY !== null) {
+          camera.position.y = spectatorSavedY;
+        }
         spectatorSavedY = null;
+      }
+    } else if (cmd === 'showHitboxes') {
+      cheats.showHitboxes = !cheats.showHitboxes;
+      window.devShowHitboxes = cheats.showHitboxes;
+      btn.textContent = 'Show Hitboxes: ' + (cheats.showHitboxes ? 'ON' : 'OFF');
+      btn.classList.toggle('active', cheats.showHitboxes);
+      if (!cheats.showHitboxes) {
+        clearHitboxVisuals();
+      }
+    } else if (cmd === 'showAIState') {
+      cheats.showAIState = !cheats.showAIState;
+      btn.textContent = 'AI State: ' + (cheats.showAIState ? 'ON' : 'OFF');
+      btn.classList.toggle('active', cheats.showAIState);
+      if (!cheats.showAIState) {
+        hideAIStateLabel();
       }
     } else if (cmd === 'killEnemy') {
       if (state && state.ai && state.ai.alive) {
@@ -142,14 +229,159 @@
         }
       }
     } else if (cmd === 'heal') {
-      if (state && state.player) {
-        state.player.health = 100;
-        state.player.alive = true;
+      if (localPlayer) {
+        localPlayer.health = localPlayer.maxHealth;
+        localPlayer.alive = true;
       }
     } else if (cmd === 'mapEditor') {
       closeConsole();
       if (typeof window.startMapEditor === 'function') {
         window.startMapEditor();
+      }
+    }
+  }
+
+  // --- Hitbox Visualization ---
+
+  function clearHitboxVisuals() {
+    for (var i = 0; i < hitboxVisuals.length; i++) {
+      try {
+        if (hitboxVisuals[i].parent) hitboxVisuals[i].parent.remove(hitboxVisuals[i]);
+        if (hitboxVisuals[i].geometry) hitboxVisuals[i].geometry.dispose();
+        if (hitboxVisuals[i].material) hitboxVisuals[i].material.dispose();
+      } catch (e) { /* ignore cleanup errors */ }
+    }
+    hitboxVisuals = [];
+  }
+
+  function updateHitboxVisuals() {
+    if (!cheats.showHitboxes || typeof scene === 'undefined' || !scene) return;
+
+    var state = getActiveState();
+
+    // Collect all Player objects that should show hitboxes
+    var players = [];
+    if (state) {
+      // AI mode
+      if (state.ai && state.ai.alive && state.ai.player) {
+        players.push(state.ai.player);
+      }
+      if (state.player && state.player.alive) {
+        players.push(state.player);
+      }
+      // LAN mode
+      if (state.players) {
+        if (state.players.host && state.players.host.alive) {
+          players.push(state.players.host);
+        }
+        if (state.players.client && state.players.client.alive) {
+          players.push(state.players.client);
+        }
+      }
+    }
+
+    // Collect collider boxes from arena
+    var arenaColliders = (state && state.arena && state.arena.colliders) ? state.arena.colliders : [];
+
+    // Expected count: one sphere per player + one box helper per collider
+    var expectedCount = players.length + arenaColliders.length;
+
+    // Rebuild visuals if count changed (simple approach)
+    if (hitboxVisuals.length !== expectedCount) {
+      clearHitboxVisuals();
+
+      // Create wireframe spheres for players
+      for (var i = 0; i < players.length; i++) {
+        var p = players[i];
+        var sphereGeom = new THREE.SphereGeometry(p._hitRadius, 16, 12);
+        var sphereMat = new THREE.MeshBasicMaterial({ color: 0x00ff00, wireframe: true, transparent: true, opacity: 0.5 });
+        var sphere = new THREE.Mesh(sphereGeom, sphereMat);
+        sphere.renderOrder = 998;
+        sphere._isHitboxSphere = true;
+        scene.add(sphere);
+        hitboxVisuals.push(sphere);
+      }
+
+      // Create wireframe boxes for arena colliders
+      for (var j = 0; j < arenaColliders.length; j++) {
+        var box = arenaColliders[j];
+        var size = box.getSize(new THREE.Vector3());
+        var center = box.getCenter(new THREE.Vector3());
+        var boxGeom = new THREE.BoxGeometry(size.x, size.y, size.z);
+        var boxMat = new THREE.MeshBasicMaterial({ color: 0xffaa00, wireframe: true, transparent: true, opacity: 0.3 });
+        var boxMesh = new THREE.Mesh(boxGeom, boxMat);
+        boxMesh.position.copy(center);
+        boxMesh._isColliderBox = true;
+        scene.add(boxMesh);
+        hitboxVisuals.push(boxMesh);
+      }
+    }
+
+    // Update sphere positions
+    var sphereIdx = 0;
+    for (var i = 0; i < hitboxVisuals.length; i++) {
+      var vis = hitboxVisuals[i];
+      if (vis._isHitboxSphere && sphereIdx < players.length) {
+        var p = players[sphereIdx];
+        var hitCenter = p.getHitCenter();
+        vis.position.copy(hitCenter);
+        sphereIdx++;
+      }
+    }
+  }
+
+  // --- AI State Display ---
+
+  function ensureAIStateLabel() {
+    if (aiStateLabel) return aiStateLabel;
+    aiStateLabel = document.createElement('div');
+    aiStateLabel.id = 'aiStateLabel';
+    document.body.appendChild(aiStateLabel);
+    return aiStateLabel;
+  }
+
+  function hideAIStateLabel() {
+    if (aiStateLabel) {
+      aiStateLabel.style.display = 'none';
+    }
+  }
+
+  function updateAIStateDisplay() {
+    if (!cheats.showAIState) return;
+    if (!window.paintballActive) {
+      hideAIStateLabel();
+      return;
+    }
+
+    var state = window.getPaintballState ? window.getPaintballState() : null;
+    if (!state || !state.ai || !state.ai.alive) {
+      hideAIStateLabel();
+      return;
+    }
+
+    var label = ensureAIStateLabel();
+    var behavior = state.ai.getCurrentBehavior ? state.ai.getCurrentBehavior() : '?';
+    label.textContent = behavior;
+    label.style.display = 'block';
+
+    // Project AI head position to screen coordinates
+    if (typeof camera !== 'undefined' && camera && typeof renderer !== 'undefined' && renderer) {
+      var headWorldPos = state.ai.player.getEyePos();
+      headWorldPos.y += 1.0; // above head
+      var projected = headWorldPos.clone().project(camera);
+
+      // Convert from NDC (-1..1) to screen pixels
+      var halfW = renderer.domElement.clientWidth * 0.5;
+      var halfH = renderer.domElement.clientHeight * 0.5;
+      var screenX = projected.x * halfW + halfW;
+      var screenY = -projected.y * halfH + halfH;
+
+      // Only show if in front of camera
+      if (projected.z > 0 && projected.z < 1) {
+        label.style.transform = 'translate(' + Math.round(screenX) + 'px, ' + Math.round(screenY) + 'px)';
+        label.style.display = 'block';
+      } else {
+        label.style.display = 'none';
       }
     }
   }
@@ -174,19 +406,19 @@
     var dt = lastCheatTs ? Math.min(0.05, (ts - lastCheatTs) / 1000) : 0;
     lastCheatTs = ts;
 
-    var state = window.getPaintballState ? window.getPaintballState() : null;
+    var loopLocalPlayer = getLocalPlayer();
 
-    if (state) {
+    if (loopLocalPlayer) {
       // God mode: prevent health from dropping below 1
-      if (cheats.godMode && state.player) {
-        if (state.player.health < 1) state.player.health = 1;
-        state.player.alive = true;
+      if (cheats.godMode) {
+        if (loopLocalPlayer.health < 1) loopLocalPlayer.health = 1;
+        loopLocalPlayer.alive = true;
       }
 
       // Unlimited ammo: refill every frame
-      if (cheats.unlimitedAmmo && state.player && state.player.weapon) {
-        state.player.weapon.ammo = state.player.weapon.magSize;
-        state.player.weapon.reloading = false;
+      if (cheats.unlimitedAmmo && loopLocalPlayer.weapon) {
+        loopLocalPlayer.weapon.ammo = loopLocalPlayer.weapon.magSize;
+        loopLocalPlayer.weapon.reloading = false;
       }
     }
 
@@ -204,6 +436,16 @@
       if (spectatorKeys.d) camera.position.addScaledVector(right, speed);
       if (spectatorKeys.space) camera.position.y += speed;
       if (spectatorKeys.shift) camera.position.y -= speed;
+    }
+
+    // Update hitbox visuals
+    if (cheats.showHitboxes) {
+      updateHitboxVisuals();
+    }
+
+    // Update AI state display
+    if (cheats.showAIState) {
+      updateAIStateDisplay();
     }
 
     requestAnimationFrame(cheatLoop);

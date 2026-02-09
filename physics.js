@@ -1,11 +1,45 @@
-// Physics: 2D (XZ) movement + collision + vertical (gravity, jumping, ramps).
-// Inputs are kept in playerControls.js (WASD, Shift, Space). This file focuses on physics only.
+/**
+ * physics.js — Movement engine, collision, and physics constants
+ *
+ * PURPOSE: Handles all physics simulation: horizontal XZ movement, vertical gravity
+ * and jumping, ground detection via raycasting, AABB collision resolution, and
+ * line-of-sight testing. All game modes call updateFullPhysics() each frame.
+ *
+ * EXPORTS (window):
+ *   GROUND_Y, GRAVITY, JUMP_VELOCITY, EYE_HEIGHT, MAX_STEP_HEIGHT — physics constants
+ *   getGroundHeight(pos, solids, feetY, grounded) — raycast ground detection
+ *   resolveCollisions2D(position, radius, aabbs, feetY) — AABB collision push-out
+ *   updateFullPhysics(state, input, arena, dt) — full physics update cycle
+ *   hasBlockingBetween(origin, target, solids) — LOS test
+ *
+ * DEPENDENCIES: Three.js (THREE), game.js (camera global)
+ *
+ * DESIGN NOTES:
+ *   - Physics constants live HERE (not in config.js) because they're consumed
+ *     exclusively by the physics engine.
+ *   - JUMP_VELOCITY is the default. Heroes can override via player._jumpVelocity
+ *     (set by applyHeroToPlayer in heroes.js). updateFullPhysics reads
+ *     state._jumpVelocity if present, falling back to JUMP_VELOCITY.
+ *   - Collision uses Y-aware AABB push-out: colliders are skipped when the player
+ *     stands on top of them (feetY + 0.1 >= box.max.y). This enables ramp traversal.
+ *   - Ground detection uses downward raycasting against arena.solids (meshes).
+ *     When grounded, only surfaces within MAX_STEP_HEIGHT are accepted (prevents
+ *     teleporting to distant surfaces). When airborne, any surface below feet is valid.
+ *
+ * TODO (future):
+ *   - Crouching: reduce EYE_HEIGHT, slow speed, smaller hitbox
+ *   - Sliding: momentum-based crouch-sprint with friction
+ *   - Wall running / wall jumping
+ *   - Ability-driven movement (dash applies velocity impulse)
+ */
+
+// Inputs are kept in input.js (WASD, Shift, Space). This file focuses on physics only.
 
 // --- Vertical physics constants ---
 var GROUND_Y = -1;
 var GRAVITY = -20;
 var JUMP_VELOCITY = 8.5;
-var EYE_HEIGHT = 3.0;
+var EYE_HEIGHT = 2.0;
 var MAX_STEP_HEIGHT = 0.3;
 
 // Compute camera-relative movement direction on the XZ plane:
@@ -61,7 +95,7 @@ function getGroundHeight(pos, solids, feetY, grounded) {
     var hitY = hits[i].point.y;
     if (grounded) {
       // When grounded, only accept surfaces within step tolerance above current feet
-      if (hitY > bestY && hitY <= currentFeetY + MAX_STEP_HEIGHT + 0.5) {
+      if (hitY > bestY && hitY <= currentFeetY + MAX_STEP_HEIGHT + 0.1) {
         bestY = hitY;
       }
     } else {
@@ -152,9 +186,9 @@ function updateFullPhysics(state, input, arena, dt) {
   var solids = (arena && arena.solids) ? arena.solids : [];
   var groundH = getGroundHeight(state.position, solids, state.feetY, state.grounded);
 
-  // 4. Jump
+  // 4. Jump (use per-hero _jumpVelocity if available, else global JUMP_VELOCITY)
   if (input.jump && state.grounded) {
-    state.verticalVelocity = JUMP_VELOCITY;
+    state.verticalVelocity = (state._jumpVelocity != null) ? state._jumpVelocity : JUMP_VELOCITY;
     state.grounded = false;
   }
 
@@ -201,24 +235,6 @@ function updateFullPhysics(state, input, arena, dt) {
   state.position.y = state.feetY + EYE_HEIGHT;
 }
 
-// Update entity (player or AI) XZ movement with collisions (legacy — kept for compatibility).
-// state: { position: THREE.Vector3, walkSpeed: number, sprintSpeed?: number, radius: number }
-// input: { moveX: number, moveZ: number, sprint: boolean }
-// arena: { colliders: Array<THREE.Box3> }
-// dt: seconds
-function updateXZPhysics(state, input, arena, dt) {
-  const speed = input.sprint && state.sprintSpeed ? state.sprintSpeed : state.walkSpeed;
-  const dir = computeMoveDirXZ(input.moveZ || 0, input.moveX || 0);
-  if (dir.lengthSq() <= 0) return;
-
-  const move = dir.multiplyScalar(speed * dt);
-  state.position.add(move);
-
-  if (arena && Array.isArray(arena.colliders)) {
-    resolveCollisions2D(state.position, state.radius || 0.3, arena.colliders);
-  }
-}
-
 // Line-of-sight test (ray vs colliders), returns true if any solid blocks LOS.
 // origin, target: THREE.Vector3
 // solids: array of THREE.Object3D (meshes) that can block
@@ -245,5 +261,4 @@ window.MAX_STEP_HEIGHT = MAX_STEP_HEIGHT;
 window.getGroundHeight = getGroundHeight;
 window.resolveCollisions2D = resolveCollisions2D;
 window.updateFullPhysics = updateFullPhysics;
-window.updateXZPhysics = updateXZPhysics;
 window.hasBlockingBetween = hasBlockingBetween;

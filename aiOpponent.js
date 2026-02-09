@@ -1,7 +1,38 @@
-// AI opponent for Paintball mode
-// Responsibilities: A* pathfinding, movement, LOS, firing with ammo + reload, taking damage.
-// Uses Player class via composition for mesh, health bar, hitbox, and physics state.
-// Features: state machine (7 states), 3 playstyles, cover system, stuck detection, layered strafing.
+/**
+ * aiOpponent.js — AI opponent for competitive single-player mode
+ *
+ * PURPOSE: Full AI opponent with 7-state state machine, A* pathfinding on a
+ * 25-point waypoint graph, cover system, layered strafing, and difficulty-scaled
+ * aim error and reaction time. Uses Player class via composition for mesh, health,
+ * hitbox, and physics state.
+ *
+ * EXPORTS (window):
+ *   AIOpponent — constructor function
+ *
+ * DEPENDENCIES: player.js (Player), weapon.js (Weapon), game.js (camera global),
+ *   physics.js (updateFullPhysics, GROUND_Y, EYE_HEIGHT, hasBlockingBetween),
+ *   projectiles.js (sharedFireWeapon)
+ *
+ * STATE MACHINE:
+ *   SPAWN_RUSH → PATROL → ENGAGE → SEEK_COVER → HOLD_COVER → FLANK → STUCK_RECOVER
+ *
+ * PLAYSTYLES (randomly selected per round):
+ *   aggressive — close range, low cover threshold, high sprint/jump
+ *   defensive  — long range, high cover threshold, frequent cover use
+ *   balanced   — middle ground between aggressive and defensive
+ *
+ * DIFFICULTY (Easy/Medium/Hard):
+ *   Aim error:     Easy 0.08rad, Medium 0.035rad, Hard 0.012rad
+ *   Reaction time: Easy 400-650ms, Medium 200-380ms, Hard 100-220ms
+ *
+ * TODO (future):
+ *   - AI hero selection (use hero system instead of default Marksman)
+ *   - Difficulty could also affect weapon stats (not just aim/reaction)
+ *   - Use sharedStartReload() instead of inline reload logic
+ *   - Counter-picking: AI adapts playstyle based on player's hero choice
+ *   - Ability usage by AI (when ability system is implemented)
+ *   - Extract base BotEntity class shared with trainingBot.js
+ */
 
 class AIOpponent {
   constructor(opts) {
@@ -431,19 +462,17 @@ class AIOpponent {
       var perfectDir = ctx.playerPos.clone().sub(origin).normalize();
       // Apply aim error: AI intentionally aims slightly off-target
       var aimDir = this._applyAimError(perfectDir, this._aimErrorRad);
-      var hit = fireHitscan(origin, aimDir, {
-        spreadRad: this.weapon.spreadRad,
+      var self = this;
+      var result = sharedFireWeapon(this.weapon, origin, aimDir, {
+        spreadOverride: this.weapon.spreadRad,
         solids: this.arena.solids,
-        playerTarget: { position: ctx.playerPos, radius: ctx.playerRadius || 0.35 },
+        targets: [{ position: ctx.playerPos, radius: ctx.playerRadius || 0.35 }],
         tracerColor: 0xff6666,
-        maxDistance: this.weapon.maxRange
+        onHit: function () {
+          if (ctx.onPlayerHit) ctx.onPlayerHit(self.weapon.damage);
+        }
       });
-      if (hit.hit && hit.hitType === 'player') {
-        ctx.onPlayerHit && ctx.onPlayerHit(this.weapon.damage);
-      }
-      this.weapon.ammo--;
-      this.weapon.lastShotTime = now;
-      if (this.weapon.ammo <= 0) {
+      if (result.magazineEmpty) {
         this.weapon.reloading = true;
         this.weapon.reloadEnd = now + this.weapon.reloadTimeSec * 1000;
       }

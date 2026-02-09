@@ -213,14 +213,16 @@ body {
     transform: translate(-50%, -50%);
     pointer-events: none;
     z-index: 160;
-    /* Use CSS var to control spread in px */
+    /* CSS vars to control spread and color */
     --spread: 10px;
+    --ch-color: #00ff88;
 }
 
+/* Cross style (4 bars) */
 #crosshair .ch-bar {
     position: absolute;
-    background: #00ff88;
-    filter: drop-shadow(0 0 6px rgba(0,255,136,0.7));
+    background: var(--ch-color, #00ff88);
+    filter: drop-shadow(0 0 6px var(--ch-color, #00ff88));
     border-radius: 1px;
 }
 
@@ -247,6 +249,36 @@ body {
 #crosshair .ch-bottom { top: var(--spread); }
 
 #crosshair.dimmed .ch-bar {
+    opacity: 0.5;
+}
+
+/* Circle style (ring + center dot) — for spread weapons like shotguns */
+#crosshair .ch-ring {
+    position: absolute;
+    top: calc(var(--spread) * -1);
+    left: calc(var(--spread) * -1);
+    width: calc(var(--spread) * 2);
+    height: calc(var(--spread) * 2);
+    border: 2px solid var(--ch-color, #00ff88);
+    border-radius: 50%;
+    filter: drop-shadow(0 0 4px var(--ch-color, #00ff88));
+    min-width: 6px;
+    min-height: 6px;
+}
+
+#crosshair .ch-dot {
+    position: absolute;
+    top: -2px;
+    left: -2px;
+    width: 4px;
+    height: 4px;
+    background: var(--ch-color, #00ff88);
+    border-radius: 50%;
+    filter: drop-shadow(0 0 3px var(--ch-color, #00ff88));
+}
+
+#crosshair.dimmed .ch-ring,
+#crosshair.dimmed .ch-dot {
     opacity: 0.5;
 }
 
@@ -729,4 +761,183 @@ body {
     background: rgba(0, 200, 255, 0.2);
     border-color: #00ccff;
     color: #00ccff;
+}
+
+/* Weapon Name Display (Training Range HUD) */
+#weaponNameDisplay {
+    text-align: center;
+    color: #aaa;
+    font-size: 11px;
+    letter-spacing: 1px;
+    margin-bottom: 6px;
+    text-transform: uppercase;
+}
+
+/* Hero Select Overlay */
+#heroSelectOverlay {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    z-index: 600;
+    background: rgba(0, 0, 0, 0.75);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 24px;
+    backdrop-filter: blur(6px);
+}
+
+#heroSelectOverlay.hidden {
+    display: none;
+}
+
+.hero-card {
+    width: 220px;
+    background: rgba(20, 20, 20, 0.9);
+    border: 2px solid #444;
+    border-radius: 12px;
+    padding: 20px 16px;
+    cursor: pointer;
+    transition: border-color 0.2s, transform 0.1s;
+    text-align: center;
+}
+
+.hero-card:hover {
+    border-color: #00ff88;
+    transform: translateY(-4px);
+}
+
+.hero-card.selected {
+    border-color: #00ff88;
+    box-shadow: 0 0 16px rgba(0, 255, 136, 0.3);
+}
+
+.hero-card h3 {
+    font-size: 18px;
+    color: #fff;
+    margin-bottom: 8px;
+}
+
+.hero-card .hero-desc {
+    font-size: 12px;
+    color: #aaa;
+    margin-bottom: 12px;
+    line-height: 1.4;
+}
+
+.hero-card .hero-stats {
+    font-size: 11px;
+    color: #888;
+    line-height: 1.6;
+    text-align: left;
+}
+
+.hero-card .hero-stats span {
+    color: #ccc;
+}
+
+#heroSelectTitle {
+    position: absolute;
+    top: 40px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 22px;
+    font-weight: bold;
+    color: #fff;
+    letter-spacing: 2px;
+}
+
+#heroSelectTimer {
+    position: absolute;
+    top: 90px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 48px;
+    font-weight: 800;
+    color: #00ff88;
+    text-shadow: 0 0 12px rgba(0,255,136,0.6);
+}
+
+#heroSelectTimer.hidden {
+    display: none;
+}
+
+.hero-card.confirmed {
+    border-color: #00ff88;
+    opacity: 0.7;
+    pointer-events: none;
+}
+
+.hero-card.confirmed::after {
+    content: 'CONFIRMED';
+    display: block;
+    color: #00ff88;
+    font-size: 11px;
+    font-weight: bold;
+    margin-top: 8px;
+    letter-spacing: 1px;
+}
+
+#heroSelectWaiting {
+    position: absolute;
+    bottom: 70px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 14px;
+    color: #aaa;
+}
+
+#heroSelectWaiting.hidden {
+    display: none;
+}
+
+#heroSelectHint {
+    position: absolute;
+    bottom: 40px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 13px;
+    color: #666;
+}
+
+/* Training stats display */
+#trainingStats {
+    position: absolute;
+    left: 20px;
+    bottom: 20px;
+    z-index: 150;
+    background: rgba(0, 0, 0, 0.55);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 10px;
+    padding: 10px 14px;
+    backdrop-filter: blur(6px);
+    font-family: Consolas, 'Courier New', monospace;
+    font-size: 12px;
+    color: #aaa;
+    line-height: 1.6;
+}
+
+#trainingStats.hidden {
+    display: none;
+}
+
+#trainingStats span {
+    color: #fff;
+}
+
+/* AI State Label (dev console overlay) */
+#aiStateLabel {
+    position: fixed;
+    top: 0;
+    left: 0;
+    z-index: 600;
+    pointer-events: none;
+    font-family: Consolas, 'Courier New', monospace;
+    font-size: 12px;
+    font-weight: bold;
+    color: #ff6a6a;
+    background: rgba(0, 0, 0, 0.6);
+    padding: 2px 6px;
+    border-radius: 3px;
+    white-space: nowrap;
+    display: none;
 }
