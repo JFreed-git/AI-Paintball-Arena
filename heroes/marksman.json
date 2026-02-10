@@ -79,6 +79,7 @@
       "rotationX": 0,
       "rotationY": 0,
       "rotationZ": 0,
+      "color": "#50d7aa",
       "radius": 0.2
     },
     {
@@ -90,6 +91,7 @@
       "rotationX": 0,
       "rotationY": 0,
       "rotationZ": 0,
+      "color": "#22a076",
       "radius": 0.225,
       "height": 0.75
     }

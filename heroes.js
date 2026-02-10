@@ -258,8 +258,20 @@
       player.rebuildMesh();
     }
 
-    // Recolor the freshly built mesh
-    if (player._meshGroup) {
+    // Recolor body parts that don't have their own per-part color
+    if (player._meshGroup && hero.bodyParts) {
+      var partIndex = 0;
+      player._meshGroup.traverse(function (child) {
+        if (child.isMesh && child.material && child.userData && child.userData.isBodyPart) {
+          if (!hero.bodyParts[partIndex] || !hero.bodyParts[partIndex].color) {
+            if (child.material.color) {
+              child.material.color.setHex(hero.color);
+            }
+          }
+          partIndex++;
+        }
+      });
+    } else if (player._meshGroup) {
       player._meshGroup.traverse(function (child) {
         if (child.isMesh && child.material && child.userData && child.userData.isBodyPart) {
           if (child.material.color) {

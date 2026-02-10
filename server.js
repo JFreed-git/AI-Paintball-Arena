@@ -241,6 +241,19 @@ app.get('/api/heroes/:id', function (req, res) {
   }
 });
 
+// Save a hero
+app.post('/api/heroes/:id', function (req, res) {
+  var name = sanitizeMapName(req.params.id);
+  if (!name) return res.status(400).json({ error: 'Invalid hero id' });
+  ensureHeroesDir();
+  try {
+    fs.writeFileSync(path.join(HEROES_DIR, name + '.json'), JSON.stringify(req.body, null, 2), 'utf8');
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to save hero' });
+  }
+});
+
 // roomId -> { hostId: string, players: Set<string>, settings: object }
 const rooms = new Map();
 
