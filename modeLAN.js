@@ -560,7 +560,7 @@
     // survive rapid socket overwrites between ticks
     if (activeRound && (ri.jump || state._remoteJumpPending)) state.players.client.input.jump = true;
     state.players.client.input.fireDown = activeRound && !!ri.fireDown;
-    state.players.client.input.meleeDown = activeRound && !!ri.meleeDown;
+    if (activeRound && (ri.meleeDown || state._remoteMeleePending)) state.players.client.input.meleeDown = true;
     if (activeRound && (ri.reloadPressed || state._remoteReloadPending)) state.players.client.input.reloadPressed = true;
 
     if (!state.players.client || !state.players.client.input) return;
@@ -612,6 +612,7 @@
     handleReload(state.players.host, now);
     handleReload(state.players.client, now);
     state._remoteReloadPending = false;
+    state._remoteMeleePending = false;
 
     // Update live projectiles (all entity hitboxes are now fresh)
     if (typeof updateProjectiles === 'function') updateProjectiles(dt);
@@ -963,6 +964,7 @@
       // event overwrites with {jump:false} before the tick reads it.
       if (payload && payload.jump) state._remoteJumpPending = true;
       if (payload && payload.reloadPressed) state._remoteReloadPending = true;
+      if (payload && payload.meleeDown) state._remoteMeleePending = true;
       state.remoteInputLatest = payload || {};
     });
 

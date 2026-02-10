@@ -374,12 +374,16 @@
     var origRot = { x: attach.rotation.x, y: attach.rotation.y, z: attach.rotation.z };
 
     // Keyframes matching FP animation timing: [progress, rotOffset(x,y,z)]
+    // Wide horizontal sweep visible from third person
     var keys = [
-      [0.0,  0, 0, 0],
-      [0.2,  -0.1, 0, 0],
-      [0.5,  0.1, 0.5, 0.2],
-      [0.7,  0.05, 0.3, 0.1],
-      [1.0,  0, 0, 0]
+      [0.00,  0, 0, 0],
+      [0.15, -0.25, -0.3, -0.1],
+      [0.25, -0.15, -0.15, -0.05],
+      [0.45,  0.3, 0.9, 0.35],
+      [0.55,  0.15, 1.2, 0.25],
+      [0.70,  0.08, 0.8, 0.15],
+      [0.85,  0.03, 0.3, 0.05],
+      [1.00,  0, 0, 0]
     ];
 
     function hermite(t) { return t * t * (3 - 2 * t); }

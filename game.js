@@ -92,12 +92,16 @@ window.triggerFPMeleeSwing = function (durationMs) {
   var origRot = { x: _fpWeaponGroup.rotation.x, y: _fpWeaponGroup.rotation.y, z: _fpWeaponGroup.rotation.z };
 
   // Keyframes: [progress, posOffset(x,y,z), rotOffset(x,y,z)]
+  // Full gun-butt strike: cock back right → slam forward left → sweep across → recover
   var keys = [
-    [0.0,  0, 0, 0,         0, 0, 0],
-    [0.2,  0, 0.03, 0.08,   -0.1, 0, 0],
-    [0.5,  -0.15, 0.05, -0.2, 0.1, 0.5, 0.2],
-    [0.7,  -0.08, 0.02, -0.1, 0.05, 0.3, 0.1],
-    [1.0,  0, 0, 0,         0, 0, 0]
+    [0.00,  0, 0, 0,              0, 0, 0],           // Rest
+    [0.15,  0.12, 0.08, 0.15,    -0.25, -0.3, -0.1],  // Wind-up: pull back+right, tilt up+right
+    [0.25,  0.08, 0.12, 0.08,    -0.15, -0.15, -0.05], // Coil peak: weapon cocked high-right
+    [0.45, -0.30, 0.06, -0.40,    0.3, 0.9, 0.35],    // Strike: slam forward+left, big yaw sweep
+    [0.55, -0.40, -0.02, -0.35,   0.15, 1.2, 0.25],   // Impact: furthest left, slight dip
+    [0.70, -0.25, 0.0, -0.18,     0.08, 0.8, 0.15],   // Follow-through: decelerate
+    [0.85, -0.10, 0.02, -0.06,    0.03, 0.3, 0.05],   // Recovery: drifting back
+    [1.00,  0, 0, 0,              0, 0, 0]             // Return to rest
   ];
 
   function hermite(t) { return t * t * (3 - 2 * t); }
