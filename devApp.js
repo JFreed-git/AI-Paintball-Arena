@@ -74,6 +74,68 @@ window.clearFirstPersonWeapon = function () {
 var _activePanel = 'splitScreen';
 var _mapEditorWasOpen = false;
 
+// ------- Sidebar / Right Panel Collapse -------
+
+function hideGameModeUI() {
+  var sidebar = document.getElementById('devSidebar');
+  var rightPanel = document.getElementById('devRightPanel');
+  var toolbar = document.getElementById('heViewportToolbar');
+  var mbToolbar = document.getElementById('mbViewportToolbar');
+  var mbPreview = document.getElementById('mbPreviewContainer');
+  var leftExpand = document.getElementById('devSidebarExpand');
+  var rightExpand = document.getElementById('devRightPanelExpand');
+  if (sidebar) sidebar.classList.add('hidden');
+  if (rightPanel) rightPanel.classList.add('hidden');
+  if (toolbar) toolbar.classList.add('hidden');
+  if (mbToolbar) mbToolbar.classList.add('hidden');
+  if (mbPreview) mbPreview.classList.add('hidden');
+  if (leftExpand) leftExpand.classList.add('hidden');
+  if (rightExpand) rightExpand.classList.add('hidden');
+}
+
+function toggleSidebar(forceCollapse) {
+  var sidebar = document.getElementById('devSidebar');
+  var expandTab = document.getElementById('devSidebarExpand');
+  if (!sidebar) return;
+
+  var shouldCollapse = (typeof forceCollapse === 'boolean') ? forceCollapse : !sidebar.classList.contains('collapsed');
+
+  if (shouldCollapse) {
+    sidebar.classList.add('collapsed');
+    if (expandTab) expandTab.classList.remove('hidden');
+  } else {
+    sidebar.classList.remove('collapsed');
+    if (expandTab) expandTab.classList.add('hidden');
+  }
+
+  setTimeout(function () {
+    resizeRenderer();
+    if (typeof window._resizeHeroEditorPreview === 'function') window._resizeHeroEditorPreview();
+    if (typeof window._resizeWmbPreview === 'function') window._resizeWmbPreview();
+  }, 50);
+}
+
+function toggleRightPanel(forceCollapse) {
+  var panel = document.getElementById('devRightPanel');
+  var expandTab = document.getElementById('devRightPanelExpand');
+  if (!panel) return;
+
+  var shouldCollapse = (typeof forceCollapse === 'boolean') ? forceCollapse : !panel.classList.contains('collapsed');
+
+  if (shouldCollapse) {
+    panel.classList.add('collapsed');
+    if (expandTab) expandTab.classList.remove('hidden');
+  } else {
+    panel.classList.remove('collapsed');
+    if (expandTab) expandTab.classList.add('hidden');
+  }
+
+  setTimeout(function () {
+    resizeRenderer();
+    if (typeof window._resizeHeroEditorPreview === 'function') window._resizeHeroEditorPreview();
+  }, 50);
+}
+
 // ------- Initialization -------
 function init() {
   // Scene
@@ -119,6 +181,18 @@ function init() {
   // Sidebar nav
   wireSidebarNav();
 
+  // Sidebar collapse/expand buttons
+  var sidebarCollapseBtn = document.getElementById('devSidebarCollapse');
+  if (sidebarCollapseBtn) sidebarCollapseBtn.addEventListener('click', function () { toggleSidebar(true); });
+  var sidebarExpandBtn = document.getElementById('devSidebarExpand');
+  if (sidebarExpandBtn) sidebarExpandBtn.addEventListener('click', function () { toggleSidebar(false); });
+
+  // Right panel collapse/expand buttons
+  var rightCollapseBtn = document.getElementById('devRightPanelCollapse');
+  if (rightCollapseBtn) rightCollapseBtn.addEventListener('click', function () { toggleRightPanel(true); });
+  var rightExpandBtn = document.getElementById('devRightPanelExpand');
+  if (rightExpandBtn) rightExpandBtn.addEventListener('click', function () { toggleRightPanel(false); });
+
   // Populate dropdowns
   populateAllDropdowns();
 
@@ -132,6 +206,9 @@ function init() {
   }
   if (typeof window._initWmbPreview === 'function') {
     window._initWmbPreview();
+  }
+  if (typeof window._initMenuBuilderPreview === 'function') {
+    window._initMenuBuilderPreview();
   }
 
   // Start loop
@@ -156,6 +233,9 @@ window.addEventListener('resize', function () {
   }
   if (typeof window._resizeWmbPreview === 'function') {
     window._resizeWmbPreview();
+  }
+  if (typeof window._resizeMenuBuilderPreview === 'function') {
+    window._resizeMenuBuilderPreview();
   }
 });
 
@@ -210,6 +290,7 @@ function getPanelElementId(panelId) {
     splitScreen: 'panelSplitScreen',
     heroEditor: 'panelHeroEditor',
     weaponModelBuilder: 'panelWeaponModelBuilder',
+    menuBuilder: 'panelMenuBuilder',
     mapEditor: 'panelMapEditor',
     quickTest: 'panelQuickTest'
   };
@@ -249,6 +330,12 @@ function getPanelElementId(panelId) {
       }
     }
 
+    // Hide menu builder preview
+    var mbPreview = document.getElementById('mbPreviewContainer');
+    if (mbPreview) mbPreview.classList.add('hidden');
+    var mbToolbar = document.getElementById('mbViewportToolbar');
+    if (mbToolbar) mbToolbar.classList.add('hidden');
+
     if (sidebar) sidebar.classList.remove('expanded');
     _prevExpandedPanel = null;
   }
@@ -268,6 +355,17 @@ function getPanelElementId(panelId) {
         setTimeout(function () {
           if (typeof window._resizeHeroEditorPreview === 'function') {
             window._resizeHeroEditorPreview();
+          }
+        }, 50);
+      }
+    } else if (panelId === 'menuBuilder') {
+      var mbPreview = document.getElementById('mbPreviewContainer');
+      if (mbPreview) {
+        mbPreview.classList.remove('hidden');
+        mbPreview.classList.add('viewport-mode');
+        setTimeout(function () {
+          if (typeof window._resizeMenuBuilderPreview === 'function') {
+            window._resizeMenuBuilderPreview();
           }
         }, 50);
       }
@@ -312,12 +410,64 @@ function getPanelElementId(panelId) {
     });
 
     // Expand layout for editor panels
-    if (panelId === 'heroEditor' || panelId === 'weaponModelBuilder') {
+    if (panelId === 'heroEditor' || panelId === 'weaponModelBuilder' || panelId === 'menuBuilder') {
       expandEditorLayout(panelId);
+    }
+
+    // Show/hide right panel and viewport toolbars based on active panel
+    var rightPanel = document.getElementById('devRightPanel');
+    var heToolbar = document.getElementById('heViewportToolbar');
+    var mbToolbar = document.getElementById('mbViewportToolbar');
+    var rightExpandTab = document.getElementById('devRightPanelExpand');
+    var hePropsContent = document.getElementById('devRightPanelContent');
+    var mbPropsContent = document.getElementById('mbRightPanelContent');
+    var rightTitle = document.querySelector('#devRightPanelHeader h3');
+
+    if (panelId === 'heroEditor') {
+      if (rightPanel) {
+        rightPanel.classList.remove('hidden');
+        if (rightExpandTab) rightExpandTab.classList.toggle('hidden', !rightPanel.classList.contains('collapsed'));
+      }
+      if (heToolbar) heToolbar.classList.remove('hidden');
+      if (mbToolbar) mbToolbar.classList.add('hidden');
+      if (hePropsContent) hePropsContent.classList.remove('hidden');
+      if (mbPropsContent) mbPropsContent.classList.add('hidden');
+      if (rightTitle) rightTitle.textContent = 'Hitbox Segments';
+    } else if (panelId === 'menuBuilder') {
+      if (rightPanel) {
+        rightPanel.classList.remove('hidden');
+        if (rightExpandTab) rightExpandTab.classList.toggle('hidden', !rightPanel.classList.contains('collapsed'));
+      }
+      if (heToolbar) heToolbar.classList.add('hidden');
+      if (mbToolbar) mbToolbar.classList.remove('hidden');
+      if (hePropsContent) hePropsContent.classList.add('hidden');
+      // mbPropsContent visibility is controlled by selection in menuBuilder.js
+      if (rightTitle) rightTitle.textContent = 'Element Properties';
+    } else {
+      if (rightPanel) rightPanel.classList.add('hidden');
+      if (heToolbar) heToolbar.classList.add('hidden');
+      if (mbToolbar) mbToolbar.classList.add('hidden');
+      if (rightExpandTab) rightExpandTab.classList.add('hidden');
     }
 
     if (panelId === 'splitScreen' || panelId === 'quickTest' || panelId === 'heroEditor') {
       populateAllDropdowns();
+      // Auto-load the first hero when opening the hero editor
+      if (panelId === 'heroEditor') {
+        var heSelect = document.getElementById('heHeroSelect');
+        if (heSelect && heSelect.options.length > 0) {
+          heSelect.selectedIndex = 0;
+          heSelect.dispatchEvent(new Event('change'));
+        }
+      }
+    }
+
+    // Auto-open map editor when switching to that panel
+    if (panelId === 'mapEditor') {
+      var meOpenBtn = document.getElementById('meOpen');
+      if (meOpenBtn) {
+        setTimeout(function () { meOpenBtn.click(); }, 50);
+      }
     }
 
     resizeRenderer();
@@ -488,9 +638,8 @@ window.registerCustomWeaponModel = registerCustomWeaponModel;
   if (meOpenBtn) {
     meOpenBtn.addEventListener('click', function () {
       if (typeof startMapEditor === 'function') {
-        // Hide sidebar for full editor experience
-        var sidebar = document.getElementById('devSidebar');
-        if (sidebar) sidebar.classList.add('hidden');
+        // Hide all UI for full editor experience
+        hideGameModeUI();
         resizeRenderer();
         startMapEditor();
         _mapEditorWasOpen = true;
@@ -501,7 +650,11 @@ window.registerCustomWeaponModel = registerCustomWeaponModel;
           origEditorExit._devHooked = true;
           origEditorExit.addEventListener('click', function () {
             var sidebar = document.getElementById('devSidebar');
-            if (sidebar) sidebar.classList.remove('hidden');
+            if (sidebar) {
+              sidebar.classList.remove('hidden');
+              var expandTab = document.getElementById('devSidebarExpand');
+              if (expandTab) expandTab.classList.toggle('hidden', !sidebar.classList.contains('collapsed'));
+            }
             _mapEditorWasOpen = false;
             setTimeout(resizeRenderer, 50);
           });
@@ -522,9 +675,8 @@ window.registerCustomWeaponModel = registerCustomWeaponModel;
       var difficulty = document.getElementById('qtDifficulty').value;
       var mapName = document.getElementById('qtMapSelect').value;
 
-      // Hide sidebar for full-screen gameplay
-      var sidebar = document.getElementById('devSidebar');
-      if (sidebar) sidebar.classList.add('hidden');
+      // Hide all UI for full-screen gameplay
+      hideGameModeUI();
       resizeRenderer();
 
       // Set the paintball menu selectors to match our choices
@@ -548,8 +700,7 @@ window.registerCustomWeaponModel = registerCustomWeaponModel;
   if (qtTraining) {
     qtTraining.addEventListener('click', function () {
       var heroId = document.getElementById('qtHero').value;
-      var sidebar = document.getElementById('devSidebar');
-      if (sidebar) sidebar.classList.add('hidden');
+      hideGameModeUI();
       resizeRenderer();
 
       if (typeof window.startTrainingRange === 'function') {
@@ -562,14 +713,40 @@ window.registerCustomWeaponModel = registerCustomWeaponModel;
   // Override showOnlyMenu to detect when we return to mainMenu
   var origShowOnlyMenu = window.showOnlyMenu;
   window.showOnlyMenu = function (idOrNull) {
-    // Call original
+    // In the dev workbench, never show the mainMenu stub — always hide all menus
+    // when returning to main menu, since the sidebar replaces it.
+    var effectiveId = (idOrNull === 'mainMenu') ? null : idOrNull;
     if (typeof origShowOnlyMenu === 'function') {
-      origShowOnlyMenu(idOrNull);
+      origShowOnlyMenu(effectiveId);
     }
-    // If returning to main menu, restore dev sidebar
+    // If returning to main menu, restore dev sidebar and panel-specific UI
     if (idOrNull === 'mainMenu' || idOrNull === null) {
       var sidebar = document.getElementById('devSidebar');
-      if (sidebar) sidebar.classList.remove('hidden');
+      if (sidebar) {
+        sidebar.classList.remove('hidden');
+        // Preserve collapsed state — don't force uncollapse
+        var expandTab = document.getElementById('devSidebarExpand');
+        if (expandTab) expandTab.classList.toggle('hidden', !sidebar.classList.contains('collapsed'));
+      }
+      // Restore right panel and toolbar if hero editor or menu builder is active
+      if (_activePanel === 'heroEditor' || _activePanel === 'menuBuilder') {
+        var rightPanel = document.getElementById('devRightPanel');
+        var rightExpandTab = document.getElementById('devRightPanelExpand');
+        if (rightPanel) {
+          rightPanel.classList.remove('hidden');
+          if (rightExpandTab) rightExpandTab.classList.toggle('hidden', !rightPanel.classList.contains('collapsed'));
+        }
+        if (_activePanel === 'heroEditor') {
+          var heToolbar = document.getElementById('heViewportToolbar');
+          if (heToolbar) heToolbar.classList.remove('hidden');
+        }
+        if (_activePanel === 'menuBuilder') {
+          var mbToolbar = document.getElementById('mbViewportToolbar');
+          var mbPreview = document.getElementById('mbPreviewContainer');
+          if (mbToolbar) mbToolbar.classList.remove('hidden');
+          if (mbPreview) mbPreview.classList.remove('hidden');
+        }
+      }
       setTimeout(resizeRenderer, 50);
     }
   };
@@ -626,6 +803,96 @@ function animate() {
   renderer.setScissorTest(false);
   renderer.render(scene, camera);
 }
+
+// ------- Server Control -------
+(function () {
+  if (!window.devAPI || typeof window.devAPI.serverStart !== 'function') return;
+
+  var btn = document.getElementById('devServerBtn');
+  var dot = btn ? btn.querySelector('.server-dot') : null;
+  var logPanel = document.getElementById('serverLogPanel');
+  var logOutput = document.getElementById('serverLogOutput');
+  var logCloseBtn = document.getElementById('serverLogClose');
+  var _logCursorId = 0;
+  var _pollTimer = null;
+
+  function setDotState(state) {
+    if (!dot) return;
+    dot.className = 'server-dot ' + state;
+  }
+
+  function updateLogs() {
+    var entries = window.devAPI.serverLogs(_logCursorId);
+    if (!entries || !entries.length) return;
+    entries.forEach(function (entry) {
+      _logCursorId = entry.id;
+      var line = document.createElement('div');
+      line.textContent = entry.text;
+      if (entry.text.indexOf('[ERR]') === 0) line.style.color = '#ff6666';
+      logOutput.appendChild(line);
+    });
+    logOutput.scrollTop = logOutput.scrollHeight;
+  }
+
+  function startPolling() {
+    if (_pollTimer) return;
+    _pollTimer = setInterval(function () {
+      var info = window.devAPI.serverStatus();
+      setDotState(info.status);
+      if (info.status === 'error' && info.error) {
+        btn.title = 'Error: ' + info.error;
+      } else if (info.status === 'running') {
+        btn.title = 'Server running — click to stop';
+      } else if (info.status === 'stopped') {
+        btn.title = 'Start LAN server';
+        stopPolling();
+      }
+      updateLogs();
+    }, 500);
+  }
+
+  function stopPolling() {
+    if (_pollTimer) {
+      clearInterval(_pollTimer);
+      _pollTimer = null;
+    }
+  }
+
+  if (btn) {
+    btn.addEventListener('click', function () {
+      var info = window.devAPI.serverStatus();
+      if (info.status === 'running' || info.status === 'starting') {
+        window.devAPI.serverStop();
+        setDotState('stopped');
+        btn.title = 'Start LAN server';
+      } else {
+        // Clear previous log
+        if (logOutput) logOutput.innerHTML = '';
+        _logCursorId = 0;
+        window.devAPI.serverStart();
+        setDotState('starting');
+        btn.title = 'Starting server...';
+        // Show log panel
+        if (logPanel) logPanel.classList.remove('hidden');
+        startPolling();
+      }
+    });
+  }
+
+  if (logCloseBtn) {
+    logCloseBtn.addEventListener('click', function () {
+      if (logPanel) logPanel.classList.add('hidden');
+    });
+  }
+
+  // Clean shutdown on window close/reload
+  window.addEventListener('beforeunload', function () {
+    var info = window.devAPI.serverStatus();
+    if (info.status === 'running' || info.status === 'starting') {
+      window.devAPI.serverStop();
+    }
+  });
+})();
 
 // ------- Boot -------
 init();

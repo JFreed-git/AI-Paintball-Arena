@@ -10,27 +10,34 @@
   "hitbox": [
     {
       "name": "head",
-      "width": 0.5,
-      "height": 0.5,
-      "depth": 0.5,
-      "offsetY": 2.95,
-      "damageMultiplier": 1
+      "shape": "sphere",
+      "offsetX": 0,
+      "offsetY": 1.9,
+      "offsetZ": 0,
+      "damageMultiplier": 1,
+      "radius": 0.5
     },
     {
       "name": "torso",
-      "width": 0.6,
-      "height": 0.9,
-      "depth": 0.5,
-      "offsetY": 2.05,
-      "damageMultiplier": 1
+      "shape": "box",
+      "offsetX": 0,
+      "offsetY": 1.5,
+      "offsetZ": 0,
+      "damageMultiplier": 1,
+      "width": 1,
+      "height": 0.6,
+      "depth": 1
     },
     {
       "name": "legs",
-      "width": 0.5,
-      "height": 1.1,
-      "depth": 0.5,
-      "offsetY": 0.55,
-      "damageMultiplier": 1
+      "shape": "box",
+      "offsetX": 0,
+      "offsetY": 0.6,
+      "offsetZ": 0,
+      "damageMultiplier": 1,
+      "width": 1,
+      "height": 1.2,
+      "depth": 1
     }
   ],
   "modelType": "standard",

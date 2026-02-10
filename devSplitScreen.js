@@ -18,6 +18,7 @@
 (function () {
 
   window._splitScreenActive = false;
+  window.getSplitScreenState = function () { return _state; };
 
   var _state = null;
 
@@ -180,9 +181,13 @@
       var canvas = renderer.domElement;
       canvas.addEventListener('click', requestPointerLockSS);
 
-      // Hide sidebar for full-screen split view
-      var devSidebar = document.getElementById('devSidebar');
-      if (devSidebar) devSidebar.classList.add('hidden');
+      // Hide all UI for full-screen split view
+      if (typeof hideGameModeUI === 'function') {
+        hideGameModeUI();
+      } else {
+        var devSidebar = document.getElementById('devSidebar');
+        if (devSidebar) devSidebar.classList.add('hidden');
+      }
       if (typeof window.resizeRenderer === 'function') window.resizeRenderer();
 
       window._splitScreenActive = true;
@@ -252,9 +257,24 @@
     camera.aspect = renderer.domElement.width / renderer.domElement.height;
     camera.updateProjectionMatrix();
 
-    // Restore sidebar
+    // Restore sidebar (preserve collapsed state)
     var devSidebar = document.getElementById('devSidebar');
-    if (devSidebar) devSidebar.classList.remove('hidden');
+    if (devSidebar) {
+      devSidebar.classList.remove('hidden');
+      var sidebarExpandTab = document.getElementById('devSidebarExpand');
+      if (sidebarExpandTab) sidebarExpandTab.classList.toggle('hidden', !devSidebar.classList.contains('collapsed'));
+    }
+    // Restore right panel and toolbar if hero editor was active
+    if (typeof _activePanel !== 'undefined' && _activePanel === 'heroEditor') {
+      var rightPanel = document.getElementById('devRightPanel');
+      var toolbar = document.getElementById('heViewportToolbar');
+      var rightExpandTab = document.getElementById('devRightPanelExpand');
+      if (rightPanel) {
+        rightPanel.classList.remove('hidden');
+        if (rightExpandTab) rightExpandTab.classList.toggle('hidden', !rightPanel.classList.contains('collapsed'));
+      }
+      if (toolbar) toolbar.classList.remove('hidden');
+    }
     if (typeof window.resizeRenderer === 'function') {
       setTimeout(window.resizeRenderer, 50);
     }

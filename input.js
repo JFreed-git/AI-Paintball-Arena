@@ -58,6 +58,14 @@ function bindPlayerControls(renderer) {
     // Additional input hooks for Paintball mode
     renderer.domElement.addEventListener('mousedown', onMouseDownGeneric);
     renderer.domElement.addEventListener('mouseup', onMouseUpGeneric);
+    // Click canvas to acquire pointer lock when a game mode is active
+    renderer.domElement.addEventListener('click', function () {
+      var anyActive = window.paintballActive || window.multiplayerActive || window.trainingRangeActive || window._splitScreenActive;
+      if (!anyActive) return;
+      if (window._heroSelectOpen || window.devConsoleOpen) return;
+      if (document.pointerLockElement === renderer.domElement) return; // already locked
+      renderer.domElement.requestPointerLock();
+    });
   }
 
   // Global listeners
@@ -102,8 +110,9 @@ function onPointerLockChange() {
   const locked = document.pointerLockElement === canvas;
 
   if (!locked) {
-    // Hero select overlay opened — don't treat as ESC
+    // Don't treat as ESC during hero selection or between-round transitions
     if (window._heroSelectOpen) return;
+    if (window._roundTransition) return;
 
     // Heuristic:
     // - If the document is focused and visible, treat pointer unlock as explicit ESC.

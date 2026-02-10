@@ -6,7 +6,8 @@
   var routes = {
     maps:            { list: 'listMaps',         read: 'readMap',          write: 'writeMap',          del: 'deleteMap' },
     heroes:          { list: 'listHeroes',        read: 'readHero',         write: 'writeHero',         del: 'deleteHero' },
-    'weapon-models': { list: 'listWeaponModels',  read: 'readWeaponModel',  write: 'writeWeaponModel',  del: 'deleteWeaponModel' }
+    'weapon-models': { list: 'listWeaponModels',  read: 'readWeaponModel',  write: 'writeWeaponModel',  del: 'deleteWeaponModel' },
+    menus:           { list: 'listMenus',         read: 'readMenu',          write: 'writeMenu',          del: 'deleteMenu' }
   };
 
   function makeResponse(body, status) {

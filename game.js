@@ -124,6 +124,11 @@ function init() {
   if (typeof loadHeroesFromServer === 'function') {
     loadHeroesFromServer();
   }
+
+  // Load custom menu configs (overrides hardcoded HTML with saved configs)
+  if (typeof loadCustomMenus === 'function') {
+    loadCustomMenus();
+  }
 }
 
 // ------- Main loop -------

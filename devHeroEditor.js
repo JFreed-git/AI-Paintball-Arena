@@ -24,11 +24,12 @@
   // Stash crosshair spread values that have no form fields, so they round-trip on save
   var _stashedCrosshair = { baseSpreadPx: 8, sprintSpreadPx: 20 };
 
-  // Hitbox segment state (now includes offsetX, offsetZ)
+  // Hitbox segment state (now includes offsetX, offsetZ, shape, radius)
+  // shape: 'box' (default), 'sphere', 'cylinder', 'capsule'
   var _hitboxSegments = [
-    { name: "head",  width: 0.5, height: 0.5, depth: 0.5, offsetX: 0, offsetY: 2.95, offsetZ: 0, damageMultiplier: 2.0 },
-    { name: "torso", width: 0.6, height: 0.9, depth: 0.5, offsetX: 0, offsetY: 2.05, offsetZ: 0, damageMultiplier: 1.0 },
-    { name: "legs",  width: 0.5, height: 1.1, depth: 0.5, offsetX: 0, offsetY: 0.55, offsetZ: 0, damageMultiplier: 0.75 }
+    { name: "head",  shape: "box", width: 0.5, height: 0.5, depth: 0.5, offsetX: 0, offsetY: 2.95, offsetZ: 0, damageMultiplier: 2.0 },
+    { name: "torso", shape: "box", width: 0.6, height: 0.9, depth: 0.5, offsetX: 0, offsetY: 2.05, offsetZ: 0, damageMultiplier: 1.0 },
+    { name: "legs",  shape: "box", width: 0.5, height: 1.1, depth: 0.5, offsetX: 0, offsetY: 0.55, offsetZ: 0, damageMultiplier: 0.75 }
   ];
 
   // --- Undo / Redo ---
@@ -345,14 +346,41 @@
     _resizeHandles = [];
   }
 
-  function rebuildResizeHandles() {
-    clearResizeHandles();
-    if (_selectedHitboxIndex < 0 || _selectedHitboxIndex >= _hitboxSegments.length) return;
+  // Get half-dimension for a resize handle given segment and handle definition
+  function getHalfDimForHandle(seg, axis) {
+    var shape = seg.shape || 'box';
+    if (shape === 'sphere') {
+      return seg.radius || 0.25;
+    } else if (shape === 'cylinder' || shape === 'capsule') {
+      if (axis === 'y') return (seg.height || 0.5) / 2;
+      return seg.radius || 0.3;
+    }
+    // box
+    if (axis === 'x') return seg.width / 2;
+    if (axis === 'y') return seg.height / 2;
+    return seg.depth / 2;
+  }
 
-    var seg = _hitboxSegments[_selectedHitboxIndex];
-    var center = getHitboxWorldPos(seg);
-
-    var handleDefs = [
+  function getHandleDefsForShape(shape) {
+    if (shape === 'sphere') {
+      // 4 handles: ±X and ±Y, all control radius
+      return [
+        { axis: 'x', sign:  1, color: 0xff4444 },
+        { axis: 'x', sign: -1, color: 0xff4444 },
+        { axis: 'y', sign:  1, color: 0x44ff44 },
+        { axis: 'y', sign: -1, color: 0x44ff44 }
+      ];
+    } else if (shape === 'cylinder' || shape === 'capsule') {
+      // 4 handles: ±X (radius), ±Y (height)
+      return [
+        { axis: 'x', sign:  1, color: 0xff4444 },
+        { axis: 'x', sign: -1, color: 0xff4444 },
+        { axis: 'y', sign:  1, color: 0x44ff44 },
+        { axis: 'y', sign: -1, color: 0x44ff44 }
+      ];
+    }
+    // box: 6 handles
+    return [
       { axis: 'x', sign:  1, color: 0xff4444 },
       { axis: 'x', sign: -1, color: 0xff4444 },
       { axis: 'y', sign:  1, color: 0x44ff44 },
@@ -360,6 +388,16 @@
       { axis: 'z', sign:  1, color: 0x4488ff },
       { axis: 'z', sign: -1, color: 0x4488ff }
     ];
+  }
+
+  function rebuildResizeHandles() {
+    clearResizeHandles();
+    if (_selectedHitboxIndex < 0 || _selectedHitboxIndex >= _hitboxSegments.length) return;
+
+    var seg = _hitboxSegments[_selectedHitboxIndex];
+    var center = getHitboxWorldPos(seg);
+    var shape = seg.shape || 'box';
+    var handleDefs = getHandleDefsForShape(shape);
 
     for (var i = 0; i < handleDefs.length; i++) {
       var def = handleDefs[i];
@@ -368,12 +406,8 @@
       var mesh = new THREE.Mesh(geom, mat);
       mesh.renderOrder = 999;
 
-      // Position at face center
       var pos = center.clone();
-      var halfDim;
-      if (def.axis === 'x') halfDim = seg.width / 2;
-      else if (def.axis === 'y') halfDim = seg.height / 2;
-      else halfDim = seg.depth / 2;
+      var halfDim = getHalfDimForHandle(seg, def.axis);
 
       if (def.axis === 'x') pos.x += def.sign * halfDim;
       else if (def.axis === 'y') pos.y += def.sign * halfDim;
@@ -393,10 +427,7 @@
     for (var i = 0; i < _resizeHandles.length; i++) {
       var h = _resizeHandles[i];
       var pos = center.clone();
-      var halfDim;
-      if (h.axis === 'x') halfDim = seg.width / 2;
-      else if (h.axis === 'y') halfDim = seg.height / 2;
-      else halfDim = seg.depth / 2;
+      var halfDim = getHalfDimForHandle(seg, h.axis);
 
       if (h.axis === 'x') pos.x += h.sign * halfDim;
       else if (h.axis === 'y') pos.y += h.sign * halfDim;
@@ -500,7 +531,24 @@
 
     // Update segment offsets (snap center forces X/Z to 0)
     seg.offsetX = _snapCenter ? 0 : Math.round(newPos.x * 100) / 100;
-    seg.offsetY = Math.max(0, Math.round((newPos.y - feetY) * 100) / 100);
+
+    // Compute shape-specific half-height to prevent going below ground
+    var rawOffsetY = Math.round((newPos.y - feetY) * 100) / 100;
+    var shape = seg.shape || 'box';
+    var halfExtent;
+    if (shape === 'box') {
+      halfExtent = (seg.height || 0.5) / 2;
+    } else if (shape === 'sphere') {
+      halfExtent = seg.radius || 0.25;
+    } else if (shape === 'cylinder') {
+      halfExtent = (seg.height || 0.5) / 2;
+    } else if (shape === 'capsule') {
+      halfExtent = (seg.height || 0.5) / 2;
+    } else {
+      halfExtent = 0; // Fallback
+    }
+    seg.offsetY = Math.max(halfExtent, rawOffsetY);
+
     seg.offsetZ = _snapCenter ? 0 : Math.round(newPos.z * 100) / 100;
 
     // Move hitbox mesh directly (no full rebuild)
@@ -535,17 +583,49 @@
 
     _resizeStartPoint.copy(point);
 
+    var shape = seg.shape || 'box';
+
     // Store start dimension and offset
-    if (_resizeAxis === 'x') {
-      _resizeStartDim = seg.width;
-      _resizeStartOffset = seg.offsetX || 0;
-    } else if (_resizeAxis === 'y') {
-      _resizeStartDim = seg.height;
-      _resizeStartOffset = seg.offsetY;
+    if (shape === 'sphere') {
+      _resizeStartDim = seg.radius || 0.25;
+      _resizeStartOffset = (_resizeAxis === 'x') ? (seg.offsetX || 0) : seg.offsetY;
+    } else if (shape === 'cylinder' || shape === 'capsule') {
+      if (_resizeAxis === 'y') {
+        _resizeStartDim = seg.height || 0.5;
+        _resizeStartOffset = seg.offsetY;
+      } else {
+        _resizeStartDim = seg.radius || 0.3;
+        _resizeStartOffset = seg.offsetX || 0;
+      }
     } else {
-      _resizeStartDim = seg.depth;
-      _resizeStartOffset = seg.offsetZ || 0;
+      if (_resizeAxis === 'x') {
+        _resizeStartDim = seg.width;
+        _resizeStartOffset = seg.offsetX || 0;
+      } else if (_resizeAxis === 'y') {
+        _resizeStartDim = seg.height;
+        _resizeStartOffset = seg.offsetY;
+      } else {
+        _resizeStartDim = seg.depth;
+        _resizeStartOffset = seg.offsetZ || 0;
+      }
     }
+  }
+
+  // Build the appropriate geometry for a hitbox segment's shape
+  function buildHitboxGeometry(seg) {
+    var shape = seg.shape || 'box';
+    if (shape === 'sphere') {
+      return new THREE.SphereGeometry(seg.radius || 0.25, 16, 12);
+    } else if (shape === 'cylinder') {
+      var r = seg.radius || 0.3;
+      var h = seg.height || 0.5;
+      return new THREE.CylinderGeometry(r, r, h, 16);
+    } else if (shape === 'capsule') {
+      var cr = seg.radius || 0.3;
+      var ch = seg.height || 0.5;
+      return buildCapsuleGeometry(cr, ch, 16, 8);
+    }
+    return new THREE.BoxGeometry(seg.width, seg.height, seg.depth);
   }
 
   function onResizeMove(e, canvas) {
@@ -569,39 +649,74 @@
     // Apply sign: positive handle grows outward, negative handle grows outward in opposite direction
     delta *= _resizeSign;
 
-    // New dimension
-    var newDim = Math.max(0.1, _resizeStartDim + delta);
-    newDim = snapTo(newDim, 0.05);
-    newDim = Math.round(newDim * 100) / 100;
+    var shape = seg.shape || 'box';
 
-    var dimChange = newDim - _resizeStartDim;
-
-    // For negative-side handles: shift position so the opposite face stays anchored
-    var newOffset = _resizeStartOffset;
-    if (_resizeSign < 0) {
-      newOffset = _resizeStartOffset - dimChange / 2;
+    if (shape === 'sphere') {
+      // All handles control radius (no offset shift)
+      var newRadius = Math.max(0.05, _resizeStartDim + delta);
+      newRadius = snapTo(newRadius, 0.05);
+      newRadius = Math.round(newRadius * 100) / 100;
+      seg.radius = newRadius;
+    } else if (shape === 'cylinder' || shape === 'capsule') {
+      if (_resizeAxis === 'y') {
+        // Y handles control height
+        var newH = Math.max(0.1, _resizeStartDim + delta);
+        newH = snapTo(newH, 0.05);
+        newH = Math.round(newH * 100) / 100;
+        // Capsule: enforce height >= 2*radius
+        if (shape === 'capsule') {
+          var minH = 2 * (seg.radius || 0.3);
+          if (newH < minH) newH = minH;
+        }
+        var dimChange = newH - _resizeStartDim;
+        var newOffset = _resizeStartOffset;
+        if (_resizeSign < 0) newOffset = _resizeStartOffset - dimChange / 2;
+        else newOffset = _resizeStartOffset + dimChange / 2;
+        seg.height = newH;
+        seg.offsetY = Math.max(0, Math.round(newOffset * 100) / 100);
+      } else {
+        // X handles control radius (no offset shift)
+        var newR = Math.max(0.05, _resizeStartDim + delta);
+        newR = snapTo(newR, 0.05);
+        newR = Math.round(newR * 100) / 100;
+        seg.radius = newR;
+        // Capsule: enforce height >= 2*radius
+        if (shape === 'capsule' && seg.height < 2 * newR) {
+          seg.height = Math.round(2 * newR * 100) / 100;
+        }
+      }
     } else {
-      newOffset = _resizeStartOffset + dimChange / 2;
-    }
-    newOffset = Math.round(newOffset * 100) / 100;
+      // Box: existing logic
+      var newDim = Math.max(0.1, _resizeStartDim + delta);
+      newDim = snapTo(newDim, 0.05);
+      newDim = Math.round(newDim * 100) / 100;
 
-    // Apply to segment (snap center forces X/Z offset to 0, resizing symmetrically)
-    if (_resizeAxis === 'x') {
-      seg.width = newDim;
-      seg.offsetX = _snapCenter ? 0 : newOffset;
-    } else if (_resizeAxis === 'y') {
-      seg.height = newDim;
-      seg.offsetY = Math.max(0, newOffset);
-    } else {
-      seg.depth = newDim;
-      seg.offsetZ = _snapCenter ? 0 : newOffset;
+      var boxDimChange = newDim - _resizeStartDim;
+      var boxNewOffset = _resizeStartOffset;
+      if (_resizeSign < 0) {
+        boxNewOffset = _resizeStartOffset - boxDimChange / 2;
+      } else {
+        boxNewOffset = _resizeStartOffset + boxDimChange / 2;
+      }
+      boxNewOffset = Math.round(boxNewOffset * 100) / 100;
+
+      if (_resizeAxis === 'x') {
+        seg.width = newDim;
+        seg.offsetX = _snapCenter ? 0 : boxNewOffset;
+      } else if (_resizeAxis === 'y') {
+        seg.height = newDim;
+        seg.offsetY = Math.max(0, boxNewOffset);
+      } else {
+        seg.depth = newDim;
+        seg.offsetZ = _snapCenter ? 0 : boxNewOffset;
+      }
     }
 
     // Rebuild hitbox mesh geometry
     var mesh = _hitboxPreviewMeshes[_selectedHitboxIndex];
     if (mesh) {
       if (mesh.geometry) mesh.geometry.dispose();
-      mesh.geometry = new THREE.BoxGeometry(seg.width, seg.height, seg.depth);
+      mesh.geometry = buildHitboxGeometry(seg);
       var feetY = getPreviewFeetY();
       mesh.position.set(seg.offsetX || 0, feetY + seg.offsetY, seg.offsetZ || 0);
     }
@@ -623,16 +738,19 @@
     for (var i = 0; i < _hitboxSegments.length; i++) {
       if (!entries[i]) continue;
       var seg = _hitboxSegments[i];
-      var inputs = entries[i].querySelectorAll('input');
-      // Field order: Name, Width, Height, Depth, OffsetX, OffsetY, OffsetZ, DmgMult
-      if (inputs[0]) inputs[0].value = seg.name;
-      if (inputs[1]) inputs[1].value = String(seg.width);
-      if (inputs[2]) inputs[2].value = String(seg.height);
-      if (inputs[3]) inputs[3].value = String(seg.depth);
-      if (inputs[4]) inputs[4].value = String(seg.offsetX || 0);
-      if (inputs[5]) inputs[5].value = String(seg.offsetY);
-      if (inputs[6]) inputs[6].value = String(seg.offsetZ || 0);
-      if (inputs[7]) inputs[7].value = String(seg.damageMultiplier);
+
+      // Use data-key attributes for keyed lookup (shape-safe)
+      var inputs = entries[i].querySelectorAll('input[data-key]');
+      for (var j = 0; j < inputs.length; j++) {
+        var key = inputs[j].getAttribute('data-key');
+        if (key && seg[key] != null) {
+          inputs[j].value = String(seg[key]);
+        }
+      }
+
+      // Update shape dropdown
+      var shapeSelect = entries[i].querySelector('select[data-key="shape"]');
+      if (shapeSelect) shapeSelect.value = seg.shape || 'box';
     }
   }
 
@@ -714,16 +832,26 @@
       jumpVelocity: parseFloat(document.getElementById('heJumpVelocity').value) || 8.5,
 
       hitbox: _hitboxSegments.map(function (seg) {
-        return {
+        var shape = seg.shape || 'box';
+        var out = {
           name: seg.name,
-          width: seg.width,
-          height: seg.height,
-          depth: seg.depth,
+          shape: shape,
           offsetX: seg.offsetX || 0,
           offsetY: seg.offsetY,
           offsetZ: seg.offsetZ || 0,
           damageMultiplier: seg.damageMultiplier
         };
+        if (shape === 'sphere') {
+          out.radius = seg.radius || 0.25;
+        } else if (shape === 'cylinder' || shape === 'capsule') {
+          out.radius = seg.radius || 0.3;
+          out.height = seg.height || 0.5;
+        } else {
+          out.width = seg.width;
+          out.height = seg.height;
+          out.depth = seg.depth;
+        }
+        return out;
       }),
 
       modelType: 'standard',
@@ -773,23 +901,33 @@
     // Load hitbox segments
     if (Array.isArray(hero.hitbox) && hero.hitbox.length > 0) {
       _hitboxSegments = hero.hitbox.map(function (seg) {
-        return {
+        var shape = seg.shape || 'box';
+        var out = {
           name: seg.name || 'segment',
-          width: seg.width || 0.5,
-          height: seg.height || 0.5,
-          depth: seg.depth || 0.5,
+          shape: shape,
           offsetX: seg.offsetX || 0,
           offsetY: seg.offsetY || 1.0,
           offsetZ: seg.offsetZ || 0,
           damageMultiplier: seg.damageMultiplier || 1.0
         };
+        if (shape === 'sphere') {
+          out.radius = seg.radius || 0.25;
+        } else if (shape === 'cylinder' || shape === 'capsule') {
+          out.radius = seg.radius || 0.3;
+          out.height = seg.height || 0.5;
+        } else {
+          out.width = seg.width || 0.5;
+          out.height = seg.height || 0.5;
+          out.depth = seg.depth || 0.5;
+        }
+        return out;
       });
     } else {
       // Legacy single-box format fallback
       _hitboxSegments = [
-        { name: "head",  width: 0.5, height: 0.5, depth: 0.5, offsetX: 0, offsetY: 2.95, offsetZ: 0, damageMultiplier: 2.0 },
-        { name: "torso", width: 0.6, height: 0.9, depth: 0.5, offsetX: 0, offsetY: 2.05, offsetZ: 0, damageMultiplier: 1.0 },
-        { name: "legs",  width: 0.5, height: 1.1, depth: 0.5, offsetX: 0, offsetY: 0.55, offsetZ: 0, damageMultiplier: 0.75 }
+        { name: "head",  shape: "box", width: 0.5, height: 0.5, depth: 0.5, offsetX: 0, offsetY: 2.95, offsetZ: 0, damageMultiplier: 2.0 },
+        { name: "torso", shape: "box", width: 0.6, height: 0.9, depth: 0.5, offsetX: 0, offsetY: 2.05, offsetZ: 0, damageMultiplier: 1.0 },
+        { name: "legs",  shape: "box", width: 0.5, height: 1.1, depth: 0.5, offsetX: 0, offsetY: 0.55, offsetZ: 0, damageMultiplier: 0.75 }
       ];
     }
     _selectedHitboxIndex = -1;
@@ -896,7 +1034,7 @@
     }
     _hitboxPreviewMeshes = [];
 
-    // Add wireframe boxes at scene level (world coordinates)
+    // Add wireframe shapes at scene level (world coordinates)
     var segColors = { head: 0xff4444, torso: 0x44ff44, legs: 0x4488ff };
     var defaultColor = 0xffff44;
     var feetY = getPreviewFeetY();
@@ -904,13 +1042,12 @@
     for (var si = 0; si < _hitboxSegments.length; si++) {
       var seg = _hitboxSegments[si];
       var segColor = segColors[seg.name] || defaultColor;
-      var boxGeom = new THREE.BoxGeometry(seg.width, seg.height, seg.depth);
-      var boxMat = new THREE.MeshBasicMaterial({ color: segColor, wireframe: true, transparent: true, opacity: 0.3 });
-      var boxMesh = new THREE.Mesh(boxGeom, boxMat);
-      // Position at world coordinates: offsetX, feetY + offsetY, offsetZ
-      boxMesh.position.set(seg.offsetX || 0, feetY + seg.offsetY, seg.offsetZ || 0);
-      _hitboxGroup.add(boxMesh);
-      _hitboxPreviewMeshes.push(boxMesh);
+      var geom = buildHitboxGeometry(seg);
+      var mat = new THREE.MeshBasicMaterial({ color: segColor, wireframe: true, transparent: true, opacity: 0.3 });
+      var mesh = new THREE.Mesh(geom, mat);
+      mesh.position.set(seg.offsetX || 0, feetY + seg.offsetY, seg.offsetZ || 0);
+      _hitboxGroup.add(mesh);
+      _hitboxPreviewMeshes.push(mesh);
     }
 
     // Restore selection visual and resize handles
@@ -928,6 +1065,7 @@
     pushUndo();
     _hitboxSegments.push({
       name: 'segment',
+      shape: 'box',
       width: 0.5,
       height: 0.5,
       depth: 0.5,
@@ -953,6 +1091,37 @@
     updateHeroPreview();
   }
 
+  // Get the fields to show for a given hitbox shape
+  function getFieldsForShape(shape) {
+    var common = [
+      { label: 'Name', key: 'name', type: 'text' },
+    ];
+    var dimensionFields;
+    if (shape === 'sphere') {
+      dimensionFields = [
+        { label: 'Radius', key: 'radius', step: 0.05, type: 'number' }
+      ];
+    } else if (shape === 'cylinder' || shape === 'capsule') {
+      dimensionFields = [
+        { label: 'Radius', key: 'radius', step: 0.05, type: 'number' },
+        { label: 'Height', key: 'height', step: 0.1, type: 'number' }
+      ];
+    } else {
+      dimensionFields = [
+        { label: 'Width', key: 'width', step: 0.1, type: 'number' },
+        { label: 'Height', key: 'height', step: 0.1, type: 'number' },
+        { label: 'Depth', key: 'depth', step: 0.1, type: 'number' }
+      ];
+    }
+    var offsetFields = [
+      { label: 'Offset X', key: 'offsetX', step: 0.1, type: 'number' },
+      { label: 'Offset Y', key: 'offsetY', step: 0.1, type: 'number' },
+      { label: 'Offset Z', key: 'offsetZ', step: 0.1, type: 'number' },
+      { label: 'Dmg Mult', key: 'damageMultiplier', step: 0.25, type: 'number' }
+    ];
+    return common.concat(dimensionFields, offsetFields);
+  }
+
   function renderHitboxSegmentList() {
     var container = document.getElementById('heHitboxList');
     if (!container) return;
@@ -972,16 +1141,58 @@
       header.appendChild(removeBtn);
       div.appendChild(header);
 
-      var fields = [
-        { label: 'Name', key: 'name', type: 'text' },
-        { label: 'Width', key: 'width', step: 0.1, type: 'number' },
-        { label: 'Height', key: 'height', step: 0.1, type: 'number' },
-        { label: 'Depth', key: 'depth', step: 0.1, type: 'number' },
-        { label: 'Offset X', key: 'offsetX', step: 0.1, type: 'number' },
-        { label: 'Offset Y', key: 'offsetY', step: 0.1, type: 'number' },
-        { label: 'Offset Z', key: 'offsetZ', step: 0.1, type: 'number' },
-        { label: 'Dmg Mult', key: 'damageMultiplier', step: 0.25, type: 'number' }
-      ];
+      // Shape dropdown
+      var shapeRow = document.createElement('div');
+      shapeRow.className = 'dev-field';
+      var shapeLbl = document.createElement('label');
+      shapeLbl.textContent = 'Shape';
+      var shapeSelect = document.createElement('select');
+      shapeSelect.setAttribute('data-key', 'shape');
+      ['box', 'sphere', 'cylinder', 'capsule'].forEach(function (s) {
+        var opt = document.createElement('option');
+        opt.value = s;
+        opt.textContent = s.charAt(0).toUpperCase() + s.slice(1);
+        if ((seg.shape || 'box') === s) opt.selected = true;
+        shapeSelect.appendChild(opt);
+      });
+      shapeSelect.addEventListener('change', function () {
+        pushUndo();
+        var newShape = shapeSelect.value;
+        var oldShape = seg.shape || 'box';
+
+        seg.shape = newShape;
+
+        // Migrate dimensions between shapes
+        if (newShape === 'sphere') {
+          if (!seg.radius) {
+            seg.radius = (oldShape === 'box') ? Math.max(seg.width, seg.height, seg.depth) / 2 : 0.25;
+          }
+        } else if (newShape === 'cylinder' || newShape === 'capsule') {
+          if (!seg.radius) {
+            seg.radius = (oldShape === 'box') ? Math.max(seg.width, seg.depth) / 2 : 0.3;
+          }
+          if (!seg.height && oldShape === 'box') {
+            seg.height = seg.height || 0.5;
+          }
+          if (newShape === 'capsule' && seg.height < 2 * seg.radius) {
+            seg.height = 2 * seg.radius;
+          }
+        } else {
+          // box
+          if (!seg.width) seg.width = (oldShape !== 'box' && seg.radius) ? seg.radius * 2 : 0.5;
+          if (!seg.height) seg.height = seg.height || 0.5;
+          if (!seg.depth) seg.depth = (oldShape !== 'box' && seg.radius) ? seg.radius * 2 : 0.5;
+        }
+
+        renderHitboxSegmentList();
+        updateHeroPreview();
+      });
+      shapeRow.appendChild(shapeLbl);
+      shapeRow.appendChild(shapeSelect);
+      div.appendChild(shapeRow);
+
+      // Dimension + offset fields, conditional on shape
+      var fields = getFieldsForShape(seg.shape || 'box');
 
       fields.forEach(function (f) {
         var row = document.createElement('div');
@@ -990,6 +1201,7 @@
         lbl.textContent = f.label;
         var inp = document.createElement('input');
         inp.type = f.type || 'number';
+        inp.setAttribute('data-key', f.key);
         if (f.step) inp.step = String(f.step);
         inp.value = String(seg[f.key] != null ? seg[f.key] : 0);
         inp.addEventListener('input', function () {
@@ -998,6 +1210,13 @@
             seg[f.key] = inp.value;
           } else {
             seg[f.key] = parseFloat(inp.value) || 0;
+          }
+          // Capsule: enforce height >= 2*radius
+          if (seg.shape === 'capsule' && (f.key === 'radius' || f.key === 'height')) {
+            if (seg.height < 2 * seg.radius) {
+              if (f.key === 'radius') seg.height = Math.round(2 * seg.radius * 100) / 100;
+              else seg.height = Math.round(2 * seg.radius * 100) / 100;
+            }
           }
           updateHeroPreview();
         });

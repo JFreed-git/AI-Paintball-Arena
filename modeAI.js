@@ -38,6 +38,7 @@
 
     return {
       difficulty: difficulty || 'Easy',
+      _heroId: null,
       arena: null,
       ai: null,
       player: null, // Player instance created after state
@@ -101,6 +102,7 @@
         }
       },
       onReady: function () {
+        window._roundTransition = false;
         state.inputEnabled = true;
         state.match.roundActive = true;
       }
@@ -174,11 +176,18 @@
       return;
     }
 
+    window._roundTransition = true;
     showRoundBanner(winner === 'player' ? 'Player wins the round!' : 'AI wins the round!', 1200);
     setTimeout(function () {
+      if (!state) { window._roundTransition = false; return; }
       resetEntitiesForRound();
       updateHUD();
-      startHeroSelectPhase();
+      if (state._heroId) {
+        applyHeroWeapon(state._heroId);
+        startRoundCountdown(3);
+      } else {
+        startHeroSelectPhase();
+      }
     }, 1200);
   }
 
@@ -346,8 +355,13 @@
 
     // If a hero was pre-selected (e.g. dev workbench quick test), skip hero selection
     if (opts && opts._heroId) {
+      state._heroId = opts._heroId;
       applyHeroWeapon(opts._heroId);
       startRoundCountdown(3);
+      // Request pointer lock since hero selection (which normally locks) is skipped
+      if (renderer && renderer.domElement && renderer.domElement.requestPointerLock) {
+        renderer.domElement.requestPointerLock();
+      }
     } else {
       startHeroSelectPhase();
     }
@@ -359,6 +373,7 @@
 
   window.stopPaintballInternal = function (showMenu) {
     if (showMenu === undefined) showMenu = true;
+    window._roundTransition = false;
     // Close hero select overlay if open
     try { if (typeof window.closePreRoundHeroSelect === 'function') window.closePreRoundHeroSelect(); } catch (e) {}
     if (state && state.loopHandle) {

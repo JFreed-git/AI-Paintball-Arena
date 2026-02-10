@@ -14,12 +14,22 @@
  *
  * SEGMENTED HITBOX SYSTEM:
  *   Each player has an array of hitbox segments (head, torso, legs, etc.) stored
- *   in _hitboxConfig. Each segment has name, width, height, depth, offsetX,
- *   offsetY, offsetZ (relative to feet/center), and damageMultiplier. offsetX and
- *   offsetZ default to 0 for backward compat. Segments are repositioned each frame
- *   in _syncMeshPosition() via _updateHitboxes(). getHitSegments() returns the
- *   current positioned segments for collision testing. getHitTarget() is kept for
- *   backward compat (returns a bounding sphere enclosing all segments).
+ *   in _hitboxConfig. Supports 4 shape types via `shape` field:
+ *     - 'box' (default): width, height, depth → AABB Box3
+ *     - 'sphere': radius → center Vector3 + radius
+ *     - 'cylinder': radius, height → center Vector3 + radius + halfHeight
+ *     - 'capsule': radius, height → center Vector3 + radius + halfHeight
+ *   All shapes have: name, offsetX, offsetY, offsetZ, damageMultiplier.
+ *   Segments without a shape field default to 'box' for backward compat.
+ *   Segments are repositioned each frame in _syncMeshPosition() via
+ *   _updateHitboxes(). getHitSegments() returns the current positioned segments
+ *   for collision testing. getHitTarget() returns a bounding sphere enclosing
+ *   all segments (works with all shapes).
+ *
+ * CAPSULE GEOMETRY:
+ *   buildCapsuleGeometry(radius, totalHeight, radialSegs, heightSegs) creates a
+ *   capsule using LatheGeometry (Three.js r128 has no CapsuleGeometry). Exposed
+ *   on window for use by devHeroEditor.js and devConsole.js.
  *
  * WEAPON ATTACHMENT SYSTEM:
  *   The player mesh uses a swappable weapon attachment point (_weaponAttachPoint),
@@ -160,6 +170,42 @@
     }
   };
 
+  // --- Capsule Geometry (Three.js r128 has no CapsuleGeometry) ---
+
+  function buildCapsuleGeometry(radius, totalHeight, radialSegs, heightSegs) {
+    radialSegs = radialSegs || 16;
+    heightSegs = heightSegs || 8;
+    var halfH = totalHeight / 2;
+    var bodyHalfH = Math.max(0, halfH - radius);
+
+    // Build 2D profile for LatheGeometry: south pole → bottom equator → top equator → north pole
+    // LatheGeometry revolves a 2D profile (x, y) around the Y axis.
+    // Profile traces the right edge of the capsule from bottom to top.
+    var points = [];
+    var hemiSegs = Math.max(4, Math.floor(heightSegs / 2));
+
+    // Bottom hemisphere (south pole up to equator)
+    // angle: -PI/2 (south pole, x=0) to 0 (equator, x=radius)
+    for (var i = 0; i <= hemiSegs; i++) {
+      var angle = -Math.PI / 2 + (Math.PI / 2) * (i / hemiSegs);
+      var x = Math.cos(angle) * radius;
+      var y = Math.sin(angle) * radius - bodyHalfH;
+      points.push(new THREE.Vector2(x, y));
+    }
+
+    // Top hemisphere (equator up to north pole)
+    // angle: 0 (equator, x=radius) to PI/2 (north pole, x=0)
+    // LatheGeometry connects last bottom point to first top point → straight side
+    for (var j = 0; j <= hemiSegs; j++) {
+      var angle2 = (Math.PI / 2) * (j / hemiSegs);
+      var x2 = Math.cos(angle2) * radius;
+      var y2 = Math.sin(angle2) * radius + bodyHalfH;
+      points.push(new THREE.Vector2(x2, y2));
+    }
+
+    return new THREE.LatheGeometry(points, radialSegs);
+  }
+
   // --- Segmented Hitbox ---
 
   Player.prototype.setHitboxConfig = function (config) {
@@ -175,12 +221,42 @@
   Player.prototype._buildHitSegments = function () {
     this._hitSegments = [];
     for (var i = 0; i < this._hitboxConfig.length; i++) {
-      var seg = this._hitboxConfig[i];
-      this._hitSegments.push({
-        name: seg.name,
-        box: new THREE.Box3(),
-        damageMultiplier: seg.damageMultiplier || 1.0
-      });
+      var cfg = this._hitboxConfig[i];
+      var shape = cfg.shape || 'box';
+      if (shape === 'sphere') {
+        this._hitSegments.push({
+          name: cfg.name,
+          shape: 'sphere',
+          center: new THREE.Vector3(),
+          radius: cfg.radius || 0.25,
+          damageMultiplier: cfg.damageMultiplier || 1.0
+        });
+      } else if (shape === 'cylinder') {
+        this._hitSegments.push({
+          name: cfg.name,
+          shape: 'cylinder',
+          center: new THREE.Vector3(),
+          radius: cfg.radius || 0.3,
+          halfHeight: (cfg.height || 0.5) / 2,
+          damageMultiplier: cfg.damageMultiplier || 1.0
+        });
+      } else if (shape === 'capsule') {
+        this._hitSegments.push({
+          name: cfg.name,
+          shape: 'capsule',
+          center: new THREE.Vector3(),
+          radius: cfg.radius || 0.3,
+          halfHeight: (cfg.height || 0.5) / 2,
+          damageMultiplier: cfg.damageMultiplier || 1.0
+        });
+      } else {
+        this._hitSegments.push({
+          name: cfg.name,
+          shape: 'box',
+          box: new THREE.Box3(),
+          damageMultiplier: cfg.damageMultiplier || 1.0
+        });
+      }
     }
   };
 
@@ -191,14 +267,20 @@
     for (var i = 0; i < this._hitboxConfig.length; i++) {
       var cfg = this._hitboxConfig[i];
       var seg = this._hitSegments[i];
-      var hw = cfg.width / 2;
-      var hh = cfg.height / 2;
-      var hd = cfg.depth / 2;
       var cx = posX + (cfg.offsetX || 0);
       var cy = feetY + cfg.offsetY;
       var cz = posZ + (cfg.offsetZ || 0);
-      seg.box.min.set(cx - hw, cy - hh, cz - hd);
-      seg.box.max.set(cx + hw, cy + hh, cz + hd);
+      var shape = seg.shape || 'box';
+
+      if (shape === 'sphere' || shape === 'cylinder' || shape === 'capsule') {
+        seg.center.set(cx, cy, cz);
+      } else {
+        var hw = cfg.width / 2;
+        var hh = cfg.height / 2;
+        var hd = cfg.depth / 2;
+        seg.box.min.set(cx - hw, cy - hh, cz - hd);
+        seg.box.max.set(cx + hw, cy + hh, cz + hd);
+      }
     }
   };
 
@@ -299,9 +381,31 @@
   Player.prototype.getHitTarget = function () {
     // Backward compat: bounding sphere enclosing all segments
     if (this._hitSegments.length > 0) {
-      var merged = this._hitSegments[0].box.clone();
-      for (var i = 1; i < this._hitSegments.length; i++) {
-        merged.union(this._hitSegments[i].box);
+      var merged = new THREE.Box3();
+      var initialized = false;
+      for (var i = 0; i < this._hitSegments.length; i++) {
+        var seg = this._hitSegments[i];
+        var segBox;
+        var shape = seg.shape || 'box';
+        if (shape === 'sphere') {
+          segBox = new THREE.Box3(
+            new THREE.Vector3(seg.center.x - seg.radius, seg.center.y - seg.radius, seg.center.z - seg.radius),
+            new THREE.Vector3(seg.center.x + seg.radius, seg.center.y + seg.radius, seg.center.z + seg.radius)
+          );
+        } else if (shape === 'cylinder' || shape === 'capsule') {
+          segBox = new THREE.Box3(
+            new THREE.Vector3(seg.center.x - seg.radius, seg.center.y - seg.halfHeight, seg.center.z - seg.radius),
+            new THREE.Vector3(seg.center.x + seg.radius, seg.center.y + seg.halfHeight, seg.center.z + seg.radius)
+          );
+        } else {
+          segBox = seg.box;
+        }
+        if (!initialized) {
+          merged.copy(segBox);
+          initialized = true;
+        } else {
+          merged.union(segBox);
+        }
       }
       var center = merged.getCenter(new THREE.Vector3());
       var sphere = merged.getBoundingSphere(new THREE.Sphere());
@@ -456,5 +560,6 @@
   };
 
   window.Player = Player;
+  window.buildCapsuleGeometry = buildCapsuleGeometry;
 
 })();

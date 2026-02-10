@@ -27,7 +27,7 @@ app.use(express.json({ limit: '1mb' }));
 
 // Block dev workbench files from being served to LAN players
 var DEV_BLOCKED = ['/dev.html', '/devApp.js', '/devApp.css', '/devHeroEditor.js', '/devSplitScreen.js',
-  '/electron-main.js', '/electron-preload.js', '/electron-fetch-shim.js', '/mapEditor.js'];
+  '/electron-main.js', '/electron-preload.js', '/electron-fetch-shim.js', '/mapEditor.js', '/menuBuilder.js'];
 app.use(function (req, res, next) {
   if (DEV_BLOCKED.indexOf(req.path) !== -1) return res.status(404).end();
   next();
@@ -102,6 +102,62 @@ app.delete('/api/maps/:name', function (req, res) {
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ error: 'Failed to delete map' });
+  }
+});
+
+// ── Menu REST API ──
+const MENUS_DIR = path.join(__dirname, 'menus');
+
+function ensureMenusDir() {
+  if (!fs.existsSync(MENUS_DIR)) fs.mkdirSync(MENUS_DIR, { recursive: true });
+}
+
+app.get('/api/menus', function (req, res) {
+  ensureMenusDir();
+  try {
+    var files = fs.readdirSync(MENUS_DIR).filter(function (f) { return f.endsWith('.json'); });
+    var names = files.map(function (f) { return f.replace(/\.json$/, ''); });
+    res.json(names);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to list menus' });
+  }
+});
+
+app.get('/api/menus/:name', function (req, res) {
+  var name = sanitizeMapName(req.params.name);
+  if (!name) return res.status(400).json({ error: 'Invalid menu name' });
+  var filePath = path.join(MENUS_DIR, name + '.json');
+  if (!fs.existsSync(filePath)) return res.status(404).json({ error: 'Menu not found' });
+  try {
+    var data = fs.readFileSync(filePath, 'utf8');
+    res.type('json').send(data);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to read menu' });
+  }
+});
+
+app.post('/api/menus/:name', function (req, res) {
+  var name = sanitizeMapName(req.params.name);
+  if (!name) return res.status(400).json({ error: 'Invalid menu name' });
+  ensureMenusDir();
+  try {
+    fs.writeFileSync(path.join(MENUS_DIR, name + '.json'), JSON.stringify(req.body, null, 2), 'utf8');
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to save menu' });
+  }
+});
+
+app.delete('/api/menus/:name', function (req, res) {
+  var name = sanitizeMapName(req.params.name);
+  if (!name) return res.status(400).json({ error: 'Invalid menu name' });
+  var filePath = path.join(MENUS_DIR, name + '.json');
+  if (!fs.existsSync(filePath)) return res.status(404).json({ error: 'Menu not found' });
+  try {
+    fs.unlinkSync(filePath);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to delete menu' });
   }
 });
 

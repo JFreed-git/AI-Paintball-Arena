@@ -51,6 +51,11 @@
       cameraAttached: false,
       weapon: new Weapon()
     });
+
+    // Apply Marksman hero for proper model, hitbox, health, and weapon
+    if (typeof window.applyHeroToPlayer === 'function') {
+      window.applyHeroToPlayer(this.player, 'marksman');
+    }
   }
 
   TrainingBot.prototype.update = function (dt, cameraPos) {
@@ -124,6 +129,9 @@
   TrainingBot.prototype.respawn = function () {
     var spawnPos = this.patrolPath.length > 0 ? this.patrolPath[0] : new THREE.Vector3(0, GROUND_Y + EYE_HEIGHT, 0);
     this.player.resetForRound(spawnPos);
+    if (typeof window.applyHeroToPlayer === 'function') {
+      window.applyHeroToPlayer(this.player, 'marksman');
+    }
     this.player.setVisible(true);
     this.alive = true;
     this._pathIndex = 0;

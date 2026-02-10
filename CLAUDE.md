@@ -41,6 +41,12 @@ All JS files use IIFEs `(function() { ... })()` for scope isolation. Public APIs
 | `abilities.js` | Ability system runtime. `AbilityManager` class with `hasPassive()`, `getCooldownPercent()`, `isReady()`, `update(dt)`, `reset()`. Cooldown tracking and passive lookup are implemented; activation via input and effect callbacks are still TODO. Hero abilities (dash, double jump) go on the hero; weapon abilities (scope) go on the weapon. |
 | `heroSelectUI.js` | Hero selection overlay UI. Builds card-based overlay from `window.HEROES`, handles pre-round timed selection for competitive modes and untimed 'H' key toggle for training. Exports: `showPreRoundHeroSelect(opts)`, `closePreRoundHeroSelect()`, `showHeroSelectWaiting()`, `openHeroSelect()`, `closeHeroSelect()`, `isHeroSelectOpen()`, `getCurrentHeroId()`, `_heroSelectOpen`. Uses `GAME_CONFIG.HERO_SELECT_SECONDS` for timer. |
 
+### Menu System
+
+| File | Purpose |
+|------|---------|
+| `menuRenderer.js` | Menu config → DOM renderer. `MENU_DEFAULTS` defines all 5 game menus (main, paintball, training, LAN, result) as JSON configs with absolute x/y positioned elements. `renderMenuFromConfig(config)` builds a standalone DOM element from a config. `renderAllMenus(configMap)` replaces existing menu DOM elements with rendered configs. `loadCustomMenus()` fetches custom configs from `/api/menus`, merges with defaults, renders, and re-calls `bindUI()`. Loaded in both `index.html` and `dev.html` before `menuNavigation.js`. Each element has `uid`, `type`, `x`, `y`, `width`, `height`, and type-specific fields (text, elementId, variant, action, label, options, etc.). Supports `config.fullScreen: true` for viewport-filling menus (100% width/height, no centering transform). |
+
 ### Input, UI, Environment
 
 | File | Purpose |
@@ -53,7 +59,7 @@ All JS files use IIFEs `(function() { ... })()` for scope isolation. Public APIs
 
 | File | Purpose |
 |------|---------|
-| `player.js` | Unified `Player` class used by all modes. Holds position/physics state, health, weapon, 3D mesh, 3D health bar, and **segmented hitbox** (head/torso/legs AABB boxes with damage multipliers and offsetX/offsetY/offsetZ positioning). Compatible with `updateFullPhysics()` (same property shape). Features a **weapon attachment point** system — `_weaponAttachPoint` is a `THREE.Group` for swappable weapon models via `swapWeaponModel(modelType)`. Body meshes tagged with `userData.isBodyPart = true` for hero recoloring. `_jumpVelocity` is overridable per hero. `setHitboxConfig(config)` sets hitbox segments from hero data; `getHitSegments()` returns positioned AABB segments for collision; `getHitTarget()` returns a bounding sphere for backward compat. **TODO:** Per-hero visual models. |
+| `player.js` | Unified `Player` class used by all modes. Holds position/physics state, health, weapon, 3D mesh, 3D health bar, and **segmented hitbox** with multiple shape types (box/sphere/cylinder/capsule, with damage multipliers and offsetX/offsetY/offsetZ positioning). Compatible with `updateFullPhysics()` (same property shape). Features a **weapon attachment point** system — `_weaponAttachPoint` is a `THREE.Group` for swappable weapon models via `swapWeaponModel(modelType)`. Body meshes tagged with `userData.isBodyPart = true` for hero recoloring. `_jumpVelocity` is overridable per hero. `setHitboxConfig(config)` sets hitbox segments from hero data; `getHitSegments()` returns positioned segments for collision (shape-aware: box→AABB, sphere/cylinder/capsule→center+radius+halfHeight); `getHitTarget()` returns a bounding sphere for backward compat. `buildCapsuleGeometry()` utility for Three.js r128 (no native CapsuleGeometry). **TODO:** Per-hero visual models. |
 | `arenaBuilder.js` | Shared arena construction helpers. `arenaAddSolidBox()`, `arenaAddFloor()`, `arenaAddPerimeterWalls()`, `arenaAddTrees()`. Shared tree materials in `ARENA_TREE_MATERIALS`. Uses `GROUND_Y` from physics.js. |
 | `arenaCompetitive.js` | Competitive arena layout. `buildPaintballArenaSymmetric()` returns `{group, colliders, solids, waypoints, spawns: {A, B}}`. Z-symmetric cover placement, AI waypoint graph (25-point), gold spawn rings, and scenery trees. Uses `arenaBuilder.js` helpers. |
 | `arenaTraining.js` | Training range arena. `buildTrainingRangeArena()` returns `{group, colliders, solids, spawns, targetPositions, botPatrolPaths}`. 80x100m arena with 3 shooting lanes (targets at 15/25/35m), open field with cover, and bot patrol routes. Uses `arenaBuilder.js` helpers. |
@@ -64,7 +70,7 @@ All JS files use IIFEs `(function() { ... })()` for scope isolation. Public APIs
 
 | File | Purpose |
 |------|---------|
-| `projectiles.js` | Unified weapon firing with both **hitscan** and **projectile** paths. `sharedFireWeapon(weapon, origin, baseDir, opts)` handles pellet loop, spread, ammo management. When `weapon.projectileSpeed > 0`, spawns traveling projectile entities via `spawnProjectile()`; otherwise uses instant hitscan raycast. Targets support **segmented hitboxes** (`{segments: [...]}` with AABB + damage multipliers) and legacy sphere hitboxes (`{position, radius}`). `onHit` callback receives `damageMultiplier` as 5th arg. `rayHitsAABB()` and `testHitSegments()` provide ray-AABB collision. `updateProjectiles(dt)` advances all live projectiles each frame. `clearAllProjectiles()` removes all on round/mode end. `spawnVisualProjectile()` creates damage-free projectiles for client-side LAN visuals. **TODO:** Splash damage when `weapon.splashRadius > 0`. |
+| `projectiles.js` | Unified weapon firing with both **hitscan** and **projectile** paths. `sharedFireWeapon(weapon, origin, baseDir, opts)` handles pellet loop, spread, ammo management. When `weapon.projectileSpeed > 0`, spawns traveling projectile entities via `spawnProjectile()`; otherwise uses instant hitscan raycast. Targets support **segmented hitboxes** with multiple shapes (`{segments: [...]}` — box/sphere/cylinder/capsule + damage multipliers) and legacy sphere hitboxes (`{position, radius}`). `onHit` callback receives `damageMultiplier` as 5th arg. `testHitSegments()` dispatches by `seg.shape` to shape-specific ray intersection: `rayHitsAABB()` (box), `rayHitsSphereDetailed()` (sphere), `rayHitsCylinder()` (cylinder), `rayHitsCapsule()` (capsule). `updateProjectiles(dt)` advances all live projectiles each frame. `clearAllProjectiles()` removes all on round/mode end. `spawnVisualProjectile()` creates damage-free projectiles for client-side LAN visuals. **TODO:** Splash damage when `weapon.splashRadius > 0`. |
 | `aiOpponent.js` | AI opponent for single-player mode. 7-state state machine (SPAWN_RUSH, PATROL, ENGAGE, SEEK_COVER, HOLD_COVER, FLANK, STUCK_RECOVER) with 3 playstyles (aggressive, defensive, balanced). A* pathfinding on waypoint graph, cover scoring, layered strafing, stuck detection. Difficulty via aim error and reaction time. Applies Marksman hero on construction for proper hitbox segments and weapon. Shoots using segmented hitboxes (`ctx.playerSegments`) with damage multipliers. |
 | `trainingBot.js` | Simple patrol bots for training range. Non-combatant, ping-pong along multi-waypoint patrol paths at walking speed, 3s respawn on death. Uses Player composition. **TODO:** Bot difficulty variants, visual variants, non-linear patrol paths. |
 
@@ -81,7 +87,7 @@ All JS files use IIFEs `(function() { ... })()` for scope isolation. Public APIs
 | File | Purpose |
 |------|---------|
 | `game.js` | Application bootstrap. Creates Three.js `scene`, `camera`, `renderer` as bare globals. Camera is added to scene so children render. Runs the master render loop. Manages first-person weapon viewmodel (camera-attached): `setFirstPersonWeapon(modelType)`, `clearFirstPersonWeapon()`. Viewmodel uses `depthTest:false` to render on top. |
-| `devConsole.js` | Password-protected developer console. God mode, unlimited ammo, spectator camera, kill enemy, heal player, hitbox visualization (color-coded wireframe boxes per segment: red=head, green=torso, blue=legs, yellow=custom), AI state display, map editor access. Toggle with 'C' key. |
+| `devConsole.js` | Password-protected developer console. God mode, unlimited ammo, spectator camera, kill enemy, heal player, hitbox visualization (color-coded wireframe shapes per segment: red=head, green=torso, blue=legs, yellow=custom — geometry matches actual shape type), AI state display, map editor access. Toggle with 'C' key. |
 | `server.js` | Node.js/Express + Socket.IO relay server. Serves static files, manages rooms (2 players per room), stores per-room settings (rounds to win), forwards messages. No game logic. Serves read-only REST API for maps and heroes (editing happens in the Electron dev workbench). Seeds built-in heroes to `heroes/` on startup. |
 
 ### Dev Workbench (Electron App)
@@ -91,13 +97,14 @@ Standalone **Electron desktop app** that loads the exact same game JS files — 
 | File | Purpose |
 |------|---------|
 | `electron-main.js` | Electron entry point. Creates BrowserWindow (1400x900), loads `dev.html` as a local file, sets up preload script. |
-| `electron-preload.js` | Electron preload script. Exposes `window.devAPI` via `contextBridge` with filesystem CRUD methods for `heroes/`, `weapon-models/`, and `maps/` directories. Same sanitization as server.js (`a-zA-Z0-9_-`, max 50 chars). |
+| `electron-preload.js` | Electron preload script. Exposes `window.devAPI` via `contextBridge` with filesystem CRUD methods for `heroes/`, `weapon-models/`, `maps/`, and `menus/` directories. Same sanitization as server.js (`a-zA-Z0-9_-`, max 50 chars). Also exposes server process management: `serverStart()` spawns `node server.js` as a child process, `serverStop()` sends SIGTERM with 3s SIGKILL fallback, `serverStatus()` returns `{status, error}`, `serverLogs(sinceId)` returns incremental log entries. Server process is killed on app exit. |
 | `electron-fetch-shim.js` | Loaded as the first `<script>` in `dev.html`. When `window.devAPI` exists (Electron), monkey-patches `window.fetch` to intercept `/api/*` calls and route to filesystem via `devAPI`. Safe no-op when not in Electron. |
-| `dev.html` | Dev workbench HTML page with sidebar layout, panel DOM, split-screen HUD elements, dev console DOM, map editor DOM (copied from index.html), and script includes. Loads all shared game JS files plus dev-specific files. |
-| `devApp.css` | Sidebar layout (300px default, 450px expanded), panel styles, split-screen HUD, editor forms, weapon model builder parts UI, collapsible section styles, viewport-mode preview styles. |
-| `devApp.js` | Dev workbench bootstrap. Creates `scene`/`camera`/`renderer` as bare globals (same as game.js). Sidebar navigation, panel switching with expanded layout (hero editor and WMB panels expand sidebar to 450px and move 3D preview to viewport), dropdown population, custom hero/weapon-model loading from filesystem, map editor integration, quick test mode launch, first-person weapon viewmodel management. Overrides `showOnlyMenu` to restore sidebar when game modes end. Exports: `getAllHeroes()`, `CUSTOM_HEROES`, `registerCustomWeaponModel()`, `resizeRenderer()`. |
-| `devSplitScreen.js` | Split-screen two-player mode. Dual viewports via `renderer.setViewport/setScissor`. Tab key switches active player. Per-player cameras, weapon viewmodels, HUD, and crosshairs. Physics, shooting, and respawn for both players. Hides sidebar on start, restores on stop. Exports: `startSplitScreen(opts)`, `stopSplitScreen()`, `_splitScreenActive`. |
-| `devHeroEditor.js` | Hero/weapon stat editor with live 3D orbit-camera preview (drag to orbit, scroll to zoom). Collapsible form sections (Weapon, Scope, Crosshair, Visual collapsed by default). Form for all hero fields (stats, weapon, scope, crosshair, visual, projectile speed/gravity). **Hitbox Segment Builder**: add/remove/edit named hitbox segments (head/torso/legs/custom) with 3D wireframe box preview color-coded by segment name. Hitbox wireframes are scene-level objects in `_hitboxGroup` (not parented to scaled player mesh). **Interactive hitbox editing**: click hitbox wireframe to select (turns semi-transparent solid), drag to move in full 3D (camera-facing plane drag, updates offsetX/Y/Z). 6 resize handles at face centers (red=X, green=Y, blue=Z spheres) for resizing width/height/depth with opposite-face anchoring. "Hide Model" button toggles player body/weapon visibility. Save/load/delete custom heroes via filesystem. Weapon Model Builder: compose models from box/cylinder parts with live orbit-camera 3D preview, register into `WEAPON_MODEL_REGISTRY`, save/load/delete via filesystem. Exports: `_initHeroEditorPreview()`, `_initWmbPreview()`, `_refreshWmbLoadList()`, `_resizeHeroEditorPreview()`, `_resizeWmbPreview()`. |
+| `dev.html` | Dev workbench HTML page with three-column layout: left sidebar, viewport (with floating toolbar), right hitbox panel. Split-screen HUD elements, dev console DOM, map editor DOM. Loads all shared game JS files plus dev-specific files. |
+| `devApp.css` | Three-column layout (left sidebar 300px/450px expanded, viewport flex, right panel 300px). Collapsible sidebars (`.collapsed` class → 0 width) with expand-tab buttons. Floating viewport toolbar (`#heViewportToolbar`). Split-screen HUD, editor forms, weapon model builder parts UI, collapsible section styles, viewport-mode preview styles. |
+| `devApp.js` | Dev workbench bootstrap. Creates `scene`/`camera`/`renderer` as bare globals (same as game.js). Sidebar navigation, panel switching with expanded layout (hero editor, WMB, and menu builder panels expand sidebar to 450px and move previews to viewport). `switchPanel` also shows/hides right panel content and floating toolbars based on active panel (hitbox segments for hero editor, element properties for menu builder). `toggleSidebar()`/`toggleRightPanel()` collapse/expand sidebars. `hideGameModeUI()` hides all panels + expand tabs + menu builder preview for full-screen gameplay. Overrides `showOnlyMenu` to restore sidebar and panel-specific UI (preserving collapsed state) when game modes end. Exports: `getAllHeroes()`, `CUSTOM_HEROES`, `registerCustomWeaponModel()`, `resizeRenderer()`. |
+| `devSplitScreen.js` | Split-screen two-player mode. Dual viewports via `renderer.setViewport/setScissor`. Tab key switches active player. Per-player cameras, weapon viewmodels, HUD, and crosshairs. Physics, shooting, and respawn for both players. Uses `hideGameModeUI()` on start; restores sidebar, right panel, and toolbar on stop (preserving collapsed state). Exports: `startSplitScreen(opts)`, `stopSplitScreen()`, `_splitScreenActive`. |
+| `devHeroEditor.js` | Hero/weapon stat editor with live 3D orbit-camera preview (drag to orbit, scroll to zoom). Collapsible form sections (Weapon, Scope, Crosshair, Visual collapsed by default). Form for all hero fields (stats, weapon, scope, crosshair, visual, projectile speed/gravity). **Hitbox editing lives in the right panel** (`#devRightPanel`): add/remove/edit named hitbox segments (head/torso/legs/custom) with 3D wireframe preview color-coded by segment name. Hitbox wireframes are scene-level objects in `_hitboxGroup` (not parented to scaled player mesh). **Interactive hitbox editing**: click hitbox wireframe to select (turns semi-transparent solid), drag to move in full 3D (camera-facing plane drag, updates offsetX/Y/Z). Resize handles at face centers (red=X, green=Y, blue=Z spheres) for resizing with opposite-face anchoring. "Hide Model" and "Snap Center" buttons live in a floating viewport toolbar (`#heViewportToolbar`). Save/load/delete custom heroes via filesystem. Weapon Model Builder: compose models from box/cylinder parts with live orbit-camera 3D preview, register into `WEAPON_MODEL_REGISTRY`, save/load/delete via filesystem. Exports: `_initHeroEditorPreview()`, `_initWmbPreview()`, `_refreshWmbLoadList()`, `_resizeHeroEditorPreview()`, `_resizeWmbPreview()`. |
+| `menuBuilder.js` | Visual menu builder (Electron dev workbench only). Three-column layout: left sidebar (menu selector, container props, element list, add buttons), viewport (live draggable DOM preview with grid overlay), right panel (selected element properties). Drag elements to reposition (x/y), drag resize handles to resize (width/height). Grid snapping (10px/5px/off toggle). **Snap-to-alignment**: when dragging, elements snap to other elements' edges and centers with pink guide lines (6px threshold, toggleable via toolbar). **Full screen mode**: checkbox to make container fill entire viewport (hides width/height fields, renders 100% in game). **Transparent background**: Clear button sets background to `transparent` for layering over custom backgrounds. Element list in sidebar with click-to-select and remove buttons. Property panel shows type-specific fields (text, ID, variant, action, label, options, min/max/step, etc.) plus position/size and style overrides. Undo/redo via JSON snapshot stack (Ctrl+Z / Ctrl+Shift+Z). Save/load menu configs to filesystem via `/api/menus`. Exports: `_initMenuBuilderPreview()`, `_resizeMenuBuilderPreview()`. |
 
 ### Other Files
 
@@ -114,7 +121,7 @@ Scripts load in this order in index.html (dependencies flow top-to-bottom):
 Three.js (CDN) → Socket.IO (CDN) →
 config.js → weapon.js → weaponModels.js → physics.js → crosshair.js →
 hud.js → roundFlow.js → heroes.js → abilities.js → heroSelectUI.js →
-menuNavigation.js → input.js → environment.js →
+menuRenderer.js → menuNavigation.js → input.js → environment.js →
 player.js → arenaBuilder.js → arenaCompetitive.js → arenaTraining.js →
 mapFormat.js →
 projectiles.js → aiOpponent.js → trainingBot.js →
@@ -126,9 +133,9 @@ dev.html (Electron) loads the same shared scripts but replaces game.js with dev-
 
 ```
 Three.js (CDN) → electron-fetch-shim.js →
-[same shared scripts as index.html: config.js through modeTraining.js] →
+[same shared scripts as index.html: config.js through modeTraining.js, including menuRenderer.js] →
 mapEditor.js →
-devSplitScreen.js → devHeroEditor.js → devConsole.js → devApp.js
+menuBuilder.js → devSplitScreen.js → devHeroEditor.js → devConsole.js → devApp.js
 ```
 
 ## Hero System
@@ -137,23 +144,36 @@ Heroes define a character's complete profile: health, movement speeds, jump velo
 
 ### Hitbox System
 
-Each hero defines an array of named hitbox segments:
+Each hero defines an array of named hitbox segments with a `shape` field:
 
 ```js
 hitbox: [
-  { name: "head",  width: 0.5, height: 0.5, depth: 0.5, offsetX: 0, offsetY: 2.95, offsetZ: 0, damageMultiplier: 2.0 },
-  { name: "torso", width: 0.6, height: 0.9, depth: 0.5, offsetX: 0, offsetY: 2.05, offsetZ: 0, damageMultiplier: 1.0 },
-  { name: "legs",  width: 0.5, height: 1.1, depth: 0.5, offsetX: 0, offsetY: 0.55, offsetZ: 0, damageMultiplier: 0.75 }
+  { name: "head",  shape: "sphere", radius: 0.25, offsetX: 0, offsetY: 2.95, offsetZ: 0, damageMultiplier: 2.0 },
+  { name: "torso", shape: "box", width: 0.6, height: 0.9, depth: 0.5, offsetX: 0, offsetY: 2.05, offsetZ: 0, damageMultiplier: 1.0 },
+  { name: "legs",  shape: "capsule", radius: 0.25, height: 1.1, offsetX: 0, offsetY: 0.55, offsetZ: 0, damageMultiplier: 0.75 }
 ]
 ```
 
+**Supported shapes and their dimension fields:**
+
+| Shape | Fields | Notes |
+|-------|--------|-------|
+| `box` (default) | width, height, depth | AABB. Segments without a `shape` field default to box for backward compat. |
+| `sphere` | radius | Single radius, centered at offset position |
+| `cylinder` | radius, height | Y-axis aligned finite cylinder with flat caps |
+| `capsule` | radius, height | Y-axis aligned, height includes hemispherical caps. Enforces `height >= 2*radius`. |
+
+**Common fields (all shapes):** name, shape, offsetX, offsetY, offsetZ, damageMultiplier.
+
 - `offsetX`, `offsetY`, `offsetZ` position the segment center relative to the player's feet position (offsetX/offsetZ default to 0 for backward compat)
 - `damageMultiplier` scales damage on hit (2.0 = headshot double damage)
-- Segments are AABB boxes repositioned each frame in `Player._updateHitboxes()`
-- `Player.getHitSegments()` returns the positioned segments for collision
-- `Player.getHitTarget()` returns a backward-compat bounding sphere enclosing all segments
-- The hero editor provides interactive 3D hitbox editing: click to select, drag to move in 3D, resize handles at face centers (6 colored spheres: red=X, green=Y, blue=Z), toggle model visibility to inspect hitboxes clearly
-- Dev console hitbox visualization shows color-coded wireframe boxes per segment
+- Segments are repositioned each frame in `Player._updateHitboxes()`: box shapes update AABB min/max, sphere/cylinder/capsule shapes update center Vector3
+- `Player.getHitSegments()` returns the positioned segments for collision — `testHitSegments()` in `projectiles.js` dispatches by `seg.shape` to the appropriate ray intersection function
+- `Player.getHitTarget()` returns a backward-compat bounding sphere enclosing all segments (works with all shapes)
+- Ray intersection functions: `rayHitsSphereDetailed()`, `rayHitsCylinder()`, `rayHitsCapsule()` in `projectiles.js`
+- `buildCapsuleGeometry(radius, totalHeight, radialSegs, heightSegs)` in `player.js` — Three.js r128 has no CapsuleGeometry, so this uses `LatheGeometry` with a hemisphere+sides profile. Exposed on `window` for use by devHeroEditor.js and devConsole.js.
+- The hero editor provides interactive 3D hitbox editing: shape dropdown per segment (box/sphere/cylinder/capsule) with conditional form fields, click to select, drag to move in 3D, shape-specific resize handles (box: 6 handles, sphere: 4, cylinder/capsule: 4), toggle model visibility to inspect hitboxes clearly
+- Dev console hitbox visualization shows color-coded wireframe shapes per segment (geometry matched to actual shape/dimensions)
 
 ### Projectile System
 
@@ -220,7 +240,7 @@ Movement is full 3D — horizontal XZ walking plus vertical gravity, jumping, an
 - `arena.solids` (Mesh array) = ground-height raycasting, bullet raycasting, AI line-of-sight.
 - `arena.colliders` (Box3 array) = movement collision.
 
-**Combat** uses visible traveling projectiles by default (`projectileSpeed: 120` m/s), with hitscan as a fallback when `projectileSpeed` is 0/null. Player hitboxes are **segmented AABBs** (head/torso/legs) with per-segment damage multipliers — headshots deal 2x damage, leg shots 0.75x. `sharedFireWeapon()` in `projectiles.js` is the single entry point for all weapon firing across all modes. `updateProjectiles(dt)` must be called each frame by the active game mode to advance live projectiles.
+**Combat** uses visible traveling projectiles by default (`projectileSpeed: 120` m/s), with hitscan as a fallback when `projectileSpeed` is 0/null. Player hitboxes are **segmented shapes** (head/torso/legs) supporting box, sphere, cylinder, and capsule shape types, with per-segment damage multipliers — headshots deal 2x damage, leg shots 0.75x. `sharedFireWeapon()` in `projectiles.js` is the single entry point for all weapon firing across all modes. `testHitSegments()` dispatches ray intersection by shape type. `updateProjectiles(dt)` must be called each frame by the active game mode to advance live projectiles.
 
 ## Networking Protocol (Socket.IO events)
 
@@ -236,11 +256,14 @@ GET              /api/maps                — List saved map names
 
 GET              /api/heroes/:id          — Hero config JSON (read-only)
 GET              /api/heroes              — List saved hero names
+
+GET/POST/DELETE  /api/menus/:name         — Menu config JSON (read-write)
+GET              /api/menus               — List saved menu names
 ```
 
-Names use sanitization (`a-zA-Z0-9_-`, max 50 chars). Storage dirs: `maps/`, `heroes/`. Built-in heroes are seeded to `heroes/` on server startup if not already present.
+Names use sanitization (`a-zA-Z0-9_-`, max 50 chars). Storage dirs: `maps/`, `heroes/`, `menus/`. Built-in heroes are seeded to `heroes/` on server startup if not already present.
 
-The Electron dev workbench handles full CRUD for heroes and weapon-models via `window.devAPI` (filesystem access through `contextBridge`). Storage dirs: `heroes/`, `weapon-models/`.
+The Electron dev workbench handles full CRUD for heroes, weapon-models, and menus via `window.devAPI` (filesystem access through `contextBridge`). Storage dirs: `heroes/`, `weapon-models/`, `menus/`.
 
 ## UI Flow
 
@@ -261,14 +284,16 @@ The dev workbench is a standalone **Electron desktop app** (`npm run dev`). It l
 ```
 
 ### Features
-- **Split-Screen**: Two viewports side by side. Tab key switches which player you control. Both players use the same physics, shooting, and weapon systems as the real game. Sidebar hides during play, restores on stop.
-- **Hero Editor**: Edit all hero stats with a live 3D orbit-camera preview (drag to orbit, scroll to zoom). Sidebar expands to 450px and preview fills the main viewport for full visibility. Collapsible form sections (Weapon, Scope, Crosshair, Visual collapsed by default). **Enhanced interactive hitbox editing**: hitbox wireframes are scene-level objects (not parented to scaled player mesh) for accurate raycasting. Click a hitbox to select it (turns semi-transparent solid), drag to move in full 3D space (camera-facing plane drag updates offsetX/Y/Z). When selected, 6 resize handles appear at face centers (red spheres=X, green=Y, blue=Z); drag handles to resize width/height/depth with opposite-face anchoring. "Hide Model" button toggles player body/weapon visibility to inspect hitboxes clearly. Form fields include offsetX, offsetY, offsetZ for each segment. Save/load custom heroes to filesystem. Custom heroes appear in all dropdowns alongside built-in heroes.
+- **Split-Screen**: Two viewports side by side. Tab key switches which player you control. Both players use the same physics, shooting, and weapon systems as the real game. All UI hides during play, restores on stop.
+- **Hero Editor**: Three-column layout: left sidebar (character/stats/weapon form, 450px expanded), 3D viewport (orbit-camera preview with floating toolbar), right panel (hitbox segments, 300px). Both sidebars are collapsible via `«`/`»` buttons — collapsed sidebars shrink to 0 and show an expand tab at the viewport edge. **Floating viewport toolbar** shows "Hide Model" and "Snap Center" buttons centered over the 3D preview. **Right hitbox panel** has undo/redo toolbar, segment list (add/remove/edit named hitbox segments), and `+ Segment` button. Hitbox wireframes are scene-level objects for accurate raycasting. Click to select (turns semi-transparent solid), drag to move in full 3D space (camera-facing plane drag updates offsetX/Y/Z). Resize handles at face centers (red=X, green=Y, blue=Z). Save/load custom heroes to filesystem. Custom heroes appear in all dropdowns alongside built-in heroes.
 - **Weapon Model Builder**: Compose weapon models from box/cylinder parts with a live orbit-camera 3D preview (fills viewport when active). Register models into `WEAPON_MODEL_REGISTRY` for use in-game.
+- **Menu Builder**: Visual drag-and-drop editor for game menus. Three-column layout: left sidebar (menu selector, container dimensions, element list with add/remove), viewport (live DOM preview centered, elements draggable to reposition, resize handles on selection), right panel (selected element properties — type, text, ID, action, position, size, style overrides). Supports all element types: heading, text, button, slider, select, numberInput, textInput, divider, image. Grid snapping (10px/5px/off), grid overlay toggle. Undo/redo via JSON snapshot stack. Save/load to filesystem. Reset to defaults. Custom menus override game HTML when loaded at startup via `loadCustomMenus()`.
 - **Map Editor**: Full visual editor with 7 shape types (box, cylinder, half-cylinder, ramp, wedge, L-shape, arch), dropdown shape selector, Z/X/quad mirror modes, multi-select, copy/paste, flexible spawn placement with team colors, arena boundary visualization, and player-mode preview.
 - **Quick Test**: Launch AI Match or Training Range directly with chosen hero/difficulty/map.
 - **Dev Console**: Press C during gameplay to open dev console (same as main game). Hitbox visualization, god mode, unlimited ammo, spectator camera, AI state display.
+- **Server Control**: "Server" button in sidebar header with status dot (gray=stopped, amber pulse=starting, green glow=running, red=error). Click to start/stop the game server (`node server.js`) directly from the workbench. Collapsible log panel at the bottom of the sidebar shows live server output. Server is automatically stopped on window close/reload.
 
 ### Key Architecture Decisions
-- `devApp.js` replaces `game.js` but provides the same globals (`scene`, `camera`, `renderer`) and the same functions (`setFirstPersonWeapon`, `clearFirstPersonWeapon`). It also overrides `showOnlyMenu` to restore the dev sidebar when game modes end via ESC. `switchPanel` handles expanded layout: moves preview containers into the viewport with `.viewport-mode` class, adds `.expanded` to sidebar, and calls resize functions. `input.js` checks `window._splitScreenActive` alongside the other mode flags for mouse look and ESC handling.
+- `devApp.js` replaces `game.js` but provides the same globals (`scene`, `camera`, `renderer`) and the same functions (`setFirstPersonWeapon`, `clearFirstPersonWeapon`). It overrides `showOnlyMenu` to restore the dev sidebar and panel-specific UI (right panel, floating toolbars, menu builder preview) when game modes end via ESC, preserving collapsed state. `switchPanel` handles expanded layout: moves preview containers into the viewport with `.viewport-mode` class, adds `.expanded` to sidebar, and calls resize functions. It also shows/hides `#devRightPanel` content (hitbox segments for hero editor, element properties for menu builder) and floating toolbars (`#heViewportToolbar`, `#mbViewportToolbar`) based on active panel. `hideGameModeUI()` is a shared helper that hides both sidebars, toolbars, menu builder preview, and expand tabs for full-screen gameplay. `toggleSidebar()`/`toggleRightPanel()` toggle `.collapsed` class (0 width) and show/hide expand-tab buttons. `input.js` checks `window._splitScreenActive` alongside the other mode flags for mouse look and ESC handling.
 - **Fetch interception**: `electron-fetch-shim.js` monkey-patches `window.fetch` when `window.devAPI` exists (Electron). All `/api/*` calls are intercepted and routed to the filesystem. When `devAPI` doesn't exist (web game), fetch works normally. This means **zero changes** to `mapFormat.js`, `devHeroEditor.js`, or `devApp.js`.
 - **Socket.IO**: Not loaded in `dev.html`. `modeLAN.js` is still included but only calls `io()` inside `ensureSocket()` which is never invoked at module load time. LAN mode is not available from the dev workbench.

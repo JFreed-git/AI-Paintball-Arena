@@ -24,6 +24,12 @@
   var PASSWORD = 'devpower5';
   var authenticated = false;
   window.devAuthenticated = false;
+
+  // Auto-authenticate in dev workbench (Electron)
+  if (window.devAPI) {
+    authenticated = true;
+    window.devAuthenticated = true;
+  }
   window.devGodMode = false;
   window.devShowHitboxes = false;
 
@@ -31,6 +37,8 @@
   function getActiveState() {
     if (window.paintballActive && window.getPaintballState) return window.getPaintballState();
     if (window.multiplayerActive && window.getMultiplayerState) return window.getMultiplayerState();
+    if (window.trainingRangeActive && window.getTrainingRangeState) return window.getTrainingRangeState();
+    if (window._splitScreenActive && window.getSplitScreenState) return window.getSplitScreenState();
     return null;
   }
 
@@ -104,7 +112,7 @@
     window.devConsoleOpen = false;
     consoleEl.classList.add('hidden');
     // Re-engage pointer lock if in game
-    if ((window.paintballActive || window.multiplayerActive) && renderer && renderer.domElement) {
+    if ((window.paintballActive || window.multiplayerActive || window.trainingRangeActive || window._splitScreenActive) && renderer && renderer.domElement) {
       try { renderer.domElement.requestPointerLock(); } catch (e) { console.warn('devConsole: requestPointerLock failed', e); }
     }
   }
@@ -273,6 +281,21 @@
           players.push(state.players.client);
         }
       }
+      // Training Range bots
+      if (state.bots) {
+        for (var bi = 0; bi < state.bots.length; bi++) {
+          if (state.bots[bi].alive && state.bots[bi].player) {
+            players.push(state.bots[bi].player);
+          }
+        }
+      }
+      // Split Screen mode
+      if (state.p1 && state.p1.player && state.p1.player.alive) {
+        players.push(state.p1.player);
+      }
+      if (state.p2 && state.p2.player && state.p2.player.alive) {
+        players.push(state.p2.player);
+      }
     }
 
     // Collect collider boxes from arena
@@ -293,21 +316,37 @@
       var segColorMap = { head: 0xff4444, torso: 0x44ff44, legs: 0x4488ff };
       var defaultSegColor = 0xffff44;
 
-      // Create wireframe boxes for each player's hitbox segments
+      // Create wireframe shapes for each player's hitbox segments
       for (var i = 0; i < players.length; i++) {
         var p = players[i];
         var segments = (typeof p.getHitSegments === 'function') ? p.getHitSegments() : [];
         for (var s = 0; s < segments.length; s++) {
           var seg = segments[s];
           var segColor = segColorMap[seg.name] || defaultSegColor;
-          // Create a unit box; we'll scale/position each frame
-          var boxGeom = new THREE.BoxGeometry(1, 1, 1);
+          var shape = seg.shape || 'box';
+          var geom;
+
+          if (shape === 'sphere') {
+            geom = new THREE.SphereGeometry(seg.radius || 0.25, 16, 12);
+          } else if (shape === 'cylinder') {
+            geom = new THREE.CylinderGeometry(seg.radius, seg.radius, seg.halfHeight * 2, 16);
+          } else if (shape === 'capsule') {
+            geom = (typeof buildCapsuleGeometry === 'function')
+              ? buildCapsuleGeometry(seg.radius, seg.halfHeight * 2, 16, 8)
+              : new THREE.CylinderGeometry(seg.radius, seg.radius, seg.halfHeight * 2, 16);
+          } else {
+            geom = new THREE.BoxGeometry(1, 1, 1);
+          }
+
           var boxMat = new THREE.MeshBasicMaterial({ color: segColor, wireframe: true, transparent: true, opacity: 0.5 });
-          var boxMesh = new THREE.Mesh(boxGeom, boxMat);
+          var boxMesh = new THREE.Mesh(geom, boxMat);
           boxMesh.renderOrder = 998;
           boxMesh._isHitboxSegment = true;
           boxMesh._playerIdx = i;
           boxMesh._segIdx = s;
+          boxMesh._segShape = shape;
+          boxMesh._segRadius = seg.radius || 0;
+          boxMesh._segHalfHeight = seg.halfHeight || 0;
           scene.add(boxMesh);
           hitboxVisuals.push(boxMesh);
         }
@@ -328,7 +367,7 @@
       }
     }
 
-    // Update segment box positions and sizes from live hitbox data
+    // Update segment positions and sizes from live hitbox data
     for (var vi = 0; vi < hitboxVisuals.length; vi++) {
       var vis = hitboxVisuals[vi];
       if (vis._isHitboxSegment) {
@@ -338,11 +377,39 @@
           var segments = (typeof players[playerIdx].getHitSegments === 'function') ? players[playerIdx].getHitSegments() : [];
           if (segIdx < segments.length) {
             var seg = segments[segIdx];
-            var segBox = seg.box;
-            var center = segBox.getCenter(new THREE.Vector3());
-            var size = segBox.getSize(new THREE.Vector3());
-            vis.position.copy(center);
-            vis.scale.set(size.x, size.y, size.z);
+            var shape = seg.shape || 'box';
+
+            if (shape === 'sphere' || shape === 'cylinder' || shape === 'capsule') {
+              vis.position.copy(seg.center);
+              vis.scale.set(1, 1, 1);
+
+              // Rebuild geometry if shape/dimensions changed
+              var needsRebuild = (vis._segShape !== shape) ||
+                (vis._segRadius !== seg.radius) ||
+                (vis._segHalfHeight !== seg.halfHeight);
+              if (needsRebuild) {
+                if (vis.geometry) vis.geometry.dispose();
+                if (shape === 'sphere') {
+                  vis.geometry = new THREE.SphereGeometry(seg.radius, 16, 12);
+                } else if (shape === 'cylinder') {
+                  vis.geometry = new THREE.CylinderGeometry(seg.radius, seg.radius, seg.halfHeight * 2, 16);
+                } else if (shape === 'capsule') {
+                  vis.geometry = (typeof buildCapsuleGeometry === 'function')
+                    ? buildCapsuleGeometry(seg.radius, seg.halfHeight * 2, 16, 8)
+                    : new THREE.CylinderGeometry(seg.radius, seg.radius, seg.halfHeight * 2, 16);
+                }
+                vis._segShape = shape;
+                vis._segRadius = seg.radius;
+                vis._segHalfHeight = seg.halfHeight;
+              }
+            } else {
+              // box: use center + scale from box min/max
+              var segBox = seg.box;
+              var center = segBox.getCenter(new THREE.Vector3());
+              var size = segBox.getSize(new THREE.Vector3());
+              vis.position.copy(center);
+              vis.scale.set(size.x, size.y, size.z);
+            }
           }
         }
       }

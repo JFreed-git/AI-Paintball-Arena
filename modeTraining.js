@@ -16,6 +16,7 @@
 
 (function () {
   window.trainingRangeActive = false;
+  window.getTrainingRangeState = function () { return state; };
 
   var WALK_SPEED = 4.5;
   var SPRINT_SPEED = 8.5;

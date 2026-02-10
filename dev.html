@@ -11,12 +11,15 @@
     <div id="devSidebar">
         <div id="devSidebarHeader">
             <h2>Dev Workbench</h2>
+            <button id="devServerBtn" class="dev-btn-server" title="Start LAN server"><span class="server-dot stopped"></span>Server</button>
+            <button id="devSidebarCollapse" class="dev-sidebar-collapse-btn" title="Collapse sidebar">&laquo;</button>
         </div>
         <nav id="devNav">
             <button class="dev-nav-btn active" data-panel="splitScreen">Split Screen</button>
             <button class="dev-nav-btn" data-panel="heroEditor">Hero Editor</button>
             <button class="dev-nav-btn" data-panel="weaponModelBuilder">Model Builder</button>
             <button class="dev-nav-btn" data-panel="mapEditor">Map Editor</button>
+            <button class="dev-nav-btn" data-panel="menuBuilder">Menu Builder</button>
             <button class="dev-nav-btn" data-panel="quickTest">Quick Test</button>
         </nav>
         <div id="devPanels">
@@ -72,20 +75,6 @@
                         <div class="dev-field"><label>Walk Speed</label><input type="number" id="heWalkSpeed" value="4.5" step="0.1" /></div>
                         <div class="dev-field"><label>Sprint Speed</label><input type="number" id="heSprintSpeed" value="8.5" step="0.1" /></div>
                         <div class="dev-field"><label>Jump Velocity</label><input type="number" id="heJumpVelocity" value="8.5" step="0.5" /></div>
-                    </div>
-
-                    <h4 class="dev-section-header">Hitbox Segments</h4>
-                    <div class="dev-hitbox-toolbar">
-                        <button id="heToggleModel" class="dev-btn-secondary">Hide Model</button>
-                        <button id="heSnapCenter" class="dev-btn-secondary">Snap Center: Off</button>
-                        <button id="heUndo" class="dev-btn-secondary" disabled title="Ctrl+Z">Undo</button>
-                        <button id="heRedo" class="dev-btn-secondary" disabled title="Ctrl+Shift+Z">Redo</button>
-                    </div>
-                    <div class="dev-section-content">
-                        <div id="heHitboxList" class="dev-scrollable"></div>
-                        <div class="dev-actions">
-                            <button id="heHitboxAdd" class="dev-btn-secondary">+ Segment</button>
-                        </div>
                     </div>
 
                     <h4 class="dev-section-header">Weapon</h4>
@@ -175,13 +164,9 @@
                 </div>
             </div>
 
-            <!-- Map Editor Panel -->
+            <!-- Map Editor Panel (auto-opens via switchPanel, button hidden) -->
             <div id="panelMapEditor" class="dev-panel">
-                <h3>Map Editor</h3>
-                <p class="dev-hint">Opens the full map editor using the 3D viewport.</p>
-                <div class="dev-actions">
-                    <button id="meOpen" class="dev-btn-primary">Open Map Editor</button>
-                </div>
+                <button id="meOpen" class="dev-btn-primary" style="display:none">Open Map Editor</button>
             </div>
 
             <!-- Quick Test Panel -->
@@ -210,10 +195,78 @@
                     <button id="qtTraining" class="dev-btn-secondary">Training Range</button>
                 </div>
             </div>
+            <!-- Menu Builder Panel -->
+            <div id="panelMenuBuilder" class="dev-panel">
+                <h3>Menu Builder</h3>
+                <div class="dev-field">
+                    <label>Menu</label>
+                    <select id="mbMenuSelect"></select>
+                </div>
+                <div class="dev-actions">
+                    <button id="mbNewMenu" class="dev-btn-secondary">New</button>
+                    <button id="mbDeleteMenu" class="dev-btn-danger">Delete</button>
+                </div>
+
+                <h4 class="dev-section-header">Container</h4>
+                <div class="dev-section-content">
+                    <div class="dev-field"><label>Full Screen</label><input type="checkbox" id="mbContainerFS" /></div>
+                    <div class="dev-field" id="mbContainerWRow"><label>Width</label><input type="number" id="mbContainerW" value="420" min="100" step="10" /></div>
+                    <div class="dev-field" id="mbContainerHRow"><label>Height</label><input type="number" id="mbContainerH" value="240" min="100" step="10" /></div>
+                    <div class="dev-field"><label>Background</label><div style="display:flex;gap:4px;flex:1;"><input type="text" id="mbContainerBg" value="" placeholder="transparent" style="flex:1;" /><button id="mbContainerBgClear" class="dev-btn-secondary" style="padding:2px 8px;font-size:11px;">Clear</button></div></div>
+                    <div class="dev-field"><label>Border Rad</label><input type="number" id="mbContainerBR" value="12" min="0" step="1" /></div>
+                </div>
+
+                <h4>Elements</h4>
+                <div id="mbElementList" class="dev-scrollable" style="max-height:300px;"></div>
+
+                <div class="dev-actions" style="flex-wrap:wrap;">
+                    <button class="dev-btn-secondary mb-add-btn" data-type="heading">+ Heading</button>
+                    <button class="dev-btn-secondary mb-add-btn" data-type="button">+ Button</button>
+                    <button class="dev-btn-secondary mb-add-btn" data-type="text">+ Text</button>
+                </div>
+                <div class="dev-actions" style="flex-wrap:wrap;">
+                    <button class="dev-btn-secondary mb-add-btn" data-type="slider">+ Slider</button>
+                    <button class="dev-btn-secondary mb-add-btn" data-type="select">+ Select</button>
+                    <button class="dev-btn-secondary mb-add-btn" data-type="numberInput">+ Number</button>
+                </div>
+                <div class="dev-actions" style="flex-wrap:wrap;">
+                    <button class="dev-btn-secondary mb-add-btn" data-type="textInput">+ Text In</button>
+                    <button class="dev-btn-secondary mb-add-btn" data-type="divider">+ Divider</button>
+                </div>
+
+                <div class="dev-actions" style="margin-top:12px;">
+                    <button id="mbSave" class="dev-btn-primary">Save</button>
+                    <button id="mbResetDefault" class="dev-btn-secondary">Reset Default</button>
+                </div>
+                <div class="dev-actions">
+                    <button id="mbUndo" class="dev-btn-secondary" disabled>Undo</button>
+                    <button id="mbRedo" class="dev-btn-secondary" disabled>Redo</button>
+                </div>
+            </div>
+        </div>
+        <div id="serverLogPanel" class="hidden">
+            <div id="serverLogHeader">
+                <span>Server Log</span>
+                <button id="serverLogClose" title="Close log">&times;</button>
+            </div>
+            <div id="serverLogOutput"></div>
         </div>
     </div>
 
     <div id="devViewport">
+        <button id="devSidebarExpand" class="dev-sidebar-expand-btn hidden" title="Expand sidebar">&raquo;</button>
+        <div id="mbPreviewContainer" class="hidden">
+            <div id="mbMenuPreview"></div>
+        </div>
+        <div id="mbViewportToolbar" class="hidden">
+            <button id="mbSnapToggle" class="dev-btn-secondary">Snap: 10px</button>
+            <button id="mbAlignToggle" class="dev-btn-secondary active">Align Snap</button>
+            <button id="mbGridToggle" class="dev-btn-secondary">Show Grid</button>
+        </div>
+        <div id="heViewportToolbar" class="hidden">
+            <button id="heToggleModel" class="dev-btn-secondary">Hide Model</button>
+            <button id="heSnapCenter" class="dev-btn-secondary">Snap Center: Off</button>
+        </div>
         <div id="gameContainer">
             <!-- Round UI -->
             <div id="roundBanner" class="hidden"></div>
@@ -388,6 +441,81 @@
         </div>
     </div>
 
+    <div id="devRightPanel" class="hidden">
+        <div id="devRightPanelHeader">
+            <h3>Hitbox Segments</h3>
+            <button id="devRightPanelCollapse" class="dev-sidebar-collapse-btn" title="Collapse panel">&raquo;</button>
+        </div>
+        <div id="devRightPanelContent">
+            <div class="dev-hitbox-toolbar">
+                <button id="heUndo" class="dev-btn-secondary" disabled title="Ctrl+Z">Undo</button>
+                <button id="heRedo" class="dev-btn-secondary" disabled title="Ctrl+Shift+Z">Redo</button>
+            </div>
+            <div id="heHitboxList"></div>
+            <div class="dev-actions">
+                <button id="heHitboxAdd" class="dev-btn-secondary">+ Segment</button>
+            </div>
+        </div>
+
+        <!-- Menu Builder Element Properties -->
+        <div id="mbRightPanelContent" class="hidden" style="flex:1;overflow-y:auto;padding:12px;">
+            <div class="dev-field"><label>Type</label><select id="mbElType">
+                <option value="heading">Heading</option>
+                <option value="text">Text</option>
+                <option value="button">Button</option>
+                <option value="numberInput">Number Input</option>
+                <option value="textInput">Text Input</option>
+                <option value="slider">Slider</option>
+                <option value="select">Select</option>
+                <option value="divider">Divider</option>
+                <option value="image">Image</option>
+            </select></div>
+            <div class="dev-field"><label>Text</label><input type="text" id="mbElText" /></div>
+            <div class="dev-field" id="mbElTagRow"><label>Tag</label><select id="mbElTag">
+                <option value="h1">H1</option><option value="h2">H2</option><option value="h3">H3</option>
+            </select></div>
+            <div class="dev-field" id="mbElIdRow"><label>Element ID</label><input type="text" id="mbElId" /></div>
+            <div class="dev-field" id="mbElVariantRow"><label>Variant</label><select id="mbElVariant">
+                <option value="primary">Primary</option><option value="secondary">Secondary</option>
+            </select></div>
+            <div class="dev-field" id="mbElActionRow"><label>Action</label><input type="text" id="mbElAction" placeholder="showMenu:menuId" /></div>
+            <div class="dev-field" id="mbElLabelRow"><label>Label</label><input type="text" id="mbElLabel" /></div>
+            <div class="dev-field" id="mbElPlaceholderRow"><label>Placeholder</label><input type="text" id="mbElPlaceholder" /></div>
+            <div class="dev-field" id="mbElMinRow"><label>Min</label><input type="number" id="mbElMin" step="any" /></div>
+            <div class="dev-field" id="mbElMaxRow"><label>Max</label><input type="number" id="mbElMax" step="any" /></div>
+            <div class="dev-field" id="mbElStepRow"><label>Step</label><input type="number" id="mbElStep" step="any" /></div>
+            <div class="dev-field" id="mbElDefaultRow"><label>Default</label><input type="number" id="mbElDefault" step="any" /></div>
+            <div class="dev-field" id="mbElInputIdRow"><label>Input ID</label><input type="text" id="mbElInputId" /></div>
+            <div class="dev-field" id="mbElValueIdRow"><label>Value ID</label><input type="text" id="mbElValueId" /></div>
+            <div class="dev-field" id="mbElOptionsRow"><label>Options</label><textarea id="mbElOptions" rows="3" style="flex:1;min-width:0;padding:4px;background:#1a1a1a;color:#fff;border:1px solid #444;border-radius:4px;font-size:11px;resize:vertical;" placeholder="Easy:Easy&#10;Medium:Medium"></textarea></div>
+
+            <h4>Position</h4>
+            <div class="dev-field"><label>X</label><input type="number" id="mbElX" step="1" /></div>
+            <div class="dev-field"><label>Y</label><input type="number" id="mbElY" step="1" /></div>
+            <div class="dev-field"><label>Width</label><input type="number" id="mbElW" step="1" min="10" /></div>
+            <div class="dev-field"><label>Height</label><input type="number" id="mbElH" step="1" min="10" /></div>
+
+            <h4>Style</h4>
+            <div class="dev-field"><label>Font Size</label><input type="text" id="mbElFontSize" placeholder="14px" /></div>
+            <div class="dev-field"><label>Color</label><input type="text" id="mbElColor" placeholder="#fff" /></div>
+            <div class="dev-field"><label>Background</label><input type="text" id="mbElBgColor" placeholder="default" /></div>
+            <div class="dev-field"><label>Border Rad</label><input type="text" id="mbElBorderRadius" placeholder="8px" /></div>
+            <div class="dev-field"><label>Font Weight</label><input type="text" id="mbElFontWeight" placeholder="normal" /></div>
+            <div class="dev-field"><label>Text Align</label><select id="mbElTextAlign">
+                <option value="">Default</option><option value="left">Left</option>
+                <option value="center">Center</option><option value="right">Right</option>
+            </select></div>
+            <div class="dev-field"><label>Padding</label><input type="text" id="mbElPadding" placeholder="0" /></div>
+
+            <div class="dev-actions" style="margin-top:12px;">
+                <button id="mbElDuplicate" class="dev-btn-secondary">Duplicate</button>
+                <button id="mbElDelete" class="dev-btn-danger">Delete</button>
+            </div>
+        </div>
+    </div>
+
+    <button id="devRightPanelExpand" class="dev-right-expand-btn hidden" title="Expand hitbox panel">&laquo;</button>
+
     <!-- External libraries -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="electron-fetch-shim.js"></script>
@@ -403,6 +531,9 @@
     <script src="heroes.js"></script>
     <script src="abilities.js"></script>
     <script src="heroSelectUI.js"></script>
+
+    <!-- Menu system -->
+    <script src="menuRenderer.js"></script>
 
     <!-- Input, UI, environment -->
     <script src="menuNavigation.js"></script>
@@ -428,6 +559,7 @@
     <script src="modeTraining.js"></script>
 
     <!-- Dev workbench -->
+    <script src="menuBuilder.js"></script>
     <script src="devSplitScreen.js"></script>
     <script src="devHeroEditor.js"></script>
     <script src="devConsole.js"></script>

@@ -1,8 +1,93 @@
 const { contextBridge } = require('electron');
 const path = require('path');
 const fs = require('fs');
+const { spawn } = require('child_process');
 
 const BASE = path.join(__dirname);
+
+// ---- Server process management ----
+var _serverProc = null;
+var _serverStatus = 'stopped'; // 'stopped' | 'starting' | 'running' | 'error'
+var _serverError = null;
+var _serverLog = [];       // ring buffer of {id, text} entries
+var _serverLogId = 0;
+var _serverLogMax = 500;
+
+function _serverPushLog(text) {
+  _serverLogId++;
+  _serverLog.push({ id: _serverLogId, text: text });
+  if (_serverLog.length > _serverLogMax) _serverLog.shift();
+}
+
+function _serverStart() {
+  if (_serverProc) return { ok: false, error: 'Already running' };
+  _serverStatus = 'starting';
+  _serverError = null;
+  _serverLog = [];
+  _serverLogId = 0;
+
+  var nodePath = '/opt/homebrew/bin/node';
+  _serverProc = spawn(nodePath, ['server.js'], { cwd: BASE, stdio: ['ignore', 'pipe', 'pipe'] });
+
+  _serverProc.stdout.on('data', function (data) {
+    var lines = data.toString().split('\n');
+    lines.forEach(function (line) {
+      if (!line) return;
+      _serverPushLog(line);
+      if (line.indexOf('listening') !== -1) {
+        _serverStatus = 'running';
+      }
+    });
+  });
+
+  _serverProc.stderr.on('data', function (data) {
+    var lines = data.toString().split('\n');
+    lines.forEach(function (line) {
+      if (!line) return;
+      _serverPushLog('[ERR] ' + line);
+      if (line.indexOf('EADDRINUSE') !== -1) {
+        _serverStatus = 'error';
+        _serverError = 'Port already in use';
+      }
+    });
+  });
+
+  _serverProc.on('error', function (err) {
+    _serverStatus = 'error';
+    _serverError = err.message;
+    _serverPushLog('[ERR] ' + err.message);
+    _serverProc = null;
+  });
+
+  _serverProc.on('close', function (code) {
+    if (_serverStatus !== 'error') {
+      _serverStatus = 'stopped';
+    }
+    _serverPushLog('[Server exited with code ' + code + ']');
+    _serverProc = null;
+  });
+
+  return { ok: true };
+}
+
+function _serverStop() {
+  if (!_serverProc) return { ok: false, error: 'Not running' };
+  var proc = _serverProc;
+  proc.kill('SIGTERM');
+  // Fallback SIGKILL after 3s
+  var killTimer = setTimeout(function () {
+    try { proc.kill('SIGKILL'); } catch (e) {}
+  }, 3000);
+  proc.on('close', function () { clearTimeout(killTimer); });
+  return { ok: true };
+}
+
+// Clean up server on app quit
+process.on('exit', function () {
+  if (_serverProc) {
+    try { _serverProc.kill('SIGKILL'); } catch (e) {}
+  }
+});
 
 function sanitize(name) {
   if (typeof name !== 'string') return null;
@@ -62,5 +147,19 @@ contextBridge.exposeInMainWorld('devAPI', {
   listWeaponModels:  function ()           { return listJSON('weapon-models'); },
   readWeaponModel:   function (name)       { return readJSON('weapon-models', name); },
   writeWeaponModel:  function (name, data) { return writeJSON('weapon-models', name, data); },
-  deleteWeaponModel: function (name)       { return deleteJSON('weapon-models', name); }
+  deleteWeaponModel: function (name)       { return deleteJSON('weapon-models', name); },
+
+  listMenus:         function ()           { return listJSON('menus'); },
+  readMenu:          function (name)       { return readJSON('menus', name); },
+  writeMenu:         function (name, data) { return writeJSON('menus', name, data); },
+  deleteMenu:        function (name)       { return deleteJSON('menus', name); },
+
+  serverStart:       function ()           { return _serverStart(); },
+  serverStop:        function ()           { return _serverStop(); },
+  serverStatus:      function ()           { return { status: _serverStatus, error: _serverError }; },
+  serverLogs:        function (sinceId)    {
+    var since = sinceId || 0;
+    var newLines = _serverLog.filter(function (entry) { return entry.id > since; });
+    return newLines;
+  }
 });
