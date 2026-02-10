@@ -50,6 +50,11 @@
     { name: "legs",  width: 0.5, height: 1.1, depth: 0.5, offsetX: 0, offsetY: 0.55, offsetZ: 0, damageMultiplier: 0.75 }
   ];
 
+  var DEFAULT_BODY_PARTS = [
+    { name: "head", shape: "sphere", radius: 0.25, offsetX: 0, offsetY: 1.6, offsetZ: 0 },
+    { name: "torso", shape: "cylinder", radius: 0.275, height: 0.9, offsetX: 0, offsetY: 1.1, offsetZ: 0 }
+  ];
+
   function Player(opts) {
     opts = opts || {};
 
@@ -83,6 +88,9 @@
     // --- Camera attachment ---
     this.cameraAttached = !!opts.cameraAttached;
 
+    // --- Body parts (custom hero visual model) ---
+    this._bodyParts = opts.bodyParts || null;
+
     // --- 3D Mesh ---
     this._color = opts.color || 0xff5555;
     this._meshGroup = new THREE.Group();
@@ -114,22 +122,51 @@
   // --- Mesh Construction ---
 
   Player.prototype._buildMesh = function () {
-    var bodyMat = new THREE.MeshLambertMaterial({ color: this._color });
+    var parts = (this._bodyParts && this._bodyParts.length > 0)
+      ? this._bodyParts : DEFAULT_BODY_PARTS;
+    this._buildMeshFromBodyParts(parts);
+  };
 
-    var head = new THREE.Mesh(new THREE.SphereGeometry(0.25, 16, 16), bodyMat);
-    head.position.set(0, 1.6, 0);
-    head.userData.isBodyPart = true;
-    this._headMesh = head;
+  /**
+   * Build mesh from custom bodyParts array.
+   * Each part: { name, shape, color, offsetX, offsetY, offsetZ, rotationX, rotationY, rotationZ,
+   *              width, height, depth (box), radius (sphere/cylinder/capsule), height (cylinder/capsule) }
+   */
+  Player.prototype._buildMeshFromBodyParts = function (bodyParts) {
+    var heroColor = this._color;
 
-    var torso = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.3, 0.9, 16), bodyMat);
-    torso.position.set(0, 1.1, 0);
-    torso.userData.isBodyPart = true;
+    for (var i = 0; i < bodyParts.length; i++) {
+      var part = bodyParts[i];
+      var shape = part.shape || 'box';
+      var geom;
 
-    // Weapon attachment point — swappable weapon model sits here
+      if (shape === 'sphere') {
+        geom = new THREE.SphereGeometry(part.radius || 0.25, 16, 12);
+      } else if (shape === 'cylinder') {
+        var r = part.radius || 0.3;
+        var h = part.height || 0.5;
+        geom = new THREE.CylinderGeometry(r, r, h, 16);
+      } else if (shape === 'capsule') {
+        geom = buildCapsuleGeometry(part.radius || 0.3, part.height || 0.5, 16, 8);
+      } else {
+        geom = new THREE.BoxGeometry(part.width || 0.5, part.height || 0.5, part.depth || 0.5);
+      }
+
+      var color = part.color ? new THREE.Color(part.color) : new THREE.Color(heroColor);
+      var mat = new THREE.MeshLambertMaterial({ color: color });
+      var mesh = new THREE.Mesh(geom, mat);
+
+      mesh.position.set(part.offsetX || 0, part.offsetY || 0, part.offsetZ || 0);
+      mesh.rotation.set(part.rotationX || 0, part.rotationY || 0, part.rotationZ || 0);
+      mesh.userData.isBodyPart = true;
+
+      this._meshGroup.add(mesh);
+    }
+
+    // Weapon attachment point
     this._weaponAttachPoint = new THREE.Group();
     this._weaponAttachPoint.position.set(0.35, 1.4, -0.1);
 
-    // Build initial weapon model (fall back to gray box if weaponModels.js not loaded)
     if (typeof buildWeaponModel === 'function') {
       var modelType = (this.weapon && this.weapon.modelType) ? this.weapon.modelType : 'default';
       var weaponModel = buildWeaponModel(modelType);
@@ -142,7 +179,7 @@
       this._weaponAttachPoint.add(fallbackGun);
     }
 
-    this._meshGroup.add(head, torso, this._weaponAttachPoint);
+    this._meshGroup.add(this._weaponAttachPoint);
     this._meshGroup.scale.set(2.0, 2.0, 2.0);
   };
 
@@ -319,6 +356,44 @@
         new THREE.MeshLambertMaterial({ color: 0x333333 })
       );
       this._weaponAttachPoint.add(fallbackGun);
+    }
+  };
+
+  // --- Mesh Rebuild ---
+
+  Player.prototype.rebuildMesh = function () {
+    // Preserve health bar before clearing children
+    var healthBarGroup = this._healthBarGroup;
+    if (healthBarGroup && healthBarGroup.parent === this._meshGroup) {
+      this._meshGroup.remove(healthBarGroup);
+    }
+
+    // Dispose old mesh children (body parts + weapon attach point)
+    while (this._meshGroup.children.length > 0) {
+      var old = this._meshGroup.children[0];
+      this._meshGroup.remove(old);
+      if (old.traverse) {
+        old.traverse(function (c) {
+          if (c.geometry) c.geometry.dispose();
+          if (c.material) c.material.dispose();
+        });
+      }
+    }
+    this._weaponAttachPoint = null;
+
+    // Rebuild from current _bodyParts (or DEFAULT_BODY_PARTS)
+    this._buildMesh();
+    this._computeMeshMetrics();
+    this._syncMeshPosition();
+
+    // Re-attach health bar
+    if (healthBarGroup) {
+      this._meshGroup.add(healthBarGroup);
+    }
+
+    // Re-hide if camera-attached
+    if (this.cameraAttached) {
+      this._meshGroup.visible = false;
     }
   };
 

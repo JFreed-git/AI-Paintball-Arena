@@ -34,7 +34,7 @@ window.getAllHeroes = function () {
 // ------- First-person weapon viewmodel -------
 var _fpWeaponGroup = null;
 
-window.setFirstPersonWeapon = function (modelType) {
+window.setFirstPersonWeapon = function (modelType, fpOffset, fpRotation) {
   if (_fpWeaponGroup && camera) {
     camera.remove(_fpWeaponGroup);
     _fpWeaponGroup.traverse(function (c) {
@@ -51,8 +51,10 @@ window.setFirstPersonWeapon = function (modelType) {
   _fpWeaponGroup = new THREE.Group();
   _fpWeaponGroup.add(model);
 
-  _fpWeaponGroup.position.set(0.28, -0.22, -0.45);
-  _fpWeaponGroup.rotation.set(0.05, -0.15, 0);
+  var pos = fpOffset || { x: 0.28, y: -0.22, z: -0.45 };
+  var rot = fpRotation || { x: 0.05, y: -0.15, z: 0 };
+  _fpWeaponGroup.position.set(pos.x, pos.y, pos.z);
+  _fpWeaponGroup.rotation.set(rot.x, rot.y, rot.z);
 
   _fpWeaponGroup.traverse(function (c) {
     if (c.isMesh && c.material) {
@@ -420,8 +422,16 @@ function getPanelElementId(panelId) {
     var mbToolbar = document.getElementById('mbViewportToolbar');
     var rightExpandTab = document.getElementById('devRightPanelExpand');
     var hePropsContent = document.getElementById('devRightPanelContent');
+    var heBodyContent = document.getElementById('heBodyPartsContent');
+    var wmbPropsContent = document.getElementById('wmbRightPanelContent');
     var mbPropsContent = document.getElementById('mbRightPanelContent');
     var rightTitle = document.querySelector('#devRightPanelHeader h3');
+
+    // Hide all right panel content sections first
+    if (hePropsContent) hePropsContent.classList.add('hidden');
+    if (heBodyContent) heBodyContent.classList.add('hidden');
+    if (wmbPropsContent) wmbPropsContent.classList.add('hidden');
+    if (mbPropsContent) mbPropsContent.classList.add('hidden');
 
     if (panelId === 'heroEditor') {
       if (rightPanel) {
@@ -430,9 +440,23 @@ function getPanelElementId(panelId) {
       }
       if (heToolbar) heToolbar.classList.remove('hidden');
       if (mbToolbar) mbToolbar.classList.add('hidden');
-      if (hePropsContent) hePropsContent.classList.remove('hidden');
-      if (mbPropsContent) mbPropsContent.classList.add('hidden');
-      if (rightTitle) rightTitle.textContent = 'Hitbox Segments';
+      // Apply current view mode (sets correct right panel content + toolbar buttons)
+      if (typeof window._applyHeroViewMode === 'function') {
+        window._applyHeroViewMode();
+      } else {
+        // Fallback if not yet loaded
+        if (hePropsContent) hePropsContent.classList.remove('hidden');
+        if (rightTitle) rightTitle.textContent = 'Hitbox Segments';
+      }
+    } else if (panelId === 'weaponModelBuilder') {
+      if (rightPanel) {
+        rightPanel.classList.remove('hidden');
+        if (rightExpandTab) rightExpandTab.classList.toggle('hidden', !rightPanel.classList.contains('collapsed'));
+      }
+      if (heToolbar) heToolbar.classList.add('hidden');
+      if (mbToolbar) mbToolbar.classList.add('hidden');
+      if (wmbPropsContent) wmbPropsContent.classList.remove('hidden');
+      if (rightTitle) rightTitle.textContent = 'Part Properties';
     } else if (panelId === 'menuBuilder') {
       if (rightPanel) {
         rightPanel.classList.remove('hidden');
@@ -440,7 +464,6 @@ function getPanelElementId(panelId) {
       }
       if (heToolbar) heToolbar.classList.add('hidden');
       if (mbToolbar) mbToolbar.classList.remove('hidden');
-      if (hePropsContent) hePropsContent.classList.add('hidden');
       // mbPropsContent visibility is controlled by selection in menuBuilder.js
       if (rightTitle) rightTitle.textContent = 'Element Properties';
     } else {
@@ -728,8 +751,8 @@ window.registerCustomWeaponModel = registerCustomWeaponModel;
         var expandTab = document.getElementById('devSidebarExpand');
         if (expandTab) expandTab.classList.toggle('hidden', !sidebar.classList.contains('collapsed'));
       }
-      // Restore right panel and toolbar if hero editor or menu builder is active
-      if (_activePanel === 'heroEditor' || _activePanel === 'menuBuilder') {
+      // Restore right panel and toolbar if hero editor, WMB, or menu builder is active
+      if (_activePanel === 'heroEditor' || _activePanel === 'weaponModelBuilder' || _activePanel === 'menuBuilder') {
         var rightPanel = document.getElementById('devRightPanel');
         var rightExpandTab = document.getElementById('devRightPanelExpand');
         if (rightPanel) {

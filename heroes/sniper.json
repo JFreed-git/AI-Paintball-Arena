@@ -1,0 +1,78 @@
+{
+  "id": "sniper",
+  "name": "Sniper",
+  "description": "long-range high-damage shooter",
+  "color": 16776960,
+  "maxHealth": 80,
+  "walkSpeed": 4.5,
+  "sprintSpeed": 8.5,
+  "jumpVelocity": 8.5,
+  "hitbox": [
+    {
+      "name": "head",
+      "shape": "sphere",
+      "offsetX": 0,
+      "offsetY": 1.9,
+      "offsetZ": 0,
+      "damageMultiplier": 1,
+      "radius": 0.5
+    },
+    {
+      "name": "torso",
+      "shape": "box",
+      "offsetX": 0,
+      "offsetY": 1.5,
+      "offsetZ": 0,
+      "damageMultiplier": 1,
+      "width": 1,
+      "height": 0.6,
+      "depth": 1
+    },
+    {
+      "name": "legs",
+      "shape": "box",
+      "offsetX": 0,
+      "offsetY": 0.6,
+      "offsetZ": 0,
+      "damageMultiplier": 1,
+      "width": 1,
+      "height": 1.2,
+      "depth": 1
+    }
+  ],
+  "modelType": "standard",
+  "weapon": {
+    "cooldownMs": 750,
+    "magSize": 2,
+    "reloadTimeSec": 3,
+    "damage": 200,
+    "spreadRad": 0,
+    "sprintSpreadRad": 0.02,
+    "maxRange": 500,
+    "pellets": 1,
+    "projectileSpeed": 200,
+    "projectileGravity": 0,
+    "splashRadius": 0,
+    "scope": {
+      "type": "scope",
+      "zoomFOV": 20,
+      "overlay": null,
+      "spreadMultiplier": 0.15
+    },
+    "modelType": "rifle",
+    "tracerColor": 16776960,
+    "crosshair": {
+      "style": "cross",
+      "baseSpreadPx": 8,
+      "sprintSpreadPx": 20,
+      "color": "#ffff00"
+    },
+    "abilities": []
+  },
+  "bodyParts": [
+    { "name": "head", "shape": "sphere", "radius": 0.25, "offsetX": 0, "offsetY": 1.6, "offsetZ": 0, "rotationX": 0, "rotationY": 0, "rotationZ": 0 },
+    { "name": "torso", "shape": "cylinder", "radius": 0.275, "height": 0.9, "offsetX": 0, "offsetY": 1.1, "offsetZ": 0, "rotationX": 0, "rotationY": 0, "rotationZ": 0 }
+  ],
+  "passives": [],
+  "abilities": []
+}

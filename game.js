@@ -40,7 +40,7 @@ var _fpWeaponGroup = null;
  * Attach a first-person weapon model to the camera (bottom-right of view).
  * Replaces any existing viewmodel. Pass null to just remove.
  */
-window.setFirstPersonWeapon = function (modelType) {
+window.setFirstPersonWeapon = function (modelType, fpOffset, fpRotation) {
   // Remove old viewmodel
   if (_fpWeaponGroup && camera) {
     camera.remove(_fpWeaponGroup);
@@ -58,9 +58,11 @@ window.setFirstPersonWeapon = function (modelType) {
   _fpWeaponGroup = new THREE.Group();
   _fpWeaponGroup.add(model);
 
-  // Position in lower-right of camera view
-  _fpWeaponGroup.position.set(0.28, -0.22, -0.45);
-  _fpWeaponGroup.rotation.set(0.05, -0.15, 0);
+  // Position in lower-right of camera view (customizable via fpOffset/fpRotation)
+  var pos = fpOffset || { x: 0.28, y: -0.22, z: -0.45 };
+  var rot = fpRotation || { x: 0.05, y: -0.15, z: 0 };
+  _fpWeaponGroup.position.set(pos.x, pos.y, pos.z);
+  _fpWeaponGroup.rotation.set(rot.x, rot.y, rot.z);
 
   // Render on top of everything (no depth fighting with scene)
   _fpWeaponGroup.traverse(function (c) {

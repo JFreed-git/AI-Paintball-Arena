@@ -108,6 +108,12 @@
         abilities: []
       },
 
+      // Visual body parts (custom 3D model pieces)
+      bodyParts: [
+        { name: "head", shape: "sphere", radius: 0.25, offsetX: 0, offsetY: 1.6, offsetZ: 0, rotationX: 0, rotationY: 0, rotationZ: 0 },
+        { name: "torso", shape: "cylinder", radius: 0.275, height: 0.9, offsetX: 0, offsetY: 1.1, offsetZ: 0, rotationX: 0, rotationY: 0, rotationZ: 0 }
+      ],
+
       // Passive abilities (checked by game systems like physics.js)
       passives: [],
 
@@ -162,6 +168,11 @@
         },
         abilities: []
       },
+
+      bodyParts: [
+        { name: "head", shape: "sphere", radius: 0.275, offsetX: 0, offsetY: 1.6, offsetZ: 0, rotationX: 0, rotationY: 0, rotationZ: 0 },
+        { name: "torso", shape: "cylinder", radius: 0.3, height: 0.9, offsetX: 0, offsetY: 1.1, offsetZ: 0, rotationX: 0, rotationY: 0, rotationZ: 0 }
+      ],
 
       passives: [],
       abilities: []
@@ -236,11 +247,20 @@
     // jumpVelocity is stored on player, read by updateFullPhysics() when jumping
     player._jumpVelocity = hero.jumpVelocity;
 
-    // Apply visual color to mesh
+    // Apply visual color and body parts, then rebuild mesh
     player._color = hero.color;
+    if (hero.bodyParts && hero.bodyParts.length > 0) {
+      player._bodyParts = hero.bodyParts;
+    } else {
+      player._bodyParts = null;
+    }
+    if (typeof player.rebuildMesh === 'function') {
+      player.rebuildMesh();
+    }
+
+    // Recolor the freshly built mesh
     if (player._meshGroup) {
       player._meshGroup.traverse(function (child) {
-        // Only recolor body parts (tagged with isBodyPart), not weapon or health bar
         if (child.isMesh && child.material && child.userData && child.userData.isBodyPart) {
           if (child.material.color) {
             child.material.color.setHex(hero.color);
@@ -249,7 +269,7 @@
       });
     }
 
-    // Swap weapon model on player mesh (uses Player.swapWeaponModel)
+    // Swap weapon model on player mesh (rebuildMesh created a fresh attach point)
     if (typeof player.swapWeaponModel === 'function') {
       player.swapWeaponModel(hero.weapon.modelType || 'default');
     }
@@ -261,7 +281,11 @@
         setCrosshairStyle(ch.style || 'cross', ch.color || null);
       }
       if (typeof setFirstPersonWeapon === 'function') {
-        setFirstPersonWeapon(hero.weapon.modelType || 'default');
+        setFirstPersonWeapon(
+          hero.weapon.modelType || 'default',
+          hero.weapon.fpOffset || null,
+          hero.weapon.fpRotation || null
+        );
       }
     }
 

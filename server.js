@@ -176,8 +176,38 @@ function ensureHeroesDir() {
 (function seedBuiltinHeroes() {
   ensureHeroesDir();
   var builtins = [
-    { id: 'marksman', name: 'Marksman', description: 'Precise single-shot marker. High accuracy, moderate fire rate.', color: 0x66ffcc, maxHealth: 100, walkSpeed: 4.5, sprintSpeed: 8.5, jumpVelocity: 8.5, hitbox: { width: 0.8, height: 3.2, depth: 0.8 }, modelType: 'standard', weapon: { cooldownMs: 166, magSize: 6, reloadTimeSec: 2.5, damage: 20, spreadRad: 0, sprintSpreadRad: 0.012, maxRange: 200, pellets: 1, projectileSpeed: null, projectileGravity: 0, splashRadius: 0, scope: { type: 'scope', zoomFOV: 35, overlay: null, spreadMultiplier: 0.15 }, modelType: 'rifle', tracerColor: 0x66ffcc, crosshair: { style: 'cross', baseSpreadPx: 8, sprintSpreadPx: 20, color: '#00ffaa' }, abilities: [] }, passives: [], abilities: [] },
-    { id: 'brawler', name: 'Brawler', description: 'Devastating close-range shotgun. 8 pellets per blast.', color: 0xff8844, maxHealth: 120, walkSpeed: 4.2, sprintSpeed: 8.0, jumpVelocity: 8.5, hitbox: { width: 0.9, height: 3.2, depth: 0.9 }, modelType: 'standard', weapon: { cooldownMs: 600, magSize: 4, reloadTimeSec: 3.0, damage: 8, spreadRad: 0.06, sprintSpreadRad: 0.10, maxRange: 60, pellets: 8, projectileSpeed: null, projectileGravity: 0, splashRadius: 0, scope: { type: 'ironsights', zoomFOV: 55, overlay: null, spreadMultiplier: 0.5 }, modelType: 'shotgun', tracerColor: 0xff8844, crosshair: { style: 'circle', baseSpreadPx: 24, sprintSpreadPx: 40, color: '#ff8844' }, abilities: [] }, passives: [], abilities: [] }
+    {
+      id: 'marksman', name: 'Marksman', description: 'Precise single-shot marker. High accuracy, moderate fire rate.', color: 0x66ffcc,
+      maxHealth: 100, walkSpeed: 4.5, sprintSpeed: 8.5, jumpVelocity: 8.5,
+      hitbox: [
+        { name: "head", width: 0.5, height: 0.5, depth: 0.5, offsetY: 2.95, damageMultiplier: 2.0 },
+        { name: "torso", width: 0.6, height: 0.9, depth: 0.5, offsetY: 2.05, damageMultiplier: 1.0 },
+        { name: "legs", width: 0.5, height: 1.1, depth: 0.5, offsetY: 0.55, damageMultiplier: 0.75 }
+      ],
+      modelType: 'standard',
+      weapon: { cooldownMs: 166, magSize: 6, reloadTimeSec: 2.5, damage: 20, spreadRad: 0, sprintSpreadRad: 0.012, maxRange: 200, pellets: 1, projectileSpeed: 120, projectileGravity: 0, splashRadius: 0, scope: { type: 'scope', zoomFOV: 35, overlay: null, spreadMultiplier: 0.15 }, modelType: 'rifle', tracerColor: 0x66ffcc, crosshair: { style: 'cross', baseSpreadPx: 8, sprintSpreadPx: 20, color: '#00ffaa' }, abilities: [] },
+      bodyParts: [
+        { name: "head", shape: "sphere", radius: 0.25, offsetX: 0, offsetY: 1.6, offsetZ: 0, rotationX: 0, rotationY: 0, rotationZ: 0 },
+        { name: "torso", shape: "cylinder", radius: 0.275, height: 0.9, offsetX: 0, offsetY: 1.1, offsetZ: 0, rotationX: 0, rotationY: 0, rotationZ: 0 }
+      ],
+      passives: [], abilities: []
+    },
+    {
+      id: 'brawler', name: 'Brawler', description: 'Devastating close-range shotgun. 8 pellets per blast.', color: 0xff8844,
+      maxHealth: 120, walkSpeed: 4.2, sprintSpeed: 8.0, jumpVelocity: 8.5,
+      hitbox: [
+        { name: "head", width: 0.55, height: 0.5, depth: 0.55, offsetY: 2.95, damageMultiplier: 2.0 },
+        { name: "torso", width: 0.7, height: 0.9, depth: 0.55, offsetY: 2.05, damageMultiplier: 1.0 },
+        { name: "legs", width: 0.55, height: 1.1, depth: 0.55, offsetY: 0.55, damageMultiplier: 0.75 }
+      ],
+      modelType: 'standard',
+      weapon: { cooldownMs: 600, magSize: 4, reloadTimeSec: 3.0, damage: 8, spreadRad: 0.06, sprintSpreadRad: 0.10, maxRange: 60, pellets: 8, projectileSpeed: 120, projectileGravity: 0, splashRadius: 0, scope: { type: 'ironsights', zoomFOV: 55, overlay: null, spreadMultiplier: 0.5 }, modelType: 'shotgun', tracerColor: 0xff8844, crosshair: { style: 'circle', baseSpreadPx: 24, sprintSpreadPx: 40, color: '#ff8844' }, abilities: [] },
+      bodyParts: [
+        { name: "head", shape: "sphere", radius: 0.275, offsetX: 0, offsetY: 1.6, offsetZ: 0, rotationX: 0, rotationY: 0, rotationZ: 0 },
+        { name: "torso", shape: "cylinder", radius: 0.3, height: 0.9, offsetX: 0, offsetY: 1.1, offsetZ: 0, rotationX: 0, rotationY: 0, rotationZ: 0 }
+      ],
+      passives: [], abilities: []
+    }
   ];
   builtins.forEach(function (hero) {
     var filePath = path.join(HEROES_DIR, hero.id + '.json');

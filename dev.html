@@ -126,6 +126,16 @@
                         <div class="dev-field"><label>Tracer Color</label><input type="color" id="heTracerColor" value="#66ffcc" /></div>
                     </div>
 
+                    <h4 class="dev-section-header">FP Weapon</h4>
+                    <div class="dev-section-content">
+                        <div class="dev-field"><label>Offset X</label><input type="number" id="heFPOffsetX" value="0.28" step="0.01" /></div>
+                        <div class="dev-field"><label>Offset Y</label><input type="number" id="heFPOffsetY" value="-0.22" step="0.01" /></div>
+                        <div class="dev-field"><label>Offset Z</label><input type="number" id="heFPOffsetZ" value="-0.45" step="0.01" /></div>
+                        <div class="dev-field"><label>Rot X</label><input type="number" id="heFPRotX" value="0.05" step="0.01" /></div>
+                        <div class="dev-field"><label>Rot Y</label><input type="number" id="heFPRotY" value="-0.15" step="0.01" /></div>
+                        <div class="dev-field"><label>Rot Z</label><input type="number" id="heFPRotZ" value="0" step="0.01" /></div>
+                    </div>
+
                     <div class="dev-actions">
                         <button id="heSave" class="dev-btn-primary">Save</button>
                         <button id="heApplySS" class="dev-btn-secondary">Apply to P1</button>
@@ -148,6 +158,10 @@
                     <select id="wmbLoadSelect">
                         <option value="">-- New --</option>
                     </select>
+                </div>
+                <div class="dev-hitbox-toolbar">
+                    <button id="wmbUndo" class="dev-btn-secondary" disabled>Undo</button>
+                    <button id="wmbRedo" class="dev-btn-secondary" disabled>Redo</button>
                 </div>
                 <div id="wmbPartsList" class="dev-scrollable"></div>
                 <div class="dev-actions">
@@ -264,8 +278,16 @@
             <button id="mbGridToggle" class="dev-btn-secondary">Show Grid</button>
         </div>
         <div id="heViewportToolbar" class="hidden">
+            <div class="he-mode-group">
+                <button class="he-mode-btn active" data-mode="hitbox">Hitbox</button>
+                <button class="he-mode-btn" data-mode="visual">Visual</button>
+                <button class="he-mode-btn" data-mode="combined">Combined</button>
+            </div>
+            <span class="he-toolbar-sep"></span>
             <button id="heToggleModel" class="dev-btn-secondary">Hide Model</button>
+            <button id="heHideWeapon" class="dev-btn-secondary hidden">Hide Weapon</button>
             <button id="heSnapCenter" class="dev-btn-secondary">Snap Center: Off</button>
+            <button id="heFPView" class="dev-btn-secondary">FP View</button>
         </div>
         <div id="gameContainer">
             <!-- Round UI -->
@@ -457,6 +479,23 @@
             </div>
         </div>
 
+        <!-- Body Parts (Visual mode) -->
+        <div id="heBodyPartsContent" class="hidden" style="flex:1;overflow-y:auto;padding:12px;">
+            <div class="dev-hitbox-toolbar">
+                <button id="heBPUndo" class="dev-btn-secondary" disabled>Undo</button>
+                <button id="heBPRedo" class="dev-btn-secondary" disabled>Redo</button>
+            </div>
+            <div id="heBodyPartList"></div>
+            <div class="dev-actions">
+                <button id="heBodyPartAdd" class="dev-btn-secondary">+ Part</button>
+            </div>
+        </div>
+
+        <!-- WMB Part Properties -->
+        <div id="wmbRightPanelContent" class="hidden" style="flex:1;overflow-y:auto;padding:12px;">
+            <p style="color:#666;font-size:12px;padding:8px;">Select a part to edit properties.</p>
+        </div>
+
         <!-- Menu Builder Element Properties -->
         <div id="mbRightPanelContent" class="hidden" style="flex:1;overflow-y:auto;padding:12px;">
             <div class="dev-field"><label>Type</label><select id="mbElType">
@@ -519,6 +558,7 @@
     <!-- External libraries -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="electron-fetch-shim.js"></script>
+    <script src="interactionEngine.js"></script>
 
     <!-- Core systems (no game-mode dependencies) -->
     <script src="config.js"></script>

@@ -867,17 +867,19 @@ body {
 
 #heViewportToolbar {
     position: absolute;
-    top: 12px;
-    left: 50%;
-    transform: translateX(-50%);
+    top: 8px;
+    left: 8px;
+    right: 8px;
     z-index: 10;
     display: flex;
-    gap: 8px;
-    background: rgba(10, 10, 10, 0.8);
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    background: rgba(10, 10, 10, 0.85);
     backdrop-filter: blur(4px);
     border: 1px solid #444;
     border-radius: 8px;
-    padding: 6px 12px;
+    padding: 5px 10px;
 }
 
 #heViewportToolbar.hidden {
@@ -886,8 +888,59 @@ body {
 
 #heViewportToolbar .dev-btn-secondary {
     flex: none;
-    padding: 5px 12px;
-    font-size: 12px;
+    padding: 4px 8px;
+    font-size: 11px;
+    white-space: nowrap;
+}
+
+#heViewportToolbar .dev-btn-secondary.active {
+    background: rgba(0, 255, 136, 0.15);
+    border-color: #00ff88;
+    color: #00ff88;
+}
+
+/* View mode button group */
+.he-mode-group {
+    display: inline-flex;
+    border-radius: 6px;
+    overflow: hidden;
+    border: 1px solid #444;
+}
+
+.he-mode-btn {
+    padding: 4px 10px;
+    background: #222;
+    color: #ccc;
+    border: none;
+    border-right: 1px solid #444;
+    cursor: pointer;
+    font-size: 11px;
+    font-weight: bold;
+    transition: background 0.15s, color 0.15s;
+    white-space: nowrap;
+}
+
+.he-mode-btn:last-child {
+    border-right: none;
+}
+
+.he-mode-btn:hover {
+    background: #333;
+}
+
+.he-mode-btn.active {
+    background: rgba(0, 255, 136, 0.2);
+    color: #00ff88;
+}
+
+/* Toolbar separator */
+.he-toolbar-sep {
+    display: block;
+    width: 1px;
+    height: 20px;
+    background: #444;
+    margin: 0 2px;
+    flex-shrink: 0;
 }
 
 /* ===== Menu Builder ===== */

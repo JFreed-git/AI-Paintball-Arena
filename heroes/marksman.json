@@ -12,45 +12,33 @@
       "name": "head",
       "shape": "sphere",
       "offsetX": 0,
-      "offsetY": 1.9,
+      "offsetY": 1.75,
       "offsetZ": 0,
-      "damageMultiplier": 1,
-      "radius": 0.5
+      "damageMultiplier": 2,
+      "radius": 0.4
     },
     {
       "name": "torso",
-      "shape": "box",
+      "shape": "cylinder",
       "offsetX": 0,
-      "offsetY": 1.5,
+      "offsetY": 0.75,
       "offsetZ": 0,
       "damageMultiplier": 1,
-      "width": 1,
-      "height": 0.6,
-      "depth": 1
-    },
-    {
-      "name": "legs",
-      "shape": "box",
-      "offsetX": 0,
-      "offsetY": 0.6,
-      "offsetZ": 0,
-      "damageMultiplier": 1,
-      "width": 1,
-      "height": 1.2,
-      "depth": 1
+      "radius": 0.45,
+      "height": 1.5
     }
   ],
   "modelType": "standard",
   "weapon": {
-    "cooldownMs": 166,
-    "magSize": 6,
+    "cooldownMs": 130,
+    "magSize": 10,
     "reloadTimeSec": 2.5,
-    "damage": 20,
+    "damage": 15,
     "spreadRad": 0,
-    "sprintSpreadRad": 0.012,
+    "sprintSpreadRad": 0.02,
     "maxRange": 200,
     "pellets": 1,
-    "projectileSpeed": 120,
+    "projectileSpeed": 140,
     "projectileGravity": 0,
     "splashRadius": 0,
     "scope": {
@@ -67,8 +55,43 @@
       "sprintSpreadPx": 20,
       "color": "#00ffaa"
     },
-    "abilities": []
+    "abilities": [],
+    "fpOffset": {
+      "x": 0.28,
+      "y": -0.22,
+      "z": -0.45
+    },
+    "fpRotation": {
+      "x": 0.05,
+      "y": -0.15,
+      "z": 0
+    }
   },
   "passives": [],
-  "abilities": []
+  "abilities": [],
+  "bodyParts": [
+    {
+      "name": "head",
+      "shape": "sphere",
+      "offsetX": 0,
+      "offsetY": 1.6,
+      "offsetZ": 0,
+      "rotationX": 0,
+      "rotationY": 0,
+      "rotationZ": 0,
+      "radius": 0.2
+    },
+    {
+      "name": "torso",
+      "shape": "cylinder",
+      "offsetX": 0,
+      "offsetY": 1.1,
+      "offsetZ": 0,
+      "rotationX": 0,
+      "rotationY": 0,
+      "rotationZ": 0,
+      "radius": 0.225,
+      "height": 0.75
+    }
+  ]
 }
