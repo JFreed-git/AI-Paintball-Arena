@@ -233,11 +233,6 @@
         localPlayer.health = localPlayer.maxHealth;
         localPlayer.alive = true;
       }
-    } else if (cmd === 'mapEditor') {
-      closeConsole();
-      if (typeof window.startMapEditor === 'function') {
-        window.startMapEditor();
-      }
     }
   }
 
@@ -283,23 +278,39 @@
     // Collect collider boxes from arena
     var arenaColliders = (state && state.arena && state.arena.colliders) ? state.arena.colliders : [];
 
-    // Expected count: one sphere per player + one box helper per collider
-    var expectedCount = players.length + arenaColliders.length;
+    // Count total expected visuals: segments per player + arena colliders
+    var totalSegments = 0;
+    for (var pi = 0; pi < players.length; pi++) {
+      var segs = (typeof players[pi].getHitSegments === 'function') ? players[pi].getHitSegments() : [];
+      totalSegments += segs.length;
+    }
+    var expectedCount = totalSegments + arenaColliders.length;
 
-    // Rebuild visuals if count changed (simple approach)
+    // Rebuild visuals if count changed
     if (hitboxVisuals.length !== expectedCount) {
       clearHitboxVisuals();
 
-      // Create wireframe spheres for players
+      var segColorMap = { head: 0xff4444, torso: 0x44ff44, legs: 0x4488ff };
+      var defaultSegColor = 0xffff44;
+
+      // Create wireframe boxes for each player's hitbox segments
       for (var i = 0; i < players.length; i++) {
         var p = players[i];
-        var sphereGeom = new THREE.SphereGeometry(p._hitRadius, 16, 12);
-        var sphereMat = new THREE.MeshBasicMaterial({ color: 0x00ff00, wireframe: true, transparent: true, opacity: 0.5 });
-        var sphere = new THREE.Mesh(sphereGeom, sphereMat);
-        sphere.renderOrder = 998;
-        sphere._isHitboxSphere = true;
-        scene.add(sphere);
-        hitboxVisuals.push(sphere);
+        var segments = (typeof p.getHitSegments === 'function') ? p.getHitSegments() : [];
+        for (var s = 0; s < segments.length; s++) {
+          var seg = segments[s];
+          var segColor = segColorMap[seg.name] || defaultSegColor;
+          // Create a unit box; we'll scale/position each frame
+          var boxGeom = new THREE.BoxGeometry(1, 1, 1);
+          var boxMat = new THREE.MeshBasicMaterial({ color: segColor, wireframe: true, transparent: true, opacity: 0.5 });
+          var boxMesh = new THREE.Mesh(boxGeom, boxMat);
+          boxMesh.renderOrder = 998;
+          boxMesh._isHitboxSegment = true;
+          boxMesh._playerIdx = i;
+          boxMesh._segIdx = s;
+          scene.add(boxMesh);
+          hitboxVisuals.push(boxMesh);
+        }
       }
 
       // Create wireframe boxes for arena colliders
@@ -307,25 +318,33 @@
         var box = arenaColliders[j];
         var size = box.getSize(new THREE.Vector3());
         var center = box.getCenter(new THREE.Vector3());
-        var boxGeom = new THREE.BoxGeometry(size.x, size.y, size.z);
-        var boxMat = new THREE.MeshBasicMaterial({ color: 0xffaa00, wireframe: true, transparent: true, opacity: 0.3 });
-        var boxMesh = new THREE.Mesh(boxGeom, boxMat);
-        boxMesh.position.copy(center);
-        boxMesh._isColliderBox = true;
-        scene.add(boxMesh);
-        hitboxVisuals.push(boxMesh);
+        var cBoxGeom = new THREE.BoxGeometry(size.x, size.y, size.z);
+        var cBoxMat = new THREE.MeshBasicMaterial({ color: 0xffaa00, wireframe: true, transparent: true, opacity: 0.3 });
+        var cBoxMesh = new THREE.Mesh(cBoxGeom, cBoxMat);
+        cBoxMesh.position.copy(center);
+        cBoxMesh._isColliderBox = true;
+        scene.add(cBoxMesh);
+        hitboxVisuals.push(cBoxMesh);
       }
     }
 
-    // Update sphere positions
-    var sphereIdx = 0;
-    for (var i = 0; i < hitboxVisuals.length; i++) {
-      var vis = hitboxVisuals[i];
-      if (vis._isHitboxSphere && sphereIdx < players.length) {
-        var p = players[sphereIdx];
-        var hitCenter = p.getHitCenter();
-        vis.position.copy(hitCenter);
-        sphereIdx++;
+    // Update segment box positions and sizes from live hitbox data
+    for (var vi = 0; vi < hitboxVisuals.length; vi++) {
+      var vis = hitboxVisuals[vi];
+      if (vis._isHitboxSegment) {
+        var playerIdx = vis._playerIdx;
+        var segIdx = vis._segIdx;
+        if (playerIdx < players.length) {
+          var segments = (typeof players[playerIdx].getHitSegments === 'function') ? players[playerIdx].getHitSegments() : [];
+          if (segIdx < segments.length) {
+            var seg = segments[segIdx];
+            var segBox = seg.box;
+            var center = segBox.getCenter(new THREE.Vector3());
+            var size = segBox.getSize(new THREE.Vector3());
+            vis.position.copy(center);
+            vis.scale.set(size.x, size.y, size.z);
+          }
+        }
       }
     }
   }

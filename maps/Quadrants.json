@@ -1,0 +1,814 @@
+{
+  "name": "Quadrants",
+  "version": 2,
+  "arena": {
+    "width": 90,
+    "length": 90,
+    "wallHeight": 3.5
+  },
+  "spawns": [
+    {
+      "id": "spawn_4",
+      "position": [
+        -40,
+        0,
+        40
+      ],
+      "team": "A"
+    },
+    {
+      "id": "spawn_5",
+      "position": [
+        40,
+        0,
+        40
+      ],
+      "team": "B"
+    },
+    {
+      "id": "spawn_6",
+      "position": [
+        40,
+        0,
+        -40
+      ],
+      "team": "C"
+    },
+    {
+      "id": "spawn_7",
+      "position": [
+        -40,
+        0,
+        -40
+      ],
+      "team": "D"
+    }
+  ],
+  "objects": [
+    {
+      "id": "obj_6",
+      "type": "cylinder",
+      "position": [
+        -12,
+        0,
+        -15.5
+      ],
+      "rotation": 0,
+      "color": "#6B5B4F",
+      "radius": 1.5,
+      "height": 3,
+      "quadGroupId": "qg_2",
+      "quadRole": "original"
+    },
+    {
+      "id": "obj_7",
+      "type": "cylinder",
+      "position": [
+        -12,
+        0,
+        15.5
+      ],
+      "rotation": 0,
+      "color": "#6B5B4F",
+      "radius": 1.5,
+      "height": 3,
+      "quadGroupId": "qg_2",
+      "quadRole": "mirZ",
+      "mirrorFlip": true,
+      "mirrorAxis": "z"
+    },
+    {
+      "id": "obj_8",
+      "type": "cylinder",
+      "position": [
+        12,
+        0,
+        -15.5
+      ],
+      "rotation": 180,
+      "color": "#6B5B4F",
+      "radius": 1.5,
+      "height": 3,
+      "quadGroupId": "qg_2",
+      "quadRole": "mirX",
+      "mirrorFlip": true,
+      "mirrorAxis": "x"
+    },
+    {
+      "id": "obj_9",
+      "type": "cylinder",
+      "position": [
+        12,
+        0,
+        15.5
+      ],
+      "rotation": 180,
+      "color": "#6B5B4F",
+      "radius": 1.5,
+      "height": 3,
+      "quadGroupId": "qg_2",
+      "quadRole": "mirXZ",
+      "mirrorFlip": false
+    },
+    {
+      "id": "obj_10",
+      "type": "arch",
+      "position": [
+        -22,
+        0,
+        -18
+      ],
+      "rotation": 180,
+      "color": "#7A6A55",
+      "size": [
+        17.25,
+        9.75,
+        4.5
+      ],
+      "quadGroupId": "qg_3",
+      "quadRole": "original",
+      "mirrorFlip": false
+    },
+    {
+      "id": "obj_11",
+      "type": "arch",
+      "position": [
+        -22,
+        0,
+        18
+      ],
+      "rotation": 180,
+      "color": "#7A6A55",
+      "size": [
+        17.25,
+        9.75,
+        4.5
+      ],
+      "quadGroupId": "qg_3",
+      "quadRole": "mirZ",
+      "mirrorFlip": true,
+      "mirrorAxis": "z"
+    },
+    {
+      "id": "obj_12",
+      "type": "arch",
+      "position": [
+        22,
+        0,
+        -18
+      ],
+      "rotation": 0,
+      "color": "#7A6A55",
+      "size": [
+        17.25,
+        9.75,
+        4.5
+      ],
+      "quadGroupId": "qg_3",
+      "quadRole": "mirX",
+      "mirrorFlip": true,
+      "mirrorAxis": "x"
+    },
+    {
+      "id": "obj_13",
+      "type": "arch",
+      "position": [
+        22,
+        0,
+        18
+      ],
+      "rotation": 0,
+      "color": "#7A6A55",
+      "size": [
+        17.25,
+        9.75,
+        4.5
+      ],
+      "quadGroupId": "qg_3",
+      "quadRole": "mirXZ",
+      "mirrorFlip": true,
+      "mirrorAxis": "x"
+    },
+    {
+      "id": "obj_14",
+      "type": "box",
+      "position": [
+        -27.5,
+        0,
+        -27.5
+      ],
+      "rotation": 0,
+      "color": "#6B5B4F",
+      "size": [
+        2.5,
+        3,
+        2
+      ],
+      "quadGroupId": "qg_4",
+      "quadRole": "original"
+    },
+    {
+      "id": "obj_15",
+      "type": "box",
+      "position": [
+        -27.5,
+        0,
+        27.5
+      ],
+      "rotation": 0,
+      "color": "#6B5B4F",
+      "size": [
+        2.5,
+        3,
+        2
+      ],
+      "quadGroupId": "qg_4",
+      "quadRole": "mirZ",
+      "mirrorFlip": true,
+      "mirrorAxis": "z"
+    },
+    {
+      "id": "obj_16",
+      "type": "box",
+      "position": [
+        27.5,
+        0,
+        -27.5
+      ],
+      "rotation": 180,
+      "color": "#6B5B4F",
+      "size": [
+        2.5,
+        3,
+        2
+      ],
+      "quadGroupId": "qg_4",
+      "quadRole": "mirX",
+      "mirrorFlip": true,
+      "mirrorAxis": "x"
+    },
+    {
+      "id": "obj_17",
+      "type": "box",
+      "position": [
+        27.5,
+        0,
+        27.5
+      ],
+      "rotation": 180,
+      "color": "#6B5B4F",
+      "size": [
+        2.5,
+        3,
+        2
+      ],
+      "quadGroupId": "qg_4",
+      "quadRole": "mirXZ",
+      "mirrorFlip": false
+    },
+    {
+      "id": "obj_18",
+      "type": "box",
+      "position": [
+        -29,
+        0,
+        -40
+      ],
+      "rotation": 0,
+      "color": "#6B5B4F",
+      "size": [
+        2.5,
+        3,
+        2
+      ],
+      "quadGroupId": "qg_5",
+      "quadRole": "original"
+    },
+    {
+      "id": "obj_19",
+      "type": "box",
+      "position": [
+        -29,
+        0,
+        40
+      ],
+      "rotation": 0,
+      "color": "#6B5B4F",
+      "size": [
+        2.5,
+        3,
+        2
+      ],
+      "quadGroupId": "qg_5",
+      "quadRole": "mirZ",
+      "mirrorFlip": true,
+      "mirrorAxis": "z"
+    },
+    {
+      "id": "obj_20",
+      "type": "box",
+      "position": [
+        29,
+        0,
+        -40
+      ],
+      "rotation": 180,
+      "color": "#6B5B4F",
+      "size": [
+        2.5,
+        3,
+        2
+      ],
+      "quadGroupId": "qg_5",
+      "quadRole": "mirX",
+      "mirrorFlip": true,
+      "mirrorAxis": "x"
+    },
+    {
+      "id": "obj_21",
+      "type": "box",
+      "position": [
+        29,
+        0,
+        40
+      ],
+      "rotation": 180,
+      "color": "#6B5B4F",
+      "size": [
+        2.5,
+        3,
+        2
+      ],
+      "quadGroupId": "qg_5",
+      "quadRole": "mirXZ",
+      "mirrorFlip": false
+    },
+    {
+      "id": "obj_22",
+      "type": "box",
+      "position": [
+        -19.5,
+        0,
+        -21.5
+      ],
+      "rotation": 0,
+      "color": "#6B5B4F",
+      "size": [
+        2.5,
+        3,
+        2
+      ],
+      "quadGroupId": "qg_6",
+      "quadRole": "original"
+    },
+    {
+      "id": "obj_23",
+      "type": "box",
+      "position": [
+        -19.5,
+        0,
+        21.5
+      ],
+      "rotation": 0,
+      "color": "#6B5B4F",
+      "size": [
+        2.5,
+        3,
+        2
+      ],
+      "quadGroupId": "qg_6",
+      "quadRole": "mirZ",
+      "mirrorFlip": true,
+      "mirrorAxis": "z"
+    },
+    {
+      "id": "obj_24",
+      "type": "box",
+      "position": [
+        19.5,
+        0,
+        -21.5
+      ],
+      "rotation": 180,
+      "color": "#6B5B4F",
+      "size": [
+        2.5,
+        3,
+        2
+      ],
+      "quadGroupId": "qg_6",
+      "quadRole": "mirX",
+      "mirrorFlip": true,
+      "mirrorAxis": "x"
+    },
+    {
+      "id": "obj_25",
+      "type": "box",
+      "position": [
+        19.5,
+        0,
+        21.5
+      ],
+      "rotation": 180,
+      "color": "#6B5B4F",
+      "size": [
+        2.5,
+        3,
+        2
+      ],
+      "quadGroupId": "qg_6",
+      "quadRole": "mirXZ",
+      "mirrorFlip": true,
+      "mirrorAxis": "x"
+    },
+    {
+      "id": "obj_26",
+      "type": "box",
+      "position": [
+        22,
+        2.5,
+        -8
+      ],
+      "rotation": 0,
+      "color": "#6B5B4F",
+      "size": [
+        2.5,
+        0.5,
+        2
+      ],
+      "quadGroupId": "qg_7",
+      "quadRole": "original"
+    },
+    {
+      "id": "obj_27",
+      "type": "box",
+      "position": [
+        22,
+        2.5,
+        8
+      ],
+      "rotation": 0,
+      "color": "#6B5B4F",
+      "size": [
+        2.5,
+        0.5,
+        2
+      ],
+      "quadGroupId": "qg_7",
+      "quadRole": "mirZ",
+      "mirrorFlip": true,
+      "mirrorAxis": "z"
+    },
+    {
+      "id": "obj_28",
+      "type": "box",
+      "position": [
+        -22,
+        2.5,
+        -8
+      ],
+      "rotation": 180,
+      "color": "#6B5B4F",
+      "size": [
+        2.5,
+        0.5,
+        2
+      ],
+      "quadGroupId": "qg_7",
+      "quadRole": "mirX",
+      "mirrorFlip": true,
+      "mirrorAxis": "x"
+    },
+    {
+      "id": "obj_29",
+      "type": "box",
+      "position": [
+        -22,
+        2.5,
+        8
+      ],
+      "rotation": 180,
+      "color": "#6B5B4F",
+      "size": [
+        2.5,
+        0.5,
+        2
+      ],
+      "quadGroupId": "qg_7",
+      "quadRole": "mirXZ",
+      "mirrorFlip": true,
+      "mirrorAxis": "x"
+    },
+    {
+      "id": "obj_31",
+      "type": "box",
+      "position": [
+        11,
+        2.5,
+        2.5
+      ],
+      "rotation": 0,
+      "color": "#6B5B4F",
+      "size": [
+        2.5,
+        0.5,
+        2
+      ],
+      "quadGroupId": "qg_8",
+      "quadRole": "original",
+      "mirrorFlip": false
+    },
+    {
+      "id": "obj_32",
+      "type": "box",
+      "position": [
+        11,
+        2.5,
+        -2.5
+      ],
+      "rotation": 0,
+      "color": "#6B5B4F",
+      "size": [
+        2.5,
+        0.5,
+        2
+      ],
+      "quadGroupId": "qg_8",
+      "quadRole": "mirZ",
+      "mirrorFlip": true,
+      "mirrorAxis": "z"
+    },
+    {
+      "id": "obj_33",
+      "type": "box",
+      "position": [
+        -11,
+        2.5,
+        2.5
+      ],
+      "rotation": 180,
+      "color": "#6B5B4F",
+      "size": [
+        2.5,
+        0.5,
+        2
+      ],
+      "quadGroupId": "qg_8",
+      "quadRole": "mirX",
+      "mirrorFlip": true,
+      "mirrorAxis": "x"
+    },
+    {
+      "id": "obj_34",
+      "type": "box",
+      "position": [
+        -11,
+        2.5,
+        -2.5
+      ],
+      "rotation": 180,
+      "color": "#6B5B4F",
+      "size": [
+        2.5,
+        0.5,
+        2
+      ],
+      "quadGroupId": "qg_8",
+      "quadRole": "mirXZ",
+      "mirrorFlip": true,
+      "mirrorAxis": "x"
+    },
+    {
+      "id": "obj_35",
+      "type": "box",
+      "position": [
+        8.5,
+        2.5,
+        -4.5
+      ],
+      "rotation": 0,
+      "color": "#6B5B4F",
+      "size": [
+        2.5,
+        0.5,
+        2
+      ],
+      "quadGroupId": "qg_9",
+      "quadRole": "original"
+    },
+    {
+      "id": "obj_36",
+      "type": "box",
+      "position": [
+        8.5,
+        2.5,
+        4.5
+      ],
+      "rotation": 0,
+      "color": "#6B5B4F",
+      "size": [
+        2.5,
+        0.5,
+        2
+      ],
+      "quadGroupId": "qg_9",
+      "quadRole": "mirZ",
+      "mirrorFlip": true,
+      "mirrorAxis": "z"
+    },
+    {
+      "id": "obj_37",
+      "type": "box",
+      "position": [
+        -8.5,
+        2.5,
+        -4.5
+      ],
+      "rotation": 180,
+      "color": "#6B5B4F",
+      "size": [
+        2.5,
+        0.5,
+        2
+      ],
+      "quadGroupId": "qg_9",
+      "quadRole": "mirX",
+      "mirrorFlip": true,
+      "mirrorAxis": "x"
+    },
+    {
+      "id": "obj_38",
+      "type": "box",
+      "position": [
+        -8.5,
+        2.5,
+        4.5
+      ],
+      "rotation": 180,
+      "color": "#6B5B4F",
+      "size": [
+        2.5,
+        0.5,
+        2
+      ],
+      "quadGroupId": "qg_9",
+      "quadRole": "mirXZ",
+      "mirrorFlip": true,
+      "mirrorAxis": "x"
+    },
+    {
+      "id": "obj_39",
+      "type": "box",
+      "position": [
+        22,
+        2.5,
+        -12.5
+      ],
+      "rotation": 0,
+      "color": "#6B5B4F",
+      "size": [
+        2.5,
+        0.5,
+        2
+      ],
+      "quadGroupId": "qg_10",
+      "quadRole": "original"
+    },
+    {
+      "id": "obj_40",
+      "type": "box",
+      "position": [
+        22,
+        2.5,
+        3.5
+      ],
+      "rotation": 0,
+      "color": "#6B5B4F",
+      "size": [
+        2.5,
+        0.5,
+        2
+      ],
+      "quadGroupId": "qg_10",
+      "quadRole": "mirZ",
+      "mirrorFlip": true,
+      "mirrorAxis": "z"
+    },
+    {
+      "id": "obj_41",
+      "type": "box",
+      "position": [
+        -22,
+        2.5,
+        -12.5
+      ],
+      "rotation": 180,
+      "color": "#6B5B4F",
+      "size": [
+        2.5,
+        0.5,
+        2
+      ],
+      "quadGroupId": "qg_10",
+      "quadRole": "mirX",
+      "mirrorFlip": true,
+      "mirrorAxis": "x"
+    },
+    {
+      "id": "obj_42",
+      "type": "box",
+      "position": [
+        -22,
+        2.5,
+        3.5
+      ],
+      "rotation": 180,
+      "color": "#6B5B4F",
+      "size": [
+        2.5,
+        0.5,
+        2
+      ],
+      "quadGroupId": "qg_10",
+      "quadRole": "mirXZ",
+      "mirrorFlip": true,
+      "mirrorAxis": "x"
+    },
+    {
+      "id": "obj_44",
+      "type": "lshape",
+      "position": [
+        39,
+        0,
+        39
+      ],
+      "rotation": 270,
+      "color": "#6b5b4f",
+      "size": [
+        4,
+        3,
+        4
+      ],
+      "thickness": 1,
+      "quadGroupId": "qg_11",
+      "quadRole": "original"
+    },
+    {
+      "id": "obj_45",
+      "type": "lshape",
+      "position": [
+        -39,
+        0,
+        39
+      ],
+      "rotation": 180,
+      "color": "#6B5B4F",
+      "size": [
+        4,
+        3,
+        4
+      ],
+      "thickness": 1,
+      "quadGroupId": "qg_11",
+      "quadRole": "rot90"
+    },
+    {
+      "id": "obj_46",
+      "type": "lshape",
+      "position": [
+        -39,
+        0,
+        -39
+      ],
+      "rotation": 90,
+      "color": "#6B5B4F",
+      "size": [
+        4,
+        3,
+        4
+      ],
+      "thickness": 1,
+      "quadGroupId": "qg_11",
+      "quadRole": "rot180"
+    },
+    {
+      "id": "obj_47",
+      "type": "lshape",
+      "position": [
+        39,
+        0,
+        -39
+      ],
+      "rotation": 0,
+      "color": "#6B5B4F",
+      "size": [
+        4,
+        3,
+        4
+      ],
+      "thickness": 1,
+      "quadGroupId": "qg_11",
+      "quadRole": "rot270"
+    }
+  ]
+}

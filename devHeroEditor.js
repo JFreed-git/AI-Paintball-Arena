@@ -3,6 +3,9 @@
  *
  * PURPOSE: Provides UI logic for:
  *   1. Hero Editor: edit hero stats, weapon config, visual settings, with live 3D preview
+ *      - Toggle model visibility to inspect hitboxes
+ *      - Full 3D drag to move hitbox segments in space (offsetX, offsetY, offsetZ)
+ *      - Resize handles (6 colored spheres at face centers) to resize segments
  *   2. Weapon Model Builder: compose weapon models from box/cylinder parts, live 3D preview,
  *      register into WEAPON_MODEL_REGISTRY
  *
@@ -10,6 +13,8 @@
  *   _initHeroEditorPreview() — initialize the hero editor 3D preview
  *   _initWmbPreview()        — initialize the weapon model builder 3D preview
  *   _refreshWmbLoadList()    — refresh weapon model load dropdown
+ *   _resizeHeroEditorPreview() — resize hero editor preview canvas
+ *   _resizeWmbPreview()      — resize weapon model builder preview canvas
  *
  * DEPENDENCIES: Three.js, weapon.js, weaponModels.js, heroes.js, player.js, devApp.js
  */
@@ -19,6 +24,74 @@
   // Stash crosshair spread values that have no form fields, so they round-trip on save
   var _stashedCrosshair = { baseSpreadPx: 8, sprintSpreadPx: 20 };
 
+  // Hitbox segment state (now includes offsetX, offsetZ)
+  var _hitboxSegments = [
+    { name: "head",  width: 0.5, height: 0.5, depth: 0.5, offsetX: 0, offsetY: 2.95, offsetZ: 0, damageMultiplier: 2.0 },
+    { name: "torso", width: 0.6, height: 0.9, depth: 0.5, offsetX: 0, offsetY: 2.05, offsetZ: 0, damageMultiplier: 1.0 },
+    { name: "legs",  width: 0.5, height: 1.1, depth: 0.5, offsetX: 0, offsetY: 0.55, offsetZ: 0, damageMultiplier: 0.75 }
+  ];
+
+  // --- Undo / Redo ---
+  var _undoStack = [];
+  var _redoStack = [];
+  var MAX_UNDO = 50;
+
+  function snapshotHitboxSegments() {
+    return JSON.stringify(_hitboxSegments);
+  }
+
+  function restoreHitboxSegments(json) {
+    _hitboxSegments = JSON.parse(json);
+    _selectedHitboxIndex = -1;
+    clearResizeHandles();
+    renderHitboxSegmentList();
+    updateHeroPreview();
+  }
+
+  function pushUndo() {
+    _undoStack.push(snapshotHitboxSegments());
+    if (_undoStack.length > MAX_UNDO) _undoStack.shift();
+    _redoStack = [];
+    updateUndoRedoButtons();
+  }
+
+  function hitboxUndo() {
+    if (_undoStack.length === 0) return;
+    _redoStack.push(snapshotHitboxSegments());
+    restoreHitboxSegments(_undoStack.pop());
+    updateUndoRedoButtons();
+  }
+
+  function hitboxRedo() {
+    if (_redoStack.length === 0) return;
+    _undoStack.push(snapshotHitboxSegments());
+    restoreHitboxSegments(_redoStack.pop());
+    updateUndoRedoButtons();
+  }
+
+  function updateUndoRedoButtons() {
+    var undoBtn = document.getElementById('heUndo');
+    var redoBtn = document.getElementById('heRedo');
+    if (undoBtn) undoBtn.disabled = _undoStack.length === 0;
+    if (redoBtn) redoBtn.disabled = _redoStack.length === 0;
+  }
+
+  // Debounced undo push for form input (avoids pushing on every keystroke)
+  var _formUndoPushed = false;
+  function pushUndoForFormInput() {
+    if (!_formUndoPushed) {
+      pushUndo();
+      _formUndoPushed = true;
+      setTimeout(function () { _formUndoPushed = false; }, 500);
+    }
+  }
+
+  // Hitbox preview wireframe objects (scene-level, not parented to player mesh)
+  var _hitboxPreviewMeshes = [];
+
+  // Scene-level hitbox group (direct child of _heroPreviewScene)
+  var _hitboxGroup = null;
+
   // ========================
   // HERO EDITOR
   // ========================
@@ -27,8 +100,52 @@
   var _heroPreviewScene = null;
   var _heroPreviewCamera = null;
   var _heroPreviewPlayer = null;
-  var _heroPreviewAngle = 0;
   var _heroPreviewAnimId = 0;
+
+  // Hero preview orbit state
+  var _heroOrbitAngle = 0;
+  var _heroOrbitPitch = 0.3;
+  var _heroOrbitDist = 6;
+  var _heroOrbitTarget = { x: 0, y: 1.5, z: 0 };
+  var _heroDragging = false;
+  var _heroLastMouse = { x: 0, y: 0 };
+
+  // Interactive hitbox editing state
+  var _selectedHitboxIndex = -1;
+  var _hitboxRaycaster = new THREE.Raycaster();
+
+  // Model visibility toggle
+  var _modelVisible = true;
+
+  // Snap-to-center toggle (forces offsetX=0, offsetZ=0 when dragging)
+  var _snapCenter = false;
+
+  // 3D drag state (camera-facing plane drag)
+  var _hitboxDragMode = null; // 'move' | null
+  var _hitboxDragPlane = new THREE.Plane();
+  var _hitboxDragOffset = new THREE.Vector3();
+  var _hitboxDragStartSeg = null; // snapshot of {offsetX, offsetY, offsetZ}
+
+  // Resize handle state
+  var _resizeHandles = []; // [{mesh, axis, sign}]
+  var _isResizing = false;
+  var _resizeHandle = null; // current handle being dragged
+  var _resizePlane = new THREE.Plane();
+  var _resizeStartPoint = new THREE.Vector3();
+  var _resizeStartDim = 0;
+  var _resizeStartOffset = 0;
+  var _resizeAxis = null; // 'x' | 'y' | 'z'
+  var _resizeSign = 0;
+
+  // Snap helper
+  function snapTo(val, step) {
+    return Math.round(val / step) * step;
+  }
+
+  // Player feetY in preview scene (GROUND_Y from physics.js)
+  function getPreviewFeetY() {
+    return (typeof GROUND_Y !== 'undefined') ? GROUND_Y : -1;
+  }
 
   window._initHeroEditorPreview = function () {
     var canvas = document.getElementById('heroPreviewCanvas');
@@ -51,9 +168,11 @@
     grid.position.y = -1;
     _heroPreviewScene.add(grid);
 
+    // Scene-level hitbox group
+    _hitboxGroup = new THREE.Group();
+    _heroPreviewScene.add(_hitboxGroup);
+
     _heroPreviewCamera = new THREE.PerspectiveCamera(50, canvas.width / canvas.height, 0.1, 100);
-    _heroPreviewCamera.position.set(0, 2, 5);
-    _heroPreviewCamera.lookAt(0, 1.5, 0);
 
     _heroPreviewRenderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true });
     _heroPreviewRenderer.setSize(canvas.width, canvas.height);
@@ -61,13 +180,54 @@
     // Build initial preview player
     updateHeroPreview();
 
-    // Animate turntable
+    // Orbit controls via mouse on the canvas
+    canvas.addEventListener('mousedown', function (e) {
+      if (onCanvasMouseDown(e, canvas)) return;
+      _heroDragging = true;
+      _heroLastMouse = { x: e.clientX, y: e.clientY };
+    });
+    window.addEventListener('mouseup', function () {
+      _heroDragging = false;
+      if (_hitboxDragMode === 'move') {
+        _hitboxDragMode = null;
+        _hitboxDragStartSeg = null;
+      }
+      if (_isResizing) {
+        _isResizing = false;
+        _resizeHandle = null;
+      }
+    });
+    canvas.addEventListener('mousemove', function (e) {
+      if (_isResizing) {
+        onResizeMove(e, canvas);
+        return;
+      }
+      if (_hitboxDragMode === 'move') {
+        onHitboxDragMove(e, canvas);
+        return;
+      }
+      if (!_heroDragging) return;
+      var dx = e.clientX - _heroLastMouse.x;
+      var dy = e.clientY - _heroLastMouse.y;
+      _heroOrbitAngle -= dx * 0.01;
+      _heroOrbitPitch = Math.max(-1.2, Math.min(1.2, _heroOrbitPitch - dy * 0.01));
+      _heroLastMouse = { x: e.clientX, y: e.clientY };
+    });
+    canvas.addEventListener('wheel', function (e) {
+      e.preventDefault();
+      _heroOrbitDist = Math.max(2, Math.min(15, _heroOrbitDist + e.deltaY * 0.005));
+    });
+
+    // Animate with orbit camera
     function animatePreview() {
       _heroPreviewAnimId = requestAnimationFrame(animatePreview);
-      _heroPreviewAngle += 0.01;
-      if (_heroPreviewPlayer && _heroPreviewPlayer._meshGroup) {
-        _heroPreviewPlayer._meshGroup.rotation.y = _heroPreviewAngle;
-      }
+      // Position camera using orbit params
+      _heroPreviewCamera.position.set(
+        _heroOrbitTarget.x + Math.sin(_heroOrbitAngle) * Math.cos(_heroOrbitPitch) * _heroOrbitDist,
+        _heroOrbitTarget.y + Math.sin(_heroOrbitPitch) * _heroOrbitDist,
+        _heroOrbitTarget.z + Math.cos(_heroOrbitAngle) * Math.cos(_heroOrbitPitch) * _heroOrbitDist
+      );
+      _heroPreviewCamera.lookAt(_heroOrbitTarget.x, _heroOrbitTarget.y, _heroOrbitTarget.z);
       _heroPreviewRenderer.render(_heroPreviewScene, _heroPreviewCamera);
     }
     animatePreview();
@@ -75,6 +235,456 @@
     // Wire form inputs to live preview updates
     wireHeroEditorInputs();
   };
+
+  // --- Canvas mouse NDC helper ---
+
+  function getCanvasMouseNDC(e, canvas) {
+    var rect = canvas.getBoundingClientRect();
+    return {
+      x: ((e.clientX - rect.left) / rect.width) * 2 - 1,
+      y: -((e.clientY - rect.top) / rect.height) * 2 + 1
+    };
+  }
+
+  // --- Ray-plane intersection helper ---
+
+  function rayPlaneIntersect(raycaster, plane, target) {
+    return raycaster.ray.intersectPlane(plane, target);
+  }
+
+  // --- Hitbox world position from segment data ---
+
+  function getHitboxWorldPos(seg) {
+    var feetY = getPreviewFeetY();
+    return new THREE.Vector3(
+      seg.offsetX || 0,
+      feetY + seg.offsetY,
+      seg.offsetZ || 0
+    );
+  }
+
+  // --- Selection and visuals ---
+
+  function selectHitboxSegment(index) {
+    _selectedHitboxIndex = index;
+    updateHitboxVisuals();
+    rebuildResizeHandles();
+
+    // Scroll form to selected segment
+    if (index >= 0) {
+      var container = document.getElementById('heHitboxList');
+      if (container) {
+        var entries = container.querySelectorAll('.wmb-part');
+        if (entries[index]) {
+          entries[index].scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+          entries[index].style.outline = '2px solid #00ff88';
+          setTimeout(function () {
+            if (entries[index]) entries[index].style.outline = '';
+          }, 800);
+        }
+      }
+    }
+  }
+
+  function updateHitboxVisuals() {
+    var segColors = { head: 0xff4444, torso: 0x44ff44, legs: 0x4488ff };
+    var defaultColor = 0xffff44;
+
+    for (var i = 0; i < _hitboxPreviewMeshes.length; i++) {
+      var mesh = _hitboxPreviewMeshes[i];
+      if (!mesh || !mesh.material) continue;
+      var seg = _hitboxSegments[i];
+      var segColor = seg ? (segColors[seg.name] || defaultColor) : defaultColor;
+
+      if (i === _selectedHitboxIndex) {
+        mesh.material.wireframe = false;
+        mesh.material.opacity = 0.5;
+        mesh.material.color.setHex(segColor);
+      } else {
+        mesh.material.wireframe = true;
+        mesh.material.opacity = 0.3;
+        mesh.material.color.setHex(segColor);
+      }
+    }
+  }
+
+  // --- Toggle model visibility ---
+
+  function toggleModelVisibility() {
+    _modelVisible = !_modelVisible;
+    var btn = document.getElementById('heToggleModel');
+    if (btn) btn.textContent = _modelVisible ? 'Hide Model' : 'Show Model';
+
+    if (_heroPreviewPlayer && _heroPreviewPlayer._meshGroup) {
+      _heroPreviewPlayer._meshGroup.traverse(function (child) {
+        if (child === _heroPreviewPlayer._meshGroup) return;
+        if (child.userData && child.userData.isBodyPart) {
+          child.visible = _modelVisible;
+        }
+        // Also toggle weapon attachment point
+        if (child === _heroPreviewPlayer._weaponAttachPoint) {
+          child.visible = _modelVisible;
+        }
+      });
+      // Health bar should hide too
+      if (_heroPreviewPlayer._healthBarGroup) {
+        _heroPreviewPlayer._healthBarGroup.visible = false;
+      }
+    }
+  }
+
+  // --- Resize Handles ---
+
+  function clearResizeHandles() {
+    for (var i = 0; i < _resizeHandles.length; i++) {
+      var h = _resizeHandles[i];
+      if (h.mesh.parent) h.mesh.parent.remove(h.mesh);
+      if (h.mesh.geometry) h.mesh.geometry.dispose();
+      if (h.mesh.material) h.mesh.material.dispose();
+    }
+    _resizeHandles = [];
+  }
+
+  function rebuildResizeHandles() {
+    clearResizeHandles();
+    if (_selectedHitboxIndex < 0 || _selectedHitboxIndex >= _hitboxSegments.length) return;
+
+    var seg = _hitboxSegments[_selectedHitboxIndex];
+    var center = getHitboxWorldPos(seg);
+
+    var handleDefs = [
+      { axis: 'x', sign:  1, color: 0xff4444 },
+      { axis: 'x', sign: -1, color: 0xff4444 },
+      { axis: 'y', sign:  1, color: 0x44ff44 },
+      { axis: 'y', sign: -1, color: 0x44ff44 },
+      { axis: 'z', sign:  1, color: 0x4488ff },
+      { axis: 'z', sign: -1, color: 0x4488ff }
+    ];
+
+    for (var i = 0; i < handleDefs.length; i++) {
+      var def = handleDefs[i];
+      var geom = new THREE.SphereGeometry(0.06, 8, 8);
+      var mat = new THREE.MeshBasicMaterial({ color: def.color, depthTest: false });
+      var mesh = new THREE.Mesh(geom, mat);
+      mesh.renderOrder = 999;
+
+      // Position at face center
+      var pos = center.clone();
+      var halfDim;
+      if (def.axis === 'x') halfDim = seg.width / 2;
+      else if (def.axis === 'y') halfDim = seg.height / 2;
+      else halfDim = seg.depth / 2;
+
+      if (def.axis === 'x') pos.x += def.sign * halfDim;
+      else if (def.axis === 'y') pos.y += def.sign * halfDim;
+      else pos.z += def.sign * halfDim;
+
+      mesh.position.copy(pos);
+      _hitboxGroup.add(mesh);
+      _resizeHandles.push({ mesh: mesh, axis: def.axis, sign: def.sign });
+    }
+  }
+
+  function repositionResizeHandles() {
+    if (_selectedHitboxIndex < 0 || _selectedHitboxIndex >= _hitboxSegments.length) return;
+    var seg = _hitboxSegments[_selectedHitboxIndex];
+    var center = getHitboxWorldPos(seg);
+
+    for (var i = 0; i < _resizeHandles.length; i++) {
+      var h = _resizeHandles[i];
+      var pos = center.clone();
+      var halfDim;
+      if (h.axis === 'x') halfDim = seg.width / 2;
+      else if (h.axis === 'y') halfDim = seg.height / 2;
+      else halfDim = seg.depth / 2;
+
+      if (h.axis === 'x') pos.x += h.sign * halfDim;
+      else if (h.axis === 'y') pos.y += h.sign * halfDim;
+      else pos.z += h.sign * halfDim;
+
+      h.mesh.position.copy(pos);
+    }
+  }
+
+  // --- Mousedown priority chain ---
+
+  function onCanvasMouseDown(e, canvas) {
+    if (!_heroPreviewCamera) return false;
+
+    var ndc = getCanvasMouseNDC(e, canvas);
+    var mouse2 = new THREE.Vector2(ndc.x, ndc.y);
+    _hitboxRaycaster.setFromCamera(mouse2, _heroPreviewCamera);
+
+    // Priority 1: Check resize handles
+    if (_resizeHandles.length > 0) {
+      var handleMeshes = _resizeHandles.map(function (h) { return h.mesh; });
+      var handleHits = _hitboxRaycaster.intersectObjects(handleMeshes);
+      if (handleHits.length > 0) {
+        var hitHandle = handleHits[0].object;
+        for (var hi = 0; hi < _resizeHandles.length; hi++) {
+          if (_resizeHandles[hi].mesh === hitHandle) {
+            startResize(_resizeHandles[hi], handleHits[0].point);
+            return true;
+          }
+        }
+      }
+    }
+
+    // Priority 2: Check hitbox meshes (start move drag)
+    if (_hitboxPreviewMeshes.length > 0) {
+      var hitboxHits = _hitboxRaycaster.intersectObjects(_hitboxPreviewMeshes);
+      if (hitboxHits.length > 0) {
+        var hitMesh = hitboxHits[0].object;
+        var idx = _hitboxPreviewMeshes.indexOf(hitMesh);
+        if (idx !== -1) {
+          selectHitboxSegment(idx);
+          startHitboxDrag(idx, hitboxHits[0].point);
+          return true;
+        }
+      }
+    }
+
+    // Priority 3: Empty space — deselect
+    selectHitboxSegment(-1);
+    return false;
+  }
+
+  // --- Full 3D drag (move hitbox in space) ---
+
+  function startHitboxDrag(index, intersectionPoint) {
+    var seg = _hitboxSegments[index];
+    if (!seg) return;
+
+    pushUndo();
+    var center = getHitboxWorldPos(seg);
+
+    // Create camera-facing plane through the hitbox center
+    var camDir = new THREE.Vector3();
+    _heroPreviewCamera.getWorldDirection(camDir);
+    _hitboxDragPlane.setFromNormalAndCoplanarPoint(camDir.negate(), center);
+
+    // Compute offset from intersection point to center (so box doesn't jump)
+    _hitboxDragOffset.copy(center).sub(intersectionPoint);
+
+    // Snapshot current offsets
+    _hitboxDragStartSeg = {
+      offsetX: seg.offsetX || 0,
+      offsetY: seg.offsetY,
+      offsetZ: seg.offsetZ || 0
+    };
+
+    _hitboxDragMode = 'move';
+  }
+
+  function onHitboxDragMove(e, canvas) {
+    if (_hitboxDragMode !== 'move' || _selectedHitboxIndex < 0) return;
+    var seg = _hitboxSegments[_selectedHitboxIndex];
+    if (!seg) return;
+
+    var ndc = getCanvasMouseNDC(e, canvas);
+    var mouse2 = new THREE.Vector2(ndc.x, ndc.y);
+    _hitboxRaycaster.setFromCamera(mouse2, _heroPreviewCamera);
+
+    var intersect = new THREE.Vector3();
+    if (!rayPlaneIntersect(_hitboxRaycaster, _hitboxDragPlane, intersect)) return;
+
+    // New position = intersection + drag offset
+    var newPos = intersect.add(_hitboxDragOffset);
+
+    // Snap to 0.05 increments
+    newPos.x = snapTo(newPos.x, 0.05);
+    newPos.y = snapTo(newPos.y, 0.05);
+    newPos.z = snapTo(newPos.z, 0.05);
+
+    var feetY = getPreviewFeetY();
+
+    // Update segment offsets (snap center forces X/Z to 0)
+    seg.offsetX = _snapCenter ? 0 : Math.round(newPos.x * 100) / 100;
+    seg.offsetY = Math.max(0, Math.round((newPos.y - feetY) * 100) / 100);
+    seg.offsetZ = _snapCenter ? 0 : Math.round(newPos.z * 100) / 100;
+
+    // Move hitbox mesh directly (no full rebuild)
+    var mesh = _hitboxPreviewMeshes[_selectedHitboxIndex];
+    if (mesh) {
+      mesh.position.set(seg.offsetX || 0, feetY + seg.offsetY, seg.offsetZ || 0);
+    }
+
+    // Reposition resize handles
+    repositionResizeHandles();
+
+    // Sync form fields
+    syncFormFromSegments();
+  }
+
+  // --- Resize interaction ---
+
+  function startResize(handle, point) {
+    pushUndo();
+    _isResizing = true;
+    _resizeHandle = handle;
+    _resizeAxis = handle.axis;
+    _resizeSign = handle.sign;
+
+    var seg = _hitboxSegments[_selectedHitboxIndex];
+    if (!seg) return;
+
+    // Create camera-facing plane through the handle position
+    var camDir = new THREE.Vector3();
+    _heroPreviewCamera.getWorldDirection(camDir);
+    _resizePlane.setFromNormalAndCoplanarPoint(camDir.negate(), point.clone());
+
+    _resizeStartPoint.copy(point);
+
+    // Store start dimension and offset
+    if (_resizeAxis === 'x') {
+      _resizeStartDim = seg.width;
+      _resizeStartOffset = seg.offsetX || 0;
+    } else if (_resizeAxis === 'y') {
+      _resizeStartDim = seg.height;
+      _resizeStartOffset = seg.offsetY;
+    } else {
+      _resizeStartDim = seg.depth;
+      _resizeStartOffset = seg.offsetZ || 0;
+    }
+  }
+
+  function onResizeMove(e, canvas) {
+    if (!_isResizing || _selectedHitboxIndex < 0) return;
+    var seg = _hitboxSegments[_selectedHitboxIndex];
+    if (!seg) return;
+
+    var ndc = getCanvasMouseNDC(e, canvas);
+    var mouse2 = new THREE.Vector2(ndc.x, ndc.y);
+    _hitboxRaycaster.setFromCamera(mouse2, _heroPreviewCamera);
+
+    var intersect = new THREE.Vector3();
+    if (!rayPlaneIntersect(_hitboxRaycaster, _resizePlane, intersect)) return;
+
+    // Compute signed distance along the handle's axis from the start point
+    var delta;
+    if (_resizeAxis === 'x') delta = intersect.x - _resizeStartPoint.x;
+    else if (_resizeAxis === 'y') delta = intersect.y - _resizeStartPoint.y;
+    else delta = intersect.z - _resizeStartPoint.z;
+
+    // Apply sign: positive handle grows outward, negative handle grows outward in opposite direction
+    delta *= _resizeSign;
+
+    // New dimension
+    var newDim = Math.max(0.1, _resizeStartDim + delta);
+    newDim = snapTo(newDim, 0.05);
+    newDim = Math.round(newDim * 100) / 100;
+
+    var dimChange = newDim - _resizeStartDim;
+
+    // For negative-side handles: shift position so the opposite face stays anchored
+    var newOffset = _resizeStartOffset;
+    if (_resizeSign < 0) {
+      newOffset = _resizeStartOffset - dimChange / 2;
+    } else {
+      newOffset = _resizeStartOffset + dimChange / 2;
+    }
+    newOffset = Math.round(newOffset * 100) / 100;
+
+    // Apply to segment (snap center forces X/Z offset to 0, resizing symmetrically)
+    if (_resizeAxis === 'x') {
+      seg.width = newDim;
+      seg.offsetX = _snapCenter ? 0 : newOffset;
+    } else if (_resizeAxis === 'y') {
+      seg.height = newDim;
+      seg.offsetY = Math.max(0, newOffset);
+    } else {
+      seg.depth = newDim;
+      seg.offsetZ = _snapCenter ? 0 : newOffset;
+    }
+
+    // Rebuild hitbox mesh geometry
+    var mesh = _hitboxPreviewMeshes[_selectedHitboxIndex];
+    if (mesh) {
+      if (mesh.geometry) mesh.geometry.dispose();
+      mesh.geometry = new THREE.BoxGeometry(seg.width, seg.height, seg.depth);
+      var feetY = getPreviewFeetY();
+      mesh.position.set(seg.offsetX || 0, feetY + seg.offsetY, seg.offsetZ || 0);
+    }
+
+    // Reposition all handles
+    repositionResizeHandles();
+
+    // Sync form
+    syncFormFromSegments();
+  }
+
+  // --- Sync form fields from current segment data ---
+
+  function syncFormFromSegments() {
+    var container = document.getElementById('heHitboxList');
+    if (!container) return;
+    var entries = container.querySelectorAll('.wmb-part');
+
+    for (var i = 0; i < _hitboxSegments.length; i++) {
+      if (!entries[i]) continue;
+      var seg = _hitboxSegments[i];
+      var inputs = entries[i].querySelectorAll('input');
+      // Field order: Name, Width, Height, Depth, OffsetX, OffsetY, OffsetZ, DmgMult
+      if (inputs[0]) inputs[0].value = seg.name;
+      if (inputs[1]) inputs[1].value = String(seg.width);
+      if (inputs[2]) inputs[2].value = String(seg.height);
+      if (inputs[3]) inputs[3].value = String(seg.depth);
+      if (inputs[4]) inputs[4].value = String(seg.offsetX || 0);
+      if (inputs[5]) inputs[5].value = String(seg.offsetY);
+      if (inputs[6]) inputs[6].value = String(seg.offsetZ || 0);
+      if (inputs[7]) inputs[7].value = String(seg.damageMultiplier);
+    }
+  }
+
+  // --- Preview resize ---
+
+  window._resizeHeroEditorPreview = function () {
+    if (!_heroPreviewRenderer || !_heroPreviewCamera) return;
+    var container = document.getElementById('heroPreviewContainer');
+    if (!container) return;
+    var w, h;
+    if (container.classList.contains('viewport-mode')) {
+      w = container.clientWidth;
+      h = container.clientHeight;
+    } else {
+      w = 280;
+      h = 260;
+    }
+    if (w <= 0 || h <= 0) return;
+    var canvas = document.getElementById('heroPreviewCanvas');
+    if (canvas) {
+      canvas.width = w;
+      canvas.height = h;
+    }
+    _heroPreviewRenderer.setSize(w, h);
+    _heroPreviewCamera.aspect = w / h;
+    _heroPreviewCamera.updateProjectionMatrix();
+  };
+
+  window._resizeWmbPreview = function () {
+    if (!_wmbRenderer || !_wmbCamera) return;
+    var container = document.getElementById('wmbPreviewContainer');
+    if (!container) return;
+    var w, h;
+    if (container.classList.contains('viewport-mode')) {
+      w = container.clientWidth;
+      h = container.clientHeight;
+    } else {
+      w = 280;
+      h = 200;
+    }
+    if (w <= 0 || h <= 0) return;
+    var canvas = document.getElementById('wmbPreviewCanvas');
+    if (canvas) {
+      canvas.width = w;
+      canvas.height = h;
+    }
+    _wmbRenderer.setSize(w, h);
+    _wmbCamera.aspect = w / h;
+    _wmbCamera.updateProjectionMatrix();
+  };
+
+  // --- Hero config form read/write ---
 
   function getHeroConfigFromForm() {
     var colorHex = document.getElementById('heColor').value || '#66ffcc';
@@ -103,11 +713,18 @@
       sprintSpeed: parseFloat(document.getElementById('heSprintSpeed').value) || 8.5,
       jumpVelocity: parseFloat(document.getElementById('heJumpVelocity').value) || 8.5,
 
-      hitbox: {
-        width: parseFloat(document.getElementById('heHitW').value) || 0.8,
-        height: parseFloat(document.getElementById('heHitH').value) || 3.2,
-        depth: parseFloat(document.getElementById('heHitD').value) || 0.8
-      },
+      hitbox: _hitboxSegments.map(function (seg) {
+        return {
+          name: seg.name,
+          width: seg.width,
+          height: seg.height,
+          depth: seg.depth,
+          offsetX: seg.offsetX || 0,
+          offsetY: seg.offsetY,
+          offsetZ: seg.offsetZ || 0,
+          damageMultiplier: seg.damageMultiplier
+        };
+      }),
 
       modelType: 'standard',
 
@@ -120,8 +737,8 @@
         sprintSpreadRad: parseFloat(document.getElementById('heSprintSpreadRad').value) || 0.012,
         maxRange: parseInt(document.getElementById('heMaxRange').value) || 200,
         pellets: parseInt(document.getElementById('hePellets').value) || 1,
-        projectileSpeed: null,
-        projectileGravity: 0,
+        projectileSpeed: parseFloat(document.getElementById('heProjectileSpeed').value) || 0,
+        projectileGravity: parseFloat(document.getElementById('heProjectileGravity').value) || 0,
         splashRadius: 0,
         scope: scopeConfig,
         modelType: document.getElementById('heModelType').value || 'rifle',
@@ -153,10 +770,30 @@
     document.getElementById('heSprintSpeed').value = hero.sprintSpeed || 8.5;
     document.getElementById('heJumpVelocity').value = hero.jumpVelocity || 8.5;
 
-    var hb = hero.hitbox || {};
-    document.getElementById('heHitW').value = hb.width || 0.8;
-    document.getElementById('heHitH').value = hb.height || 3.2;
-    document.getElementById('heHitD').value = hb.depth || 0.8;
+    // Load hitbox segments
+    if (Array.isArray(hero.hitbox) && hero.hitbox.length > 0) {
+      _hitboxSegments = hero.hitbox.map(function (seg) {
+        return {
+          name: seg.name || 'segment',
+          width: seg.width || 0.5,
+          height: seg.height || 0.5,
+          depth: seg.depth || 0.5,
+          offsetX: seg.offsetX || 0,
+          offsetY: seg.offsetY || 1.0,
+          offsetZ: seg.offsetZ || 0,
+          damageMultiplier: seg.damageMultiplier || 1.0
+        };
+      });
+    } else {
+      // Legacy single-box format fallback
+      _hitboxSegments = [
+        { name: "head",  width: 0.5, height: 0.5, depth: 0.5, offsetX: 0, offsetY: 2.95, offsetZ: 0, damageMultiplier: 2.0 },
+        { name: "torso", width: 0.6, height: 0.9, depth: 0.5, offsetX: 0, offsetY: 2.05, offsetZ: 0, damageMultiplier: 1.0 },
+        { name: "legs",  width: 0.5, height: 1.1, depth: 0.5, offsetX: 0, offsetY: 0.55, offsetZ: 0, damageMultiplier: 0.75 }
+      ];
+    }
+    _selectedHitboxIndex = -1;
+    renderHitboxSegmentList();
 
     var w = hero.weapon || {};
     document.getElementById('heCooldownMs').value = w.cooldownMs || 166;
@@ -167,6 +804,8 @@
     document.getElementById('heSprintSpreadRad').value = (typeof w.sprintSpreadRad === 'number') ? w.sprintSpreadRad : 0.012;
     document.getElementById('heMaxRange').value = w.maxRange || 200;
     document.getElementById('hePellets').value = w.pellets || 1;
+    document.getElementById('heProjectileSpeed').value = (typeof w.projectileSpeed === 'number') ? w.projectileSpeed : 120;
+    document.getElementById('heProjectileGravity').value = (typeof w.projectileGravity === 'number') ? w.projectileGravity : 0;
 
     var scope = w.scope || {};
     document.getElementById('heScopeType').value = scope.type || 'none';
@@ -182,6 +821,8 @@
     document.getElementById('heModelType').value = w.modelType || 'rifle';
     document.getElementById('heTracerColor').value = '#' + (w.tracerColor || 0x66ffcc).toString(16).padStart(6, '0');
   }
+
+  // --- Hero preview update ---
 
   function updateHeroPreview() {
     if (!_heroPreviewScene) return;
@@ -226,9 +867,170 @@
         }
       });
     }
+
+    // Apply model visibility state
+    if (!_modelVisible && _heroPreviewPlayer._meshGroup) {
+      _heroPreviewPlayer._meshGroup.traverse(function (child) {
+        if (child === _heroPreviewPlayer._meshGroup) return;
+        if (child.userData && child.userData.isBodyPart) {
+          child.visible = false;
+        }
+        if (child === _heroPreviewPlayer._weaponAttachPoint) {
+          child.visible = false;
+        }
+      });
+      if (_heroPreviewPlayer._healthBarGroup) {
+        _heroPreviewPlayer._healthBarGroup.visible = false;
+      }
+    }
+
+    // Remove old hitbox preview wireframes from scene-level hitbox group
+    clearResizeHandles();
+    if (_hitboxGroup) {
+      while (_hitboxGroup.children.length > 0) {
+        var old = _hitboxGroup.children[0];
+        _hitboxGroup.remove(old);
+        if (old.geometry) old.geometry.dispose();
+        if (old.material) old.material.dispose();
+      }
+    }
+    _hitboxPreviewMeshes = [];
+
+    // Add wireframe boxes at scene level (world coordinates)
+    var segColors = { head: 0xff4444, torso: 0x44ff44, legs: 0x4488ff };
+    var defaultColor = 0xffff44;
+    var feetY = getPreviewFeetY();
+
+    for (var si = 0; si < _hitboxSegments.length; si++) {
+      var seg = _hitboxSegments[si];
+      var segColor = segColors[seg.name] || defaultColor;
+      var boxGeom = new THREE.BoxGeometry(seg.width, seg.height, seg.depth);
+      var boxMat = new THREE.MeshBasicMaterial({ color: segColor, wireframe: true, transparent: true, opacity: 0.3 });
+      var boxMesh = new THREE.Mesh(boxGeom, boxMat);
+      // Position at world coordinates: offsetX, feetY + offsetY, offsetZ
+      boxMesh.position.set(seg.offsetX || 0, feetY + seg.offsetY, seg.offsetZ || 0);
+      _hitboxGroup.add(boxMesh);
+      _hitboxPreviewMeshes.push(boxMesh);
+    }
+
+    // Restore selection visual and resize handles
+    updateHitboxVisuals();
+    if (_selectedHitboxIndex >= 0 && _selectedHitboxIndex < _hitboxSegments.length) {
+      rebuildResizeHandles();
+    }
+  }
+
+  // --- Hitbox Segment List ---
+
+  var _hitboxSegmentColors = { head: 0xff4444, torso: 0x44ff44, legs: 0x4488ff };
+
+  function addHitboxSegment() {
+    pushUndo();
+    _hitboxSegments.push({
+      name: 'segment',
+      width: 0.5,
+      height: 0.5,
+      depth: 0.5,
+      offsetX: 0,
+      offsetY: 1.0,
+      offsetZ: 0,
+      damageMultiplier: 1.0
+    });
+    renderHitboxSegmentList();
+    updateHeroPreview();
+  }
+
+  function removeHitboxSegment(index) {
+    pushUndo();
+    if (index === _selectedHitboxIndex) {
+      _selectedHitboxIndex = -1;
+      clearResizeHandles();
+    } else if (index < _selectedHitboxIndex) {
+      _selectedHitboxIndex--;
+    }
+    _hitboxSegments.splice(index, 1);
+    renderHitboxSegmentList();
+    updateHeroPreview();
+  }
+
+  function renderHitboxSegmentList() {
+    var container = document.getElementById('heHitboxList');
+    if (!container) return;
+    container.innerHTML = '';
+
+    _hitboxSegments.forEach(function (seg, i) {
+      var div = document.createElement('div');
+      div.className = 'wmb-part';
+
+      var header = document.createElement('div');
+      header.className = 'wmb-part-header';
+      header.innerHTML = '<span>' + (seg.name || 'segment').toUpperCase() + ' #' + (i + 1) + '</span>';
+      var removeBtn = document.createElement('button');
+      removeBtn.className = 'wmb-part-remove';
+      removeBtn.textContent = 'Remove';
+      removeBtn.addEventListener('click', function () { removeHitboxSegment(i); });
+      header.appendChild(removeBtn);
+      div.appendChild(header);
+
+      var fields = [
+        { label: 'Name', key: 'name', type: 'text' },
+        { label: 'Width', key: 'width', step: 0.1, type: 'number' },
+        { label: 'Height', key: 'height', step: 0.1, type: 'number' },
+        { label: 'Depth', key: 'depth', step: 0.1, type: 'number' },
+        { label: 'Offset X', key: 'offsetX', step: 0.1, type: 'number' },
+        { label: 'Offset Y', key: 'offsetY', step: 0.1, type: 'number' },
+        { label: 'Offset Z', key: 'offsetZ', step: 0.1, type: 'number' },
+        { label: 'Dmg Mult', key: 'damageMultiplier', step: 0.25, type: 'number' }
+      ];
+
+      fields.forEach(function (f) {
+        var row = document.createElement('div');
+        row.className = 'dev-field';
+        var lbl = document.createElement('label');
+        lbl.textContent = f.label;
+        var inp = document.createElement('input');
+        inp.type = f.type || 'number';
+        if (f.step) inp.step = String(f.step);
+        inp.value = String(seg[f.key] != null ? seg[f.key] : 0);
+        inp.addEventListener('input', function () {
+          pushUndoForFormInput();
+          if (f.type === 'text') {
+            seg[f.key] = inp.value;
+          } else {
+            seg[f.key] = parseFloat(inp.value) || 0;
+          }
+          updateHeroPreview();
+        });
+        row.appendChild(lbl);
+        row.appendChild(inp);
+        div.appendChild(row);
+      });
+
+      container.appendChild(div);
+    });
   }
 
   function wireHeroEditorInputs() {
+    // Collapsible sections
+    var defaultCollapsed = ['Weapon', 'Scope', 'Crosshair', 'Visual'];
+    var sectionHeaders = document.querySelectorAll('#heroEditorForm .dev-section-header');
+    sectionHeaders.forEach(function (header) {
+      var content = header.nextElementSibling;
+      if (!content || !content.classList.contains('dev-section-content')) return;
+
+      // Collapse default sections
+      var sectionName = header.textContent.trim();
+      if (defaultCollapsed.indexOf(sectionName) !== -1) {
+        header.classList.add('collapsed');
+        content.classList.add('collapsed');
+      }
+
+      header.addEventListener('click', function () {
+        header.classList.toggle('collapsed');
+        content.classList.toggle('collapsed');
+      });
+    });
+
     // Live preview on any input change
     var inputIds = [
       'heColor', 'heModelType', 'heTracerColor'
@@ -244,6 +1046,62 @@
         });
       }
     });
+
+    // Hitbox segment add button
+    var hitboxAddBtn = document.getElementById('heHitboxAdd');
+    if (hitboxAddBtn) {
+      hitboxAddBtn.addEventListener('click', function () { addHitboxSegment(); });
+    }
+
+    // Toggle model button
+    var toggleModelBtn = document.getElementById('heToggleModel');
+    if (toggleModelBtn) {
+      toggleModelBtn.addEventListener('click', function () { toggleModelVisibility(); });
+    }
+
+    // Snap to center toggle
+    var snapCenterBtn = document.getElementById('heSnapCenter');
+    if (snapCenterBtn) {
+      snapCenterBtn.addEventListener('click', function () {
+        _snapCenter = !_snapCenter;
+        snapCenterBtn.textContent = _snapCenter ? 'Snap Center: On' : 'Snap Center: Off';
+        if (_snapCenter) {
+          snapCenterBtn.classList.add('active');
+        } else {
+          snapCenterBtn.classList.remove('active');
+        }
+      });
+    }
+
+    // Undo / Redo buttons
+    var undoBtn = document.getElementById('heUndo');
+    var redoBtn = document.getElementById('heRedo');
+    if (undoBtn) undoBtn.addEventListener('click', function () { hitboxUndo(); });
+    if (redoBtn) redoBtn.addEventListener('click', function () { hitboxRedo(); });
+
+    // Ctrl+Z / Ctrl+Shift+Z keyboard shortcuts for hitbox undo/redo
+    var canvas = document.getElementById('heroPreviewCanvas');
+    if (canvas) {
+      window.addEventListener('keydown', function (e) {
+        // Only handle when hero editor panel is active
+        var panel = document.getElementById('panelHeroEditor');
+        if (!panel || !panel.classList.contains('active')) return;
+
+        if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
+          e.preventDefault();
+          hitboxUndo();
+        } else if ((e.ctrlKey || e.metaKey) && e.key === 'z' && e.shiftKey) {
+          e.preventDefault();
+          hitboxRedo();
+        } else if ((e.ctrlKey || e.metaKey) && e.key === 'y') {
+          e.preventDefault();
+          hitboxRedo();
+        }
+      });
+    }
+
+    // Render initial hitbox segment list
+    renderHitboxSegmentList();
 
     // Hero select dropdown
     var heroSelect = document.getElementById('heHeroSelect');

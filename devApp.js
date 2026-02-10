@@ -147,9 +147,16 @@ function resizeRenderer() {
   camera.aspect = w / h;
   camera.updateProjectionMatrix();
 }
+window.resizeRenderer = resizeRenderer;
 
 window.addEventListener('resize', function () {
   resizeRenderer();
+  if (typeof window._resizeHeroEditorPreview === 'function') {
+    window._resizeHeroEditorPreview();
+  }
+  if (typeof window._resizeWmbPreview === 'function') {
+    window._resizeWmbPreview();
+  }
 });
 
 // ------- Sidebar Navigation -------
@@ -209,12 +216,85 @@ function getPanelElementId(panelId) {
   return map[panelId] || '';
 }
 
-// Override switchPanel to use proper mapping
+// Override switchPanel to use proper mapping + expanded layout for editor panels
 (function () {
   var origSwitch = switchPanel;
+
+  // Track previous panel for cleanup
+  var _prevExpandedPanel = null;
+
+  function collapseEditorLayout() {
+    var sidebar = document.getElementById('devSidebar');
+    var viewport = document.getElementById('devViewport');
+
+    // Return hero preview container to its panel
+    var heroContainer = document.getElementById('heroPreviewContainer');
+    var heroPanel = document.getElementById('panelHeroEditor');
+    if (heroContainer && heroPanel && heroContainer.classList.contains('viewport-mode')) {
+      heroContainer.classList.remove('viewport-mode');
+      heroPanel.appendChild(heroContainer);
+    }
+
+    // Return wmb preview container to its panel
+    var wmbContainer = document.getElementById('wmbPreviewContainer');
+    var wmbPanel = document.getElementById('panelWeaponModelBuilder');
+    if (wmbContainer && wmbPanel && wmbContainer.classList.contains('viewport-mode')) {
+      wmbContainer.classList.remove('viewport-mode');
+      // Insert before the last dev-actions in the panel
+      var wmbActions = wmbPanel.querySelectorAll('.dev-actions');
+      if (wmbActions.length > 1) {
+        wmbPanel.insertBefore(wmbContainer, wmbActions[wmbActions.length - 1]);
+      } else {
+        wmbPanel.appendChild(wmbContainer);
+      }
+    }
+
+    if (sidebar) sidebar.classList.remove('expanded');
+    _prevExpandedPanel = null;
+  }
+
+  function expandEditorLayout(panelId) {
+    var sidebar = document.getElementById('devSidebar');
+    var viewport = document.getElementById('devViewport');
+    if (!sidebar || !viewport) return;
+
+    sidebar.classList.add('expanded');
+
+    if (panelId === 'heroEditor') {
+      var heroContainer = document.getElementById('heroPreviewContainer');
+      if (heroContainer) {
+        viewport.appendChild(heroContainer);
+        heroContainer.classList.add('viewport-mode');
+        setTimeout(function () {
+          if (typeof window._resizeHeroEditorPreview === 'function') {
+            window._resizeHeroEditorPreview();
+          }
+        }, 50);
+      }
+    } else if (panelId === 'weaponModelBuilder') {
+      var wmbContainer = document.getElementById('wmbPreviewContainer');
+      if (wmbContainer) {
+        viewport.appendChild(wmbContainer);
+        wmbContainer.classList.add('viewport-mode');
+        setTimeout(function () {
+          if (typeof window._resizeWmbPreview === 'function') {
+            window._resizeWmbPreview();
+          }
+        }, 50);
+      }
+    }
+
+    _prevExpandedPanel = panelId;
+  }
+
   switchPanel = function (panelId) {
     if (_activePanel === 'mapEditor' && _mapEditorWasOpen) {
       _mapEditorWasOpen = false;
+    }
+
+    // Collapse previous expanded layout
+    if (_prevExpandedPanel) {
+      collapseEditorLayout();
     }
 
     _activePanel = panelId;
@@ -231,9 +311,16 @@ function getPanelElementId(panelId) {
       p.classList.toggle('active', p.id === targetId);
     });
 
+    // Expand layout for editor panels
+    if (panelId === 'heroEditor' || panelId === 'weaponModelBuilder') {
+      expandEditorLayout(panelId);
+    }
+
     if (panelId === 'splitScreen' || panelId === 'quickTest' || panelId === 'heroEditor') {
       populateAllDropdowns();
     }
+
+    resizeRenderer();
   };
 })();
 

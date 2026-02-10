@@ -530,3 +530,73 @@ body {
 .ss-hud.dimmed {
     opacity: 0.4;
 }
+
+/* Collapsible sections */
+.dev-section-header {
+    cursor: pointer;
+    user-select: none;
+    padding-left: 16px;
+    position: relative;
+}
+
+.dev-section-header::before {
+    content: '\25BC ';
+    font-size: 10px;
+    position: absolute;
+    left: 0;
+    top: 50%;
+    transform: translateY(-50%);
+}
+
+.dev-section-header.collapsed::before {
+    content: '\25B6 ';
+}
+
+.dev-section-content.collapsed {
+    display: none;
+}
+
+/* Hitbox toolbar — always visible, not inside collapsible content */
+.dev-hitbox-toolbar {
+    display: flex;
+    gap: 6px;
+    margin: 6px 0 4px;
+}
+
+.dev-hitbox-toolbar .dev-btn-secondary {
+    flex: 1;
+    padding: 5px 8px;
+    font-size: 11px;
+}
+
+.dev-hitbox-toolbar .dev-btn-secondary.active {
+    background: rgba(0, 255, 136, 0.15);
+    border-color: #00ff88;
+    color: #00ff88;
+}
+
+/* Expanded sidebar for editor panels */
+#devSidebar.expanded {
+    width: 450px;
+    min-width: 450px;
+}
+
+/* Viewport-mode preview: fills the main viewport area */
+#heroPreviewContainer.viewport-mode,
+#wmbPreviewContainer.viewport-mode {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 5;
+    margin: 0;
+    border: none;
+    border-radius: 0;
+}
+
+#heroPreviewContainer.viewport-mode canvas,
+#wmbPreviewContainer.viewport-mode canvas {
+    width: 100% !important;
+    height: 100% !important;
+}

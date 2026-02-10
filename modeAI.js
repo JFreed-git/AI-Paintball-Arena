@@ -158,6 +158,7 @@
 
   function endRound(winner) {
     state.match.roundActive = false;
+    if (typeof clearAllProjectiles === 'function') clearAllProjectiles();
     if (winner === 'player') state.match.playerWins++;
     else if (winner === 'ai') state.match.aiWins++;
 
@@ -201,15 +202,24 @@
     if (input.fireDown && playerCanShoot(now)) {
       var dir = new THREE.Vector3();
       camera.getWorldDirection(dir);
-      var playerTarget = state.ai ? state.ai.player.getHitTarget() : null;
+
+      // Build segmented hitbox target for AI
+      var aiTargets = [];
+      var aiEntities = [];
+      if (state.ai && state.ai.player && state.ai.player.alive) {
+        aiTargets.push({ segments: state.ai.player.getHitSegments(), entity: state.ai });
+        aiEntities.push(state.ai.player);
+      }
 
       var result = sharedFireWeapon(w, camera.position.clone(), dir, {
         sprinting: !!input.sprint,
         solids: state.arena.solids,
-        targets: playerTarget ? [playerTarget] : [],
+        targets: aiTargets,
+        projectileTargetEntities: aiEntities,
         tracerColor: 0x66ffcc,
-        onHit: function () {
-          state.ai.takeDamage(w.damage);
+        onHit: function (target, point, dist, pelletIdx, damageMultiplier) {
+          var dmg = w.damage * (damageMultiplier || 1.0);
+          state.ai.takeDamage(dmg);
           updateHUD();
           if (!state.ai.alive && state.match.roundActive) {
             endRound('player');
@@ -270,6 +280,9 @@
     }
     updateReload(now);
 
+    // Update live projectiles
+    if (typeof updateProjectiles === 'function') updateProjectiles(dt);
+
     if (state.ai && state.match.roundActive) {
       // In spectator mode, AI targets the stationary player position, not the free camera
       var aiTargetPos = window.devSpectatorMode
@@ -277,7 +290,8 @@
         : camera.position.clone();
       state.ai.update(dt, {
         playerPos: aiTargetPos,
-        playerRadius: state.player._hitRadius,
+        playerSegments: state.player.getHitSegments(),
+        playerEntity: state.player,
         onPlayerHit: function (dmg) {
           if (!state.player.alive) return;
           if (window.devGodMode) return;
@@ -364,6 +378,7 @@
     }
     if (state) showPaintballHUD(false);
 
+    if (typeof clearAllProjectiles === 'function') clearAllProjectiles();
     setCrosshairDimmed(false);
     setCrosshairSpread(BASE_CROSSHAIR_SPREAD_PX);
     if (typeof clearFirstPersonWeapon === 'function') clearFirstPersonWeapon();

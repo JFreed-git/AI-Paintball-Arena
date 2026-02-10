@@ -128,6 +128,7 @@
   function endRound(who) {
     if (!state || !state.match) return;
     state.match.roundActive = false;
+    if (typeof clearAllProjectiles === 'function') clearAllProjectiles();
 
     if (who === 'p1') state.match.player1Wins++;
     else if (who === 'p2') state.match.player2Wins++;
@@ -385,21 +386,27 @@
       : p.position.clone().add(dir.clone().multiplyScalar(0.2)).add(new THREE.Vector3(0, -0.05, 0));
     var other = (p === state.players.host) ? state.players.client : state.players.host;
 
-    // Use Player's getHitTarget() for proper hitbox — fixes Y alignment bug
-    var hitTarget = other ? other.getHitTarget() : null;
+    // Build segmented hitbox targets
+    var hitTargets = [];
+    var hitEntities = [];
+    if (other && other.alive) {
+      hitTargets.push({ segments: other.getHitSegments(), entity: other });
+      hitEntities.push(other);
+    }
     var tracerColor = isLocalPlayer(p) ? 0x66ffcc : 0x66aaff;
 
     var result = sharedFireWeapon(w, origin, dir, {
       sprinting: !!inp.sprint,
       solids: state.arena.solids,
-      targets: hitTarget ? [hitTarget] : [],
+      targets: hitTargets,
+      projectileTargetEntities: hitEntities,
       tracerColor: tracerColor,
-      onHit: function (target) {
+      onHit: function (target, point, dist, pelletIdx, damageMultiplier) {
         if (other && other.alive) {
           if (window.devGodMode && isLocalPlayer(other)) {
             return; // God mode: skip damage for local player
           }
-          other.takeDamage(w.damage);
+          other.takeDamage(w.damage * (damageMultiplier || 1.0));
           if (isLocalPlayer(other)) updateHUDForPlayer(other);
           if (isHost && state.match && state.match.roundActive && !other.alive) {
             endRound((p === state.players.host) ? 'p1' : 'p2');
@@ -408,13 +415,24 @@
         }
       },
       onPelletFired: function (pelletResult) {
-        if (isHost && socket && pelletResult && pelletResult.point) {
+        if (isHost && socket) {
           try {
-            socket.emit('shot', {
-              o: [origin.x, origin.y, origin.z],
-              e: [pelletResult.point.x, pelletResult.point.y, pelletResult.point.z],
-              c: tracerColor
-            });
+            // For projectile weapons, send direction + speed for client-side visual
+            if (w.projectileSpeed && w.projectileSpeed > 0) {
+              socket.emit('shot', {
+                o: [origin.x, origin.y, origin.z],
+                d: pelletResult.dir ? [pelletResult.dir.x, pelletResult.dir.y, pelletResult.dir.z] : [0, 0, -1],
+                c: tracerColor,
+                s: w.projectileSpeed,
+                g: w.projectileGravity || 0
+              });
+            } else if (pelletResult && pelletResult.point) {
+              socket.emit('shot', {
+                o: [origin.x, origin.y, origin.z],
+                e: [pelletResult.point.x, pelletResult.point.y, pelletResult.point.z],
+                c: tracerColor
+              });
+            }
           } catch (e) { console.warn('multiplayer: shot emit failed:', e); }
         }
       }
@@ -495,6 +513,9 @@
     handleShooting(state.players.client, now);
     handleReload(state.players.host, now);
     handleReload(state.players.client, now);
+
+    // Update live projectiles
+    if (typeof updateProjectiles === 'function') updateProjectiles(dt);
 
     // Update remote player mesh position and facing
     var remotePlayer = state.players.client;
@@ -709,6 +730,9 @@
 
       sharedSetCrosshairBySprint(!!input.sprint, state.players.client.weapon.spreadRad, state.players.client.weapon.sprintSpreadRad);
       sharedSetSprintUI(!!input.sprint, state.hud.sprintIndicator);
+
+      // Update visual projectiles on client
+      if (typeof updateProjectiles === 'function') updateProjectiles(dt);
     }
 
     state.loopHandle = requestAnimationFrame(tick);
@@ -864,12 +888,33 @@
 
     socket.on('shot', function (payload) {
       if (isHost) return;
-      if (!payload || !Array.isArray(payload.o) || !Array.isArray(payload.e)) return;
+      if (!payload || !Array.isArray(payload.o)) return;
       var o = new THREE.Vector3(payload.o[0], payload.o[1], payload.o[2]);
-      var e = new THREE.Vector3(payload.e[0], payload.e[1], payload.e[2]);
       var color = (typeof payload.c === 'number') ? payload.c : 0x66ffcc;
-      if (typeof spawnTracer === 'function') {
-        try { spawnTracer(o, e, color, TRACER_LIFETIME); } catch (e) { console.warn('multiplayer: spawnTracer failed:', e); }
+
+      // Projectile format: has 'd' (direction) and 's' (speed)
+      if (payload.d && Array.isArray(payload.d) && payload.s) {
+        var d = new THREE.Vector3(payload.d[0], payload.d[1], payload.d[2]);
+        var vel = d.clone().multiplyScalar(payload.s);
+        if (typeof spawnVisualProjectile === 'function') {
+          try {
+            spawnVisualProjectile({
+              position: o,
+              velocity: vel,
+              gravity: payload.g || 0,
+              tracerColor: color,
+              maxRange: 200,
+              solids: (state && state.arena) ? state.arena.solids : []
+            });
+          } catch (err) { console.warn('multiplayer: visual projectile failed:', err); }
+        }
+      }
+      // Legacy hitscan format: has 'e' (endpoint)
+      else if (Array.isArray(payload.e)) {
+        var e = new THREE.Vector3(payload.e[0], payload.e[1], payload.e[2]);
+        if (typeof spawnTracer === 'function') {
+          try { spawnTracer(o, e, color, TRACER_LIFETIME); } catch (err) { console.warn('multiplayer: spawnTracer failed:', err); }
+        }
       }
     });
   }
@@ -958,6 +1003,7 @@
       if (state.players.client) { try { state.players.client.destroy(); } catch (e) { console.warn('multiplayer: client.destroy failed:', e); } }
       if (state.arena && state.arena.group && state.arena.group.parent) state.arena.group.parent.remove(state.arena.group);
       showMultiplayerHUD(false);
+      if (typeof clearAllProjectiles === 'function') clearAllProjectiles();
       setCrosshairDimmed(false);
       setCrosshairSpread(0);
       if (typeof clearFirstPersonWeapon === 'function') clearFirstPersonWeapon();

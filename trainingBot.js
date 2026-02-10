@@ -135,6 +135,11 @@
     return this.player.getHitTarget();
   };
 
+  TrainingBot.prototype.getHitSegments = function () {
+    if (!this.alive || !this.player) return [];
+    return this.player.getHitSegments();
+  };
+
   TrainingBot.prototype.destroy = function () {
     if (this.player) {
       this.player.destroy();

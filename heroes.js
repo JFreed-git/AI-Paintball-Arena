@@ -25,13 +25,16 @@
  *     sprintSpeed:   number    — sprint speed (m/s)
  *     jumpVelocity:  number    — initial jump velocity (m/s upward)
  *
- *     hitbox: {
- *       width:  number,        — X extent (meters)
- *       height: number,        — Y extent (full standing height)
- *       depth:  number         — Z extent
- *       // TODO (future): segments for headshot detection
- *       // segments: { head: { offsetY, w, h, d }, torso: {...}, legs: {...} }
- *     }
+ *     hitbox: [               — array of named hitbox segments
+ *       {
+ *         name: string,       — label (e.g. "head", "torso", "legs")
+ *         width: number,      — X extent (meters)
+ *         height: number,     — Y extent
+ *         depth: number,      — Z extent
+ *         offsetY: number,    — center Y relative to player feet
+ *         damageMultiplier: number — damage scaling on hit (2.0 = headshot)
+ *       }
+ *     ]
  *
  *     modelType:     string    — key into a hero model builder (future)
  *     weapon:        object    — weapon config passed to new Weapon(hero.weapon)
@@ -65,8 +68,12 @@
       sprintSpeed: 8.5,
       jumpVelocity: 8.5,
 
-      // Hitbox dimensions (meters) — used for collision and hit detection
-      hitbox: { width: 0.8, height: 3.2, depth: 0.8 },
+      // Hitbox segments — head/torso/legs with damage multipliers
+      hitbox: [
+        { name: "head",  width: 0.5, height: 0.5, depth: 0.5, offsetY: 2.95, damageMultiplier: 2.0 },
+        { name: "torso", width: 0.6, height: 0.9, depth: 0.5, offsetY: 2.05, damageMultiplier: 1.0 },
+        { name: "legs",  width: 0.5, height: 1.1, depth: 0.5, offsetY: 0.55, damageMultiplier: 0.75 }
+      ],
 
       // Visual model key (future: maps to hero model builder)
       modelType: 'standard',
@@ -81,7 +88,7 @@
         sprintSpreadRad: 0.012,
         maxRange: 200,
         pellets: 1,
-        projectileSpeed: null,    // hitscan
+        projectileSpeed: 120,
         projectileGravity: 0,
         splashRadius: 0,
         scope: {
@@ -119,7 +126,11 @@
       sprintSpeed: 8.0,
       jumpVelocity: 8.5,
 
-      hitbox: { width: 0.9, height: 3.2, depth: 0.9 },
+      hitbox: [
+        { name: "head",  width: 0.55, height: 0.5, depth: 0.55, offsetY: 2.95, damageMultiplier: 2.0 },
+        { name: "torso", width: 0.7,  height: 0.9, depth: 0.55, offsetY: 2.05, damageMultiplier: 1.0 },
+        { name: "legs",  width: 0.55, height: 1.1, depth: 0.55, offsetY: 0.55, damageMultiplier: 0.75 }
+      ],
 
       modelType: 'standard',
 
@@ -132,7 +143,7 @@
         sprintSpreadRad: 0.10,
         maxRange: 60,
         pellets: 8,
-        projectileSpeed: null,    // hitscan
+        projectileSpeed: 120,
         projectileGravity: 0,
         splashRadius: 0,
         scope: {
@@ -250,6 +261,11 @@
       if (typeof setFirstPersonWeapon === 'function') {
         setFirstPersonWeapon(hero.weapon.modelType || 'default');
       }
+    }
+
+    // Apply segmented hitbox config
+    if (typeof player.setHitboxConfig === 'function') {
+      player.setHitboxConfig(hero.hitbox);
     }
 
     // Store hero id on player for reference

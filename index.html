@@ -127,79 +127,6 @@
             </div>
         </div>
 
-        <!-- Map Editor UI -->
-        <div id="editorUI" class="hidden">
-            <div id="editorToolbar">
-                <button class="editor-tool active" data-tool="select">Select</button>
-                <button class="editor-tool" data-tool="box">Box</button>
-                <button class="editor-tool" data-tool="cylinder">Cylinder</button>
-                <button class="editor-tool" data-tool="halfCylinder">Half-Cyl</button>
-                <button class="editor-tool" data-tool="ramp">Ramp</button>
-                <span class="editor-sep"></span>
-                <button class="editor-btn" id="editorMirrorToggle">Mirror: Off</button>
-                <span class="editor-sep"></span>
-                <button class="editor-btn" id="editorUndo">Undo</button>
-                <button class="editor-btn" id="editorRedo">Redo</button>
-                <span class="editor-sep"></span>
-                <button class="editor-btn" id="editorSave">Save</button>
-                <button class="editor-btn" id="editorLoad">Load</button>
-                <button class="editor-btn" id="editorNew">New</button>
-                <span class="editor-sep"></span>
-                <button class="editor-btn" id="editorPlayerMode">Player</button>
-                <button class="editor-btn" id="editorSettings">Settings</button>
-                <button class="editor-btn editor-exit" id="editorExit">Exit</button>
-            </div>
-
-            <div id="editorPropsPanel" class="hidden">
-                <button class="panel-close" id="epropClose">&times;</button>
-                <h4>Properties</h4>
-                <div class="eprop"><label>Type</label><span id="epropType">-</span></div>
-                <div class="eprop"><label>X</label><input type="number" id="epropX" step="0.5" /></div>
-                <div class="eprop"><label>Z</label><input type="number" id="epropZ" step="0.5" /></div>
-                <div class="eprop"><label>Y</label><input type="number" id="epropY" step="0.5" /></div>
-                <div class="eprop" id="epropSizeRow"><label>Size X</label><input type="number" id="epropSX" step="0.5" min="0.5" /></div>
-                <div class="eprop" id="epropSYRow"><label>Height</label><input type="number" id="epropSY" step="0.5" min="0.5" /></div>
-                <div class="eprop" id="epropSZRow"><label>Size Z</label><input type="number" id="epropSZ" step="0.5" min="0.5" /></div>
-                <div class="eprop" id="epropRadiusRow"><label>Radius</label><input type="number" id="epropRadius" step="0.25" min="0.25" /></div>
-                <div class="eprop"><label>Rotation</label><input type="number" id="epropRot" step="90" /></div>
-                <div class="eprop"><label>Color</label><input type="color" id="epropColor" value="#6B5B4F" /></div>
-                <button class="editor-btn" id="epropMirror">Mirror Copy</button>
-                <button class="editor-btn editor-danger" id="epropDelete">Delete</button>
-            </div>
-
-            <div id="editorSettingsPanel" class="hidden">
-                <button class="panel-close" id="esCloseX">&times;</button>
-                <h4>Map Settings</h4>
-                <div class="eprop"><label>Map Name</label><input type="text" id="esMapName" value="my-map" /></div>
-                <div class="eprop"><label>Arena Width</label><input type="number" id="esArenaW" step="1" min="20" value="60" /></div>
-                <div class="eprop"><label>Arena Length</label><input type="number" id="esArenaL" step="1" min="20" value="90" /></div>
-                <div class="eprop"><label>Wall Height</label><input type="number" id="esWallH" step="0.5" min="1" value="3.5" /></div>
-                <div class="eprop"><label>Spawn A X</label><input type="number" id="esSpawnAX" step="1" value="0" /></div>
-                <div class="eprop"><label>Spawn A Z</label><input type="number" id="esSpawnAZ" step="1" value="-37" /></div>
-                <div class="eprop"><label>Spawn B X</label><input type="number" id="esSpawnBX" step="1" value="0" /></div>
-                <div class="eprop"><label>Spawn B Z</label><input type="number" id="esSpawnBZ" step="1" value="37" /></div>
-                <button class="editor-btn" id="esApply">Apply</button>
-                <button class="editor-btn" id="esClose">Close</button>
-            </div>
-
-            <div id="editorLoadPanel" class="hidden">
-                <button class="panel-close" id="editorLoadCloseX">&times;</button>
-                <h4>Load Map</h4>
-                <select id="editorLoadSelect"></select>
-                <button class="editor-btn" id="editorLoadConfirm">Load</button>
-                <button class="editor-btn editor-danger" id="editorDeleteMap">Delete</button>
-                <button class="editor-btn" id="editorLoadCancel">Cancel</button>
-            </div>
-
-            <div id="editorPlayerHint" class="hidden">Player Mode — Press P to return to editor</div>
-
-            <div id="editorStatusBar">
-                <span id="editorToolLabel">Tool: Select</span>
-                <span id="editorControlsHint">RMB+WASD: Fly | LMB: Select/Place</span>
-                <span id="editorObjCount">Objects: 0</span>
-            </div>
-        </div>
-
         <div id="trainingStats" class="hidden">
             Shots: <span id="tsShotCount">0</span><br>
             Hits: <span id="tsHitCount">0</span><br>
@@ -230,7 +157,6 @@
                 <button class="dev-cmd" data-cmd="heal">Heal Player</button>
                 <button class="dev-cmd" data-cmd="showHitboxes">Show Hitboxes: OFF</button>
                 <button class="dev-cmd" data-cmd="showAIState">AI State: OFF</button>
-                <button class="dev-cmd" data-cmd="mapEditor">Map Editor</button>
             </div>
         </div>
     </div>
@@ -262,7 +188,6 @@
     <script src="arenaCompetitive.js"></script>
     <script src="arenaTraining.js"></script>
     <script src="mapFormat.js"></script>
-    <script src="mapEditor.js"></script>
 
     <!-- Combat and AI -->
     <script src="projectiles.js"></script>

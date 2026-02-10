@@ -58,61 +58,84 @@
                     </div>
                 </div>
                 <div id="heroEditorForm" class="dev-scrollable">
-                    <h4>Character</h4>
-                    <div class="dev-field"><label>ID</label><input type="text" id="heId" /></div>
-                    <div class="dev-field"><label>Name</label><input type="text" id="heName" /></div>
-                    <div class="dev-field"><label>Description</label><input type="text" id="heDesc" /></div>
-                    <div class="dev-field"><label>Color</label><input type="color" id="heColor" value="#66ffcc" /></div>
-
-                    <h4>Stats</h4>
-                    <div class="dev-field"><label>Max Health</label><input type="number" id="heMaxHealth" value="100" min="1" /></div>
-                    <div class="dev-field"><label>Walk Speed</label><input type="number" id="heWalkSpeed" value="4.5" step="0.1" /></div>
-                    <div class="dev-field"><label>Sprint Speed</label><input type="number" id="heSprintSpeed" value="8.5" step="0.1" /></div>
-                    <div class="dev-field"><label>Jump Velocity</label><input type="number" id="heJumpVelocity" value="8.5" step="0.5" /></div>
-
-                    <h4>Hitbox</h4>
-                    <div class="dev-field"><label>Width</label><input type="number" id="heHitW" value="0.8" step="0.1" /></div>
-                    <div class="dev-field"><label>Height</label><input type="number" id="heHitH" value="3.2" step="0.1" /></div>
-                    <div class="dev-field"><label>Depth</label><input type="number" id="heHitD" value="0.8" step="0.1" /></div>
-
-                    <h4>Weapon</h4>
-                    <div class="dev-field"><label>Cooldown (ms)</label><input type="number" id="heCooldownMs" value="166" min="1" /></div>
-                    <div class="dev-field"><label>Mag Size</label><input type="number" id="heMagSize" value="6" min="1" /></div>
-                    <div class="dev-field"><label>Reload (sec)</label><input type="number" id="heReloadTime" value="2.5" step="0.1" /></div>
-                    <div class="dev-field"><label>Damage</label><input type="number" id="heDamage" value="20" min="1" /></div>
-                    <div class="dev-field"><label>Spread (rad)</label><input type="number" id="heSpreadRad" value="0" step="0.005" min="0" /></div>
-                    <div class="dev-field"><label>Sprint Spread</label><input type="number" id="heSprintSpreadRad" value="0.012" step="0.005" min="0" /></div>
-                    <div class="dev-field"><label>Max Range</label><input type="number" id="heMaxRange" value="200" min="1" /></div>
-                    <div class="dev-field"><label>Pellets</label><input type="number" id="hePellets" value="1" min="1" /></div>
-
-                    <h4>Scope</h4>
-                    <div class="dev-field">
-                        <label>Type</label>
-                        <select id="heScopeType">
-                            <option value="none">None</option>
-                            <option value="scope">Scope</option>
-                            <option value="ironsights">Iron Sights</option>
-                        </select>
+                    <h4 class="dev-section-header">Character</h4>
+                    <div class="dev-section-content">
+                        <div class="dev-field"><label>ID</label><input type="text" id="heId" /></div>
+                        <div class="dev-field"><label>Name</label><input type="text" id="heName" /></div>
+                        <div class="dev-field"><label>Description</label><input type="text" id="heDesc" /></div>
+                        <div class="dev-field"><label>Color</label><input type="color" id="heColor" value="#66ffcc" /></div>
                     </div>
-                    <div class="dev-field"><label>Zoom FOV</label><input type="number" id="heScopeFOV" value="35" min="10" max="90" /></div>
-                    <div class="dev-field"><label>Spread Mult</label><input type="number" id="heScopeSpreadMult" value="0.15" step="0.05" min="0" /></div>
 
-                    <h4>Crosshair</h4>
-                    <div class="dev-field">
-                        <label>Style</label>
-                        <select id="heCrosshairStyle">
-                            <option value="cross">Cross</option>
-                            <option value="circle">Circle</option>
-                        </select>
+                    <h4 class="dev-section-header">Stats</h4>
+                    <div class="dev-section-content">
+                        <div class="dev-field"><label>Max Health</label><input type="number" id="heMaxHealth" value="100" min="1" /></div>
+                        <div class="dev-field"><label>Walk Speed</label><input type="number" id="heWalkSpeed" value="4.5" step="0.1" /></div>
+                        <div class="dev-field"><label>Sprint Speed</label><input type="number" id="heSprintSpeed" value="8.5" step="0.1" /></div>
+                        <div class="dev-field"><label>Jump Velocity</label><input type="number" id="heJumpVelocity" value="8.5" step="0.5" /></div>
                     </div>
-                    <div class="dev-field"><label>Color</label><input type="color" id="heCrosshairColor" value="#00ffaa" /></div>
 
-                    <h4>Visual</h4>
-                    <div class="dev-field">
-                        <label>Model Type</label>
-                        <select id="heModelType"></select>
+                    <h4 class="dev-section-header">Hitbox Segments</h4>
+                    <div class="dev-hitbox-toolbar">
+                        <button id="heToggleModel" class="dev-btn-secondary">Hide Model</button>
+                        <button id="heSnapCenter" class="dev-btn-secondary">Snap Center: Off</button>
+                        <button id="heUndo" class="dev-btn-secondary" disabled title="Ctrl+Z">Undo</button>
+                        <button id="heRedo" class="dev-btn-secondary" disabled title="Ctrl+Shift+Z">Redo</button>
                     </div>
-                    <div class="dev-field"><label>Tracer Color</label><input type="color" id="heTracerColor" value="#66ffcc" /></div>
+                    <div class="dev-section-content">
+                        <div id="heHitboxList" class="dev-scrollable"></div>
+                        <div class="dev-actions">
+                            <button id="heHitboxAdd" class="dev-btn-secondary">+ Segment</button>
+                        </div>
+                    </div>
+
+                    <h4 class="dev-section-header">Weapon</h4>
+                    <div class="dev-section-content">
+                        <div class="dev-field"><label>Cooldown (ms)</label><input type="number" id="heCooldownMs" value="166" min="1" /></div>
+                        <div class="dev-field"><label>Mag Size</label><input type="number" id="heMagSize" value="6" min="1" /></div>
+                        <div class="dev-field"><label>Reload (sec)</label><input type="number" id="heReloadTime" value="2.5" step="0.1" /></div>
+                        <div class="dev-field"><label>Damage</label><input type="number" id="heDamage" value="20" min="1" /></div>
+                        <div class="dev-field"><label>Spread (rad)</label><input type="number" id="heSpreadRad" value="0" step="0.005" min="0" /></div>
+                        <div class="dev-field"><label>Sprint Spread</label><input type="number" id="heSprintSpreadRad" value="0.012" step="0.005" min="0" /></div>
+                        <div class="dev-field"><label>Max Range</label><input type="number" id="heMaxRange" value="200" min="1" /></div>
+                        <div class="dev-field"><label>Pellets</label><input type="number" id="hePellets" value="1" min="1" /></div>
+                        <div class="dev-field"><label>Projectile Speed</label><input type="number" id="heProjectileSpeed" value="120" step="10" min="0" /></div>
+                        <div class="dev-field"><label>Proj. Gravity</label><input type="number" id="heProjectileGravity" value="0" step="1" min="0" /></div>
+                    </div>
+
+                    <h4 class="dev-section-header">Scope</h4>
+                    <div class="dev-section-content">
+                        <div class="dev-field">
+                            <label>Type</label>
+                            <select id="heScopeType">
+                                <option value="none">None</option>
+                                <option value="scope">Scope</option>
+                                <option value="ironsights">Iron Sights</option>
+                            </select>
+                        </div>
+                        <div class="dev-field"><label>Zoom FOV</label><input type="number" id="heScopeFOV" value="35" min="10" max="90" /></div>
+                        <div class="dev-field"><label>Spread Mult</label><input type="number" id="heScopeSpreadMult" value="0.15" step="0.05" min="0" /></div>
+                    </div>
+
+                    <h4 class="dev-section-header">Crosshair</h4>
+                    <div class="dev-section-content">
+                        <div class="dev-field">
+                            <label>Style</label>
+                            <select id="heCrosshairStyle">
+                                <option value="cross">Cross</option>
+                                <option value="circle">Circle</option>
+                            </select>
+                        </div>
+                        <div class="dev-field"><label>Color</label><input type="color" id="heCrosshairColor" value="#00ffaa" /></div>
+                    </div>
+
+                    <h4 class="dev-section-header">Visual</h4>
+                    <div class="dev-section-content">
+                        <div class="dev-field">
+                            <label>Model Type</label>
+                            <select id="heModelType"></select>
+                        </div>
+                        <div class="dev-field"><label>Tracer Color</label><input type="color" id="heTracerColor" value="#66ffcc" /></div>
+                    </div>
 
                     <div class="dev-actions">
                         <button id="heSave" class="dev-btn-primary">Save</button>
@@ -264,16 +287,47 @@
                 <div id="heroSelectHint">Press H to close</div>
             </div>
 
+            <!-- Dev Console -->
+            <div id="devConsole" class="hidden">
+                <div id="devPassword">
+                    <h3>Dev Console</h3>
+                    <input type="password" id="devPasswordInput" placeholder="Enter password" autocomplete="off" />
+                    <button id="devPasswordSubmit">Submit</button>
+                    <div id="devPasswordError" class="hidden">Wrong password</div>
+                </div>
+                <div id="devCommands" class="hidden">
+                    <h3>Dev Console</h3>
+                    <button class="dev-cmd" data-cmd="godMode">God Mode: OFF</button>
+                    <button class="dev-cmd" data-cmd="unlimitedAmmo">Unlimited Ammo: OFF</button>
+                    <button class="dev-cmd" data-cmd="spectator">Spectator Camera: OFF</button>
+                    <button class="dev-cmd" data-cmd="killEnemy">Kill Enemy</button>
+                    <button class="dev-cmd" data-cmd="heal">Heal Player</button>
+                    <button class="dev-cmd" data-cmd="showHitboxes">Show Hitboxes: OFF</button>
+                    <button class="dev-cmd" data-cmd="showAIState">AI State: OFF</button>
+                </div>
+            </div>
+
             <!-- Map Editor UI (reused from index.html) -->
             <div id="editorUI" class="hidden">
                 <div id="editorToolbar">
                     <button class="editor-tool active" data-tool="select">Select</button>
-                    <button class="editor-tool" data-tool="box">Box</button>
-                    <button class="editor-tool" data-tool="cylinder">Cylinder</button>
-                    <button class="editor-tool" data-tool="halfCylinder">Half-Cyl</button>
-                    <button class="editor-tool" data-tool="ramp">Ramp</button>
+                    <div class="editor-dropdown" id="editorPlaceDropdown">
+                        <button class="editor-btn" id="editorPlaceBtn">Place: Box &#9662;</button>
+                        <div class="editor-dropdown-menu" id="editorPlaceMenu">
+                            <button class="editor-shape-opt" data-tool="box">Box</button>
+                            <button class="editor-shape-opt" data-tool="cylinder">Cylinder</button>
+                            <button class="editor-shape-opt" data-tool="halfCylinder">Half-Cylinder</button>
+                            <button class="editor-shape-opt" data-tool="ramp">Ramp</button>
+                            <div class="editor-dropdown-sep"></div>
+                            <button class="editor-shape-opt" data-tool="wedge">Wedge</button>
+                            <button class="editor-shape-opt" data-tool="lshape">L-Shape</button>
+                            <button class="editor-shape-opt" data-tool="arch">Arch</button>
+                        </div>
+                    </div>
+                    <button class="editor-tool" data-tool="spawn">Spawn</button>
                     <span class="editor-sep"></span>
                     <button class="editor-btn" id="editorMirrorToggle">Mirror: Off</button>
+                    <button class="editor-btn" id="editorSnapToggle">Snap: Grid+Edge</button>
                     <span class="editor-sep"></span>
                     <button class="editor-btn" id="editorUndo">Undo</button>
                     <button class="editor-btn" id="editorRedo">Redo</button>
@@ -289,16 +343,19 @@
                 <div id="editorPropsPanel" class="hidden">
                     <button class="panel-close" id="epropClose">&times;</button>
                     <h4>Properties</h4>
-                    <div class="eprop"><label>Type</label><span id="epropType">-</span></div>
-                    <div class="eprop"><label>X</label><input type="number" id="epropX" step="0.5" /></div>
-                    <div class="eprop"><label>Z</label><input type="number" id="epropZ" step="0.5" /></div>
-                    <div class="eprop"><label>Y</label><input type="number" id="epropY" step="0.5" /></div>
+                    <div class="eprop" id="epropTypeRow"><label>Type</label><span id="epropType">-</span></div>
+                    <div class="eprop" id="epropMultiRow" style="display:none"><span id="epropMultiLabel" style="color:#00ff88;font-size:12px">-</span></div>
+                    <div class="eprop" id="epropXRow"><label>X</label><input type="number" id="epropX" step="0.5" /></div>
+                    <div class="eprop" id="epropZRow"><label>Z</label><input type="number" id="epropZ" step="0.5" /></div>
+                    <div class="eprop" id="epropYRow"><label>Y</label><input type="number" id="epropY" step="0.5" /></div>
                     <div class="eprop" id="epropSizeRow"><label>Size X</label><input type="number" id="epropSX" step="0.5" min="0.5" /></div>
                     <div class="eprop" id="epropSYRow"><label>Height</label><input type="number" id="epropSY" step="0.5" min="0.5" /></div>
                     <div class="eprop" id="epropSZRow"><label>Size Z</label><input type="number" id="epropSZ" step="0.5" min="0.5" /></div>
                     <div class="eprop" id="epropRadiusRow"><label>Radius</label><input type="number" id="epropRadius" step="0.25" min="0.25" /></div>
-                    <div class="eprop"><label>Rotation</label><input type="number" id="epropRot" step="90" /></div>
+                    <div class="eprop" id="epropThicknessRow"><label>Thick</label><input type="number" id="epropThickness" step="0.25" min="0.25" /></div>
+                    <div class="eprop" id="epropRotRow"><label>Rotation</label><input type="number" id="epropRot" step="90" /></div>
                     <div class="eprop"><label>Color</label><input type="color" id="epropColor" value="#6B5B4F" /></div>
+                    <div class="eprop" id="epropSpawnTeamRow" style="display:none"><label>Team</label><select id="epropSpawnTeam"><option value="">None</option><option value="A">A</option><option value="B">B</option><option value="C">C</option><option value="D">D</option></select></div>
                     <button class="editor-btn" id="epropMirror">Mirror Copy</button>
                     <button class="editor-btn editor-danger" id="epropDelete">Delete</button>
                 </div>
@@ -309,10 +366,7 @@
                     <div class="eprop"><label>Arena Width</label><input type="number" id="esArenaW" step="1" min="20" value="60" /></div>
                     <div class="eprop"><label>Arena Length</label><input type="number" id="esArenaL" step="1" min="20" value="90" /></div>
                     <div class="eprop"><label>Wall Height</label><input type="number" id="esWallH" step="0.5" min="1" value="3.5" /></div>
-                    <div class="eprop"><label>Spawn A X</label><input type="number" id="esSpawnAX" step="1" value="0" /></div>
-                    <div class="eprop"><label>Spawn A Z</label><input type="number" id="esSpawnAZ" step="1" value="-37" /></div>
-                    <div class="eprop"><label>Spawn B X</label><input type="number" id="esSpawnBX" step="1" value="0" /></div>
-                    <div class="eprop"><label>Spawn B Z</label><input type="number" id="esSpawnBZ" step="1" value="37" /></div>
+                    <button class="editor-btn" id="esMakeSquare">Make Square</button>
                     <button class="editor-btn" id="esApply">Apply</button>
                     <button class="editor-btn" id="esClose">Close</button>
                 </div>
@@ -373,9 +427,10 @@
     <script src="modeLAN.js"></script>
     <script src="modeTraining.js"></script>
 
-    <!-- Dev workbench (replaces game.js + devConsole.js) -->
+    <!-- Dev workbench -->
     <script src="devSplitScreen.js"></script>
     <script src="devHeroEditor.js"></script>
+    <script src="devConsole.js"></script>
     <script src="devApp.js"></script>
 </body>
 </html>

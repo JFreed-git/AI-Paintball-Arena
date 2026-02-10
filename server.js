@@ -25,6 +25,14 @@ const io = new Server(server, { cors: { origin: '*' } });
 // JSON body parsing for map API
 app.use(express.json({ limit: '1mb' }));
 
+// Block dev workbench files from being served to LAN players
+var DEV_BLOCKED = ['/dev.html', '/devApp.js', '/devApp.css', '/devHeroEditor.js', '/devSplitScreen.js',
+  '/electron-main.js', '/electron-preload.js', '/electron-fetch-shim.js', '/mapEditor.js'];
+app.use(function (req, res, next) {
+  if (DEV_BLOCKED.indexOf(req.path) !== -1) return res.status(404).end();
+  next();
+});
+
 // Serve static files from this directory
 app.use(express.static(__dirname));
 

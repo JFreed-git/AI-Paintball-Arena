@@ -180,6 +180,11 @@
       var canvas = renderer.domElement;
       canvas.addEventListener('click', requestPointerLockSS);
 
+      // Hide sidebar for full-screen split view
+      var devSidebar = document.getElementById('devSidebar');
+      if (devSidebar) devSidebar.classList.add('hidden');
+      if (typeof window.resizeRenderer === 'function') window.resizeRenderer();
+
       window._splitScreenActive = true;
       _state.lastTs = performance.now();
       ssLoop();
@@ -202,6 +207,8 @@
   // ------- Stop -------
   window.stopSplitScreen = function () {
     window._splitScreenActive = false;
+
+    if (typeof clearAllProjectiles === 'function') clearAllProjectiles();
 
     if (_state) {
       if (_state.loopHandle) cancelAnimationFrame(_state.loopHandle);
@@ -244,6 +251,13 @@
     // Restore global camera
     camera.aspect = renderer.domElement.width / renderer.domElement.height;
     camera.updateProjectionMatrix();
+
+    // Restore sidebar
+    var devSidebar = document.getElementById('devSidebar');
+    if (devSidebar) devSidebar.classList.remove('hidden');
+    if (typeof window.resizeRenderer === 'function') {
+      setTimeout(window.resizeRenderer, 50);
+    }
 
     // Reset renderer
     renderer.setViewport(0, 0, renderer.domElement.width, renderer.domElement.height);
@@ -473,21 +487,22 @@
         // Determine target: the other player
         var targetPlayer = inactive.player;
         var targets = [];
+        var targetEntities = [];
         if (targetPlayer && targetPlayer.alive) {
-          targets.push(targetPlayer.getHitTarget());
+          targets.push({ segments: targetPlayer.getHitSegments(), entity: targetPlayer });
+          targetEntities.push(targetPlayer);
         }
 
-        var spread = input.sprint ? weapon.sprintSpreadRad : weapon.spreadRad;
-
         sharedFireWeapon(weapon, eyePos, dir, {
-          spread: spread,
+          sprinting: input.sprint,
           maxRange: weapon.maxRange,
           targets: targets,
+          projectileTargetEntities: targetEntities,
           solids: _state.arena.solids || [],
           tracerColor: weapon.tracerColor,
-          onHit: function (target) {
+          onHit: function (target, point, dist, pelletIdx, damageMultiplier) {
             if (targetPlayer && targetPlayer.alive) {
-              targetPlayer.takeDamage(weapon.damage);
+              targetPlayer.takeDamage(weapon.damage * (damageMultiplier || 1.0));
             }
           }
         });
@@ -506,6 +521,9 @@
         chEl.style.setProperty('--spread', px + 'px');
       }
     }
+
+    // Update live projectiles
+    if (typeof updateProjectiles === 'function') updateProjectiles(dt);
 
     // Update inactive player's weapon reload state
     if (inactive && inactive.player && inactive.player.alive) {

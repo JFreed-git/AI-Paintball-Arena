@@ -7,11 +7,32 @@
   "walkSpeed": 4.5,
   "sprintSpeed": 8.5,
   "jumpVelocity": 8.5,
-  "hitbox": {
-    "width": 0.8,
-    "height": 3.2,
-    "depth": 0.8
-  },
+  "hitbox": [
+    {
+      "name": "head",
+      "width": 0.5,
+      "height": 0.5,
+      "depth": 0.5,
+      "offsetY": 2.95,
+      "damageMultiplier": 1
+    },
+    {
+      "name": "torso",
+      "width": 0.6,
+      "height": 0.9,
+      "depth": 0.5,
+      "offsetY": 2.05,
+      "damageMultiplier": 1
+    },
+    {
+      "name": "legs",
+      "width": 0.5,
+      "height": 1.1,
+      "depth": 0.5,
+      "offsetY": 0.55,
+      "damageMultiplier": 1
+    }
+  ],
   "modelType": "standard",
   "weapon": {
     "cooldownMs": 166,
@@ -22,7 +43,7 @@
     "sprintSpreadRad": 0.012,
     "maxRange": 200,
     "pellets": 1,
-    "projectileSpeed": null,
+    "projectileSpeed": 120,
     "projectileGravity": 0,
     "splashRadius": 0,
     "scope": {

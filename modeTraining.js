@@ -48,7 +48,7 @@
     grp.position.set(position.x, position.y, position.z);
     scene.add(grp);
 
-    return {
+    var targetObj = {
       group: grp,
       headMesh: head,
       headMat: headMat,
@@ -65,6 +65,25 @@
           ),
           radius: TARGET_RADIUS
         };
+      },
+      // Segmented hitbox interface for projectile system
+      getHitSegments: function () {
+        if (!this.active) return [];
+        var cx = grp.position.x;
+        var headY = grp.position.y + 1.0 + TARGET_RADIUS;
+        var cz = grp.position.z;
+        var r = TARGET_RADIUS;
+        return [{
+          box: new THREE.Box3(
+            new THREE.Vector3(cx - r, headY - r, cz - r),
+            new THREE.Vector3(cx + r, headY + r, cz + r)
+          ),
+          damageMultiplier: 1.0,
+          name: 'head'
+        }];
+      },
+      takeDamage: function () {
+        this.onHit();
       },
       onHit: function () {
         if (!this.active) return;
@@ -90,6 +109,11 @@
         });
       }
     };
+    // 'alive' getter mirrors 'active' for projectile system compatibility
+    Object.defineProperty(targetObj, 'alive', {
+      get: function () { return targetObj.active; }
+    });
+    return targetObj;
   }
 
   // ── HUD ──
@@ -179,23 +203,38 @@
 
       // Build multi-target array from static targets and bots
       var allTargets = [];
+      var allEntities = [];
       for (var ti = 0; ti < state.targets.length; ti++) {
-        var ht = state.targets[ti].getHitTarget();
-        if (ht) allTargets.push({ position: ht.position, radius: ht.radius, entity: state.targets[ti], type: 'target' });
+        var tgt = state.targets[ti];
+        var ht = tgt.getHitTarget();
+        if (ht) allTargets.push({ position: ht.position, radius: ht.radius, entity: tgt, type: 'target' });
+        if (tgt.alive) allEntities.push(tgt);
       }
       for (var bi = 0; bi < state.bots.length; bi++) {
-        var bht = state.bots[bi].getHitTarget();
-        if (bht) allTargets.push({ position: bht.position, radius: bht.radius, entity: state.bots[bi], type: 'bot' });
+        var bot = state.bots[bi];
+        if (bot.alive && bot.player) {
+          allTargets.push({ segments: bot.player.getHitSegments(), entity: bot, type: 'bot' });
+          allEntities.push(bot);
+        }
       }
 
       var result = sharedFireWeapon(w, camera.position.clone(), dir, {
         sprinting: !!input.sprint,
         solids: state.arena.solids,
         targets: allTargets,
+        projectileTargetEntities: allEntities,
         tracerColor: state.tracerColor,
-        onHit: function (target) {
-          if (target.type === 'target') target.entity.onHit();
-          else if (target.type === 'bot') target.entity.takeDamage(w.damage);
+        onHit: function (target, point, dist, pelletIdx, damageMultiplier) {
+          // Hitscan path: target is wrapper with .type
+          if (target.type === 'target') {
+            target.entity.onHit();
+          } else if (target.type === 'bot') {
+            target.entity.takeDamage(w.damage * (damageMultiplier || 1.0));
+          }
+          // Projectile path: target is entity directly
+          else if (typeof target.takeDamage === 'function') {
+            target.takeDamage(w.damage * (damageMultiplier || 1.0));
+          }
           state.stats.hits++;
         }
       });
@@ -264,6 +303,9 @@
     var now = performance.now();
     handlePlayerShooting(input, now);
     updateReload(now);
+
+    // Update live projectiles
+    if (typeof updateProjectiles === 'function') updateProjectiles(dt);
 
     // Update bots
     for (var i = 0; i < state.bots.length; i++) {
@@ -408,6 +450,7 @@
 
     if (state) showTrainingHUD(false);
 
+    if (typeof clearAllProjectiles === 'function') clearAllProjectiles();
     setCrosshairDimmed(false);
     setCrosshairSpread(0);
     if (typeof clearFirstPersonWeapon === 'function') clearFirstPersonWeapon();

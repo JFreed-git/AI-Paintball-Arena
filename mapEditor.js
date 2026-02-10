@@ -1,29 +1,18 @@
 /**
  * mapEditor.js — In-game 3D map editor
  *
- * PURPOSE: Spectator-mode editor for creating and modifying arena layouts. Allows
- * placing cover blocks, ramps, spawn points, and waypoints. Gated behind the dev
- * console password. Maps are saved/loaded via server API (mapFormat.js).
- *
  * EXPORTS (window):
  *   editorActive — boolean flag
- *   (Various editor functions exposed on window for devConsole.js integration)
  *
- * DEPENDENCIES: Three.js, mapFormat.js, devConsole.js (authentication gate)
+ * DEPENDENCIES: Three.js, mapFormat.js
  *
- * DESIGN NOTES:
- *   - Currently runs as an in-game overlay. The long-term plan is to extract this
- *     into a standalone app so only the developer can edit and upload maps.
- *   - Uses free-camera controls (WASD + mouse) separate from game input.
- *
- * TODO (future):
- *   - Extract to standalone app (separate from game client)
- *   - Copy/paste/mirror selection
- *   - Snap-to-grid with configurable grid size
- *   - Prop placement (barrels, crates, scenery)
- *   - Lighting placement and preview
- *   - Map testing mode (play the map without reloading)
- *   - Export to file (download JSON) instead of only server save
+ * FEATURES:
+ *   - 7 shape types: box, cylinder, halfCylinder, ramp, wedge, lshape, arch
+ *   - Mirror modes: off, z, x, quad (4-way)
+ *   - Flexible spawn points (array-based, team assignment)
+ *   - Copy/paste (Ctrl+C/V), multi-select (Shift+click, Ctrl+A)
+ *   - Independent color on mirror/quad clones
+ *   - Arena boundary visualization
  */
 
 (function () {
@@ -31,20 +20,29 @@
   var editorScene, editorCamera, editorRenderer;
   var mapData = null;
   var editorObjects = []; // { mesh, data (ref into mapData.objects) }
-  var selectedObj = null;
-  var boxHelper = null;
-  var spawnMeshes = { A: null, B: null };
-  var selectedSpawn = null; // 'A' or 'B' if a spawn is selected
+  var selectedObj = null; // convenience: selectedObjects[0] or null
+  var selectedObjects = []; // multi-select entries
+  var boxHelpers = []; // one outline per selected object
   var currentTool = 'select';
-  var arena = null; // result from buildArenaFromMap
+  var arena = null;
 
-  // Mirror symmetry: 'off', 'z', 'x'
+  // Spawns (flexible array)
+  var spawnEntries = []; // { mesh, data (ref into mapData.spawns[i]) }
+  var selectedSpawnEntry = null;
+  var _nextSpawnId = 1;
+
+  // Clipboard
+  var clipboard = null; // array of cloned object data
+
+  // Mirror symmetry: 'off', 'z', 'x', 'quad'
   var mirrorMode = 'z';
-  var mirrorLine = null;
+  var mirrorLines = []; // array of Line objects
   var isDragging = false;
   var dragStart = new THREE.Vector2();
   var dragObjStart = new THREE.Vector3();
   var dragGroundStart = new THREE.Vector3();
+  // For multi-select drag: array of {entry, startX, startZ}
+  var multiDragStarts = [];
   var raycaster = new THREE.Raycaster();
   var mouse = new THREE.Vector2();
   var _nextId = 1;
@@ -52,8 +50,15 @@
   // Mirror pair IDs
   var _nextMirrorPairId = 1;
 
+  // Quad group IDs
+  var _nextQuadGroupId = 1;
+
+  // Boundary outline
+  var boundaryOutline = null;
+  var boundaryPosts = [];
+
   // Resize handles
-  var resizeHandles = []; // { mesh, handleType, signX, signZ }
+  var resizeHandles = [];
   var isResizing = false;
   var resizeHandle = null;
   var resizeStartPoint = new THREE.Vector3();
@@ -92,6 +97,90 @@
   var editorUI, toolbar, propsPanel, settingsPanel, loadPanel, statusBar;
   var toolLabel, objCount;
 
+  // Shape display names
+  var SHAPE_NAMES = {
+    box: 'Box', cylinder: 'Cylinder', halfCylinder: 'Half-Cylinder',
+    ramp: 'Ramp', wedge: 'Wedge', lshape: 'L-Shape', arch: 'Arch'
+  };
+
+  // Spawn team colors
+  var SPAWN_COLORS = { '': 0xffd700, A: 0xff4444, B: 0x4488ff, C: 0x44cc44, D: 0xff8800 };
+
+  // Snap settings
+  var gridSnap = true;
+  var edgeSnap = true;
+
+  function snapToGrid(val) {
+    return gridSnap ? Math.round(val * 2) / 2 : val;
+  }
+
+  function applyEdgeSnap(proposedX, proposedZ, draggedEntries) {
+    if (!edgeSnap) return [proposedX, proposedZ];
+    var threshold = 0.75;
+    var bestSnapX = proposedX, bestSnapZ = proposedZ;
+    var bestDx = threshold, bestDz = threshold;
+
+    // Build set of excluded IDs (objects being dragged)
+    var exclude = {};
+    for (var d = 0; d < draggedEntries.length; d++) {
+      exclude[draggedEntries[d].data.id] = true;
+    }
+
+    // Get dragged object bounds from first entry
+    var refEntry = draggedEntries[0];
+    var bbox = new THREE.Box3().setFromObject(refEntry.mesh);
+    var curX = refEntry.data.position[0];
+    var curZ = refEntry.data.position[2];
+    var halfW = (bbox.max.x - bbox.min.x) / 2;
+    var halfD = (bbox.max.z - bbox.min.z) / 2;
+
+    var propMinX = proposedX - halfW, propMaxX = proposedX + halfW;
+    var propMinZ = proposedZ - halfD, propMaxZ = proposedZ + halfD;
+
+    for (var i = 0; i < editorObjects.length; i++) {
+      var other = editorObjects[i];
+      if (exclude[other.data.id]) continue;
+      var ob = new THREE.Box3().setFromObject(other.mesh);
+
+      // X-axis edge checks: left-to-right, right-to-left, left-to-left, right-to-right
+      var xDiffs = [ob.max.x - propMinX, ob.min.x - propMaxX, ob.min.x - propMinX, ob.max.x - propMaxX];
+      for (var xi = 0; xi < xDiffs.length; xi++) {
+        if (Math.abs(xDiffs[xi]) < bestDx) { bestDx = Math.abs(xDiffs[xi]); bestSnapX = proposedX + xDiffs[xi]; }
+      }
+
+      // Z-axis edge checks
+      var zDiffs = [ob.max.z - propMinZ, ob.min.z - propMaxZ, ob.min.z - propMinZ, ob.max.z - propMaxZ];
+      for (var zi = 0; zi < zDiffs.length; zi++) {
+        if (Math.abs(zDiffs[zi]) < bestDz) { bestDz = Math.abs(zDiffs[zi]); bestSnapZ = proposedZ + zDiffs[zi]; }
+      }
+    }
+
+    return [bestSnapX, bestSnapZ];
+  }
+
+  function toggleGridSnap() {
+    gridSnap = !gridSnap;
+    updateSnapButton();
+    updateStatusBar();
+  }
+
+  function toggleEdgeSnap() {
+    edgeSnap = !edgeSnap;
+    updateSnapButton();
+    updateStatusBar();
+  }
+
+  function updateSnapButton() {
+    var btn = document.getElementById('editorSnapToggle');
+    if (!btn) return;
+    var label = 'Snap:';
+    if (gridSnap && edgeSnap) label += ' Grid+Edge';
+    else if (gridSnap) label += ' Grid';
+    else if (edgeSnap) label += ' Edge';
+    else label += ' Off';
+    btn.textContent = label;
+  }
+
   function getUI() {
     editorUI = document.getElementById('editorUI');
     toolbar = document.getElementById('editorToolbar');
@@ -121,13 +210,39 @@
     return 'mp_' + (_nextMirrorPairId++);
   }
 
+  function recalcNextQuadGroupId() {
+    var max = 0;
+    var objs = mapData.objects || [];
+    for (var i = 0; i < objs.length; i++) {
+      var qg = objs[i].quadGroupId;
+      if (qg) {
+        var num = parseInt(qg.replace('qg_', ''), 10);
+        if (num > max) max = num;
+      }
+    }
+    _nextQuadGroupId = max + 1;
+  }
+
+  function generateQuadGroupId() {
+    return 'qg_' + (_nextQuadGroupId++);
+  }
+
+  function recalcNextSpawnId() {
+    var max = 0;
+    var spawns = mapData.spawns || [];
+    for (var i = 0; i < spawns.length; i++) {
+      var sid = spawns[i].id || '';
+      var num = parseInt(sid.replace('spawn_', ''), 10);
+      if (num > max) max = num;
+    }
+    _nextSpawnId = max + 1;
+  }
+
   // ── Start / Stop ──
 
   window.startMapEditor = function () {
-    if (!window.devAuthenticated) { alert('Dev access required.'); return; }
     if (editorActive) return;
 
-    // Stop any running game
     if (window.paintballActive && typeof stopPaintballInternal === 'function') stopPaintballInternal();
     if (window.multiplayerActive && typeof stopMultiplayerInternal === 'function') stopMultiplayerInternal();
 
@@ -136,10 +251,13 @@
     window.editorActive = true;
     playerMode = false;
     mapData = getDefaultMapData();
+    // Normalize spawns to array format
+    mapData.spawns = normalizeSpawns(mapData.spawns);
     recalcNextId();
     recalcNextMirrorPairId();
+    recalcNextQuadGroupId();
+    recalcNextSpawnId();
 
-    // Hide game menus, show editor
     showOnlyMenu(null);
     setHUDVisible(false);
     editorUI.classList.remove('hidden');
@@ -148,7 +266,6 @@
     loadPanel.classList.add('hidden');
     document.getElementById('editorPlayerHint').classList.add('hidden');
 
-    // Use the existing Three.js renderer + scene
     editorScene = scene;
     if (typeof renderer === 'undefined' || !renderer) {
       console.warn('mapEditor: renderer not initialized');
@@ -156,32 +273,30 @@
     }
     editorRenderer = renderer;
 
-    // Clear scene children that are arena groups
     clearSceneArena();
 
-    // Perspective camera starting above Spawn A looking toward center
     var aspect = window.innerWidth / window.innerHeight;
     editorCamera = new THREE.PerspectiveCamera(75, aspect, 0.1, 500);
-    var spA = mapData.spawns.A;
-    editorCamera.position.set(spA[0], 25, spA[2] - 15);
+    // Position above first spawn
+    var firstSpawn = mapData.spawns[0];
+    var camZ = firstSpawn ? firstSpawn.position[2] - 15 : -52;
+    var camX = firstSpawn ? firstSpawn.position[0] : 0;
+    editorCamera.position.set(camX, 25, camZ);
     flyYaw = 0;
     flyPitch = -0.6;
     editorCamera.rotation.order = 'YXZ';
     editorCamera.rotation.set(flyPitch, flyYaw, 0);
 
-    // Set mirror button state
     var btn = document.getElementById('editorMirrorToggle');
     if (btn) {
       btn.textContent = 'Mirror: Z';
       btn.classList.add('mirror-active');
     }
 
-    // Build editor scene
     rebuildEditorScene();
     bindEditorEvents();
+    updateSnapButton();
     updateStatusBar();
-
-    // Start editor render loop
     editorRenderLoop();
   };
 
@@ -192,7 +307,6 @@
     window.editorActive = false;
     flyMode = false;
 
-    // Clean up editor objects
     clearEditorScene();
 
     editorUI.classList.add('hidden');
@@ -202,7 +316,6 @@
 
     unbindEditorEvents();
 
-    // Restore perspective camera
     if (typeof camera !== 'undefined' && camera) {
       camera.position.set(0, 2, 5);
       camera.rotation.set(0, 0, 0);
@@ -224,25 +337,32 @@
   function clearEditorScene() {
     editorObjects = [];
     selectedObj = null;
-    selectedSpawn = null;
-    if (boxHelper && boxHelper.parent) boxHelper.parent.remove(boxHelper);
-    boxHelper = null;
+    selectedObjects = [];
+    selectedSpawnEntry = null;
+    removeAllBoxHelpers();
     removeResizeHandles();
-    spawnMeshes = { A: null, B: null };
+    spawnEntries = [];
     arena = null;
 
     clearSceneArena();
-    if (mirrorLine && mirrorLine.parent) mirrorLine.parent.remove(mirrorLine);
-    mirrorLine = null;
+    removeMirrorLines();
+    removeBoundaryOutline();
   }
 
   function rebuildEditorScene() {
     clearEditorScene();
 
-    // Build the full visual arena from map data
     arena = buildArenaFromMap(mapData);
 
-    // Build editorObjects from arena solids that have userData.mapObj
+    // Remove spawn rings from arena group — the editor creates its own interactive ones
+    var arenaRingsToRemove = [];
+    arena.group.children.forEach(function (c) {
+      if (c.userData && c.userData.isSpawnRing) arenaRingsToRemove.push(c);
+    });
+    for (var ri = 0; ri < arenaRingsToRemove.length; ri++) {
+      arena.group.remove(arenaRingsToRemove[ri]);
+    }
+
     for (var i = 0; i < arena.solids.length; i++) {
       var mesh = arena.solids[i];
       if (mesh.userData.mapObj) {
@@ -250,76 +370,142 @@
       }
     }
 
-    // Mirror axis line
-    rebuildMirrorLine();
-
-    // Editor spawn ring meshes (slightly larger, for selection handles)
-    var ringMat = new THREE.MeshBasicMaterial({ color: 0xffd700, side: THREE.DoubleSide });
-    function makeSpawnRing(pos) {
-      var ring = new THREE.Mesh(new THREE.RingGeometry(1.0, 1.8, 32), ringMat);
-      ring.rotation.x = -Math.PI / 2;
-      ring.position.set(pos[0], -0.94, pos[2]);
-      ring.name = 'EditorGroup';
-      editorScene.add(ring);
-      return ring;
-    }
-    spawnMeshes.A = makeSpawnRing(mapData.spawns.A);
-    spawnMeshes.B = makeSpawnRing(mapData.spawns.B);
-
+    rebuildMirrorLines();
+    rebuildBoundaryOutline();
+    rebuildSpawnMeshes();
     updateStatusBar();
   }
 
-  // ── Mirror axis line ──
+  // ── Spawn meshes ──
 
-  function rebuildMirrorLine() {
-    if (mirrorLine && mirrorLine.parent) mirrorLine.parent.remove(mirrorLine);
-    mirrorLine = null;
-    if (mirrorMode === 'off') return;
+  function rebuildSpawnMeshes() {
+    // Remove old spawn meshes
+    for (var i = 0; i < spawnEntries.length; i++) {
+      if (spawnEntries[i].mesh && spawnEntries[i].mesh.parent) {
+        spawnEntries[i].mesh.parent.remove(spawnEntries[i].mesh);
+      }
+    }
+    spawnEntries = [];
 
+    var spawns = mapData.spawns || [];
+    for (var si = 0; si < spawns.length; si++) {
+      var sp = spawns[si];
+      var color = SPAWN_COLORS[sp.team] || SPAWN_COLORS[''];
+      var ringMat = new THREE.MeshBasicMaterial({ color: color, side: THREE.DoubleSide });
+      var ring = new THREE.Mesh(new THREE.RingGeometry(1.0, 1.8, 32), ringMat);
+      ring.rotation.x = -Math.PI / 2;
+      ring.position.set(sp.position[0], -0.94, sp.position[2]);
+      ring.name = 'EditorGroup';
+      editorScene.add(ring);
+      // Add team label
+      spawnEntries.push({ mesh: ring, data: sp });
+    }
+  }
+
+  // ── Mirror axis lines ──
+
+  function removeMirrorLines() {
+    for (var i = 0; i < mirrorLines.length; i++) {
+      if (mirrorLines[i].parent) mirrorLines[i].parent.remove(mirrorLines[i]);
+    }
+    mirrorLines = [];
+  }
+
+  function addMirrorLine(axis) {
     var halfW = (mapData.arena.width || 60) / 2;
     var halfL = (mapData.arena.length || 90) / 2;
     var extend = 5;
     var pts;
-    if (mirrorMode === 'z') {
+    if (axis === 'z') {
       pts = [
         new THREE.Vector3(-halfW - extend, -0.85, 0),
-        new THREE.Vector3( halfW + extend, -0.85, 0)
+        new THREE.Vector3(halfW + extend, -0.85, 0)
       ];
     } else {
       pts = [
         new THREE.Vector3(0, -0.85, -halfL - extend),
-        new THREE.Vector3(0, -0.85,  halfL + extend)
+        new THREE.Vector3(0, -0.85, halfL + extend)
       ];
     }
-
     var lineGeom = new THREE.BufferGeometry().setFromPoints(pts);
     var lineMat = new THREE.LineDashedMaterial({ color: 0xffaa00, dashSize: 1.5, gapSize: 0.8 });
-    mirrorLine = new THREE.Line(lineGeom, lineMat);
-    mirrorLine.computeLineDistances();
-    mirrorLine.name = 'EditorGroup';
-    editorScene.add(mirrorLine);
+    var line = new THREE.Line(lineGeom, lineMat);
+    line.computeLineDistances();
+    line.name = 'EditorGroup';
+    editorScene.add(line);
+    mirrorLines.push(line);
+  }
+
+  function rebuildMirrorLines() {
+    removeMirrorLines();
+    if (mirrorMode === 'off') return;
+    if (mirrorMode === 'z' || mirrorMode === 'quad') addMirrorLine('z');
+    if (mirrorMode === 'x' || mirrorMode === 'quad') addMirrorLine('x');
   }
 
   function cycleMirrorMode() {
     if (mirrorMode === 'off') mirrorMode = 'z';
     else if (mirrorMode === 'z') mirrorMode = 'x';
+    else if (mirrorMode === 'x') mirrorMode = 'quad';
     else mirrorMode = 'off';
 
     var btn = document.getElementById('editorMirrorToggle');
     if (btn) {
-      if (mirrorMode === 'off') {
-        btn.textContent = 'Mirror: Off';
-        btn.classList.remove('mirror-active');
-      } else if (mirrorMode === 'z') {
-        btn.textContent = 'Mirror: Z';
-        btn.classList.add('mirror-active');
-      } else {
-        btn.textContent = 'Mirror: X';
-        btn.classList.add('mirror-active');
-      }
+      var labels = { off: 'Mirror: Off', z: 'Mirror: Z', x: 'Mirror: X', quad: 'Mirror: Quad' };
+      btn.textContent = labels[mirrorMode] || 'Mirror: Off';
+      if (mirrorMode === 'off') btn.classList.remove('mirror-active');
+      else btn.classList.add('mirror-active');
     }
-    rebuildMirrorLine();
+    rebuildMirrorLines();
     updateStatusBar();
+  }
+
+  // ── Boundary outline ──
+
+  function removeBoundaryOutline() {
+    if (boundaryOutline && boundaryOutline.parent) boundaryOutline.parent.remove(boundaryOutline);
+    boundaryOutline = null;
+    for (var i = 0; i < boundaryPosts.length; i++) {
+      if (boundaryPosts[i].parent) boundaryPosts[i].parent.remove(boundaryPosts[i]);
+    }
+    boundaryPosts = [];
+  }
+
+  function rebuildBoundaryOutline() {
+    removeBoundaryOutline();
+    var halfW = (mapData.arena.width || 60) / 2;
+    var halfL = (mapData.arena.length || 90) / 2;
+    var wallH = mapData.arena.wallHeight || 3.5;
+    var baseY = -0.98;
+
+    var pts = [
+      new THREE.Vector3(-halfW, baseY, -halfL),
+      new THREE.Vector3(halfW, baseY, -halfL),
+      new THREE.Vector3(halfW, baseY, halfL),
+      new THREE.Vector3(-halfW, baseY, halfL),
+      new THREE.Vector3(-halfW, baseY, -halfL)
+    ];
+    var geom = new THREE.BufferGeometry().setFromPoints(pts);
+    var mat = new THREE.LineDashedMaterial({ color: 0x4488ff, dashSize: 2.0, gapSize: 1.0 });
+    boundaryOutline = new THREE.Line(geom, mat);
+    boundaryOutline.computeLineDistances();
+    boundaryOutline.name = 'EditorGroup';
+    editorScene.add(boundaryOutline);
+
+    // Corner posts showing wall height
+    var corners = [[-halfW, -halfL], [halfW, -halfL], [halfW, halfL], [-halfW, halfL]];
+    var postMat = new THREE.LineBasicMaterial({ color: 0x4488ff, transparent: true, opacity: 0.5 });
+    for (var i = 0; i < corners.length; i++) {
+      var postPts = [
+        new THREE.Vector3(corners[i][0], baseY, corners[i][1]),
+        new THREE.Vector3(corners[i][0], baseY + wallH, corners[i][1])
+      ];
+      var postGeom = new THREE.BufferGeometry().setFromPoints(postPts);
+      var post = new THREE.Line(postGeom, postMat);
+      post.name = 'EditorGroup';
+      editorScene.add(post);
+      boundaryPosts.push(post);
+    }
   }
 
   // ── Mirror pair helpers ──
@@ -345,13 +531,8 @@
 
   function mirrorRotation(rotation, axis) {
     var rot = rotation || 0;
-    if (axis === 'z') {
-      // Reflecting across z=0: negate the Y-rotation
-      return (360 - rot) % 360;
-    } else if (axis === 'x') {
-      // Reflecting across x=0: supplement the Y-rotation (180 - rot)
-      return (540 - rot) % 360;
-    }
+    if (axis === 'z') return (360 - rot) % 360;
+    if (axis === 'x') return (540 - rot) % 360;
     return rot;
   }
 
@@ -361,35 +542,27 @@
     var axis = srcData.mirrorAxis || 'z';
 
     partner.type = srcData.type;
-    partner.color = srcData.color;
+    // Color is NOT synced — allows independent coloring
     if (srcData.size) partner.size = srcData.size.slice();
     if (srcData.radius !== undefined) partner.radius = srcData.radius;
     if (srcData.height !== undefined) partner.height = srcData.height;
+    if (srcData.thickness !== undefined) partner.thickness = srcData.thickness;
 
-    // Mirror position (copy Y as-is), mirror rotation based on axis, toggle geometry flip
     partner.position = srcData.position.slice();
-    if (axis === 'z') {
-      partner.position[2] = -srcData.position[2];
-    } else if (axis === 'x') {
-      partner.position[0] = -srcData.position[0];
-    }
+    if (axis === 'z') partner.position[2] = -srcData.position[2];
+    else if (axis === 'x') partner.position[0] = -srcData.position[0];
     partner.rotation = mirrorRotation(srcData.rotation, axis);
     partner.mirrorFlip = !srcData.mirrorFlip;
 
     var partnerEntry = findMirrorPartnerEntry(srcData);
-    if (partnerEntry) {
-      rebuildSingleObject(partnerEntry);
-    }
+    if (partnerEntry) rebuildSingleObject(partnerEntry);
   }
 
   function mirrorObjData(srcData, axis) {
     var obj = JSON.parse(JSON.stringify(srcData));
     obj.id = 'obj_' + (++_nextId);
-    if (axis === 'z') {
-      obj.position[2] = -obj.position[2];
-    } else if (axis === 'x') {
-      obj.position[0] = -obj.position[0];
-    }
+    if (axis === 'z') obj.position[2] = -obj.position[2];
+    else if (axis === 'x') obj.position[0] = -obj.position[0];
     obj.rotation = mirrorRotation(obj.rotation, axis);
     obj.mirrorFlip = !srcData.mirrorFlip;
     return obj;
@@ -399,11 +572,100 @@
     var pairId = generateMirrorPairId();
     srcData.mirrorPairId = pairId;
     srcData.mirrorAxis = axis;
-
     var obj = mirrorObjData(srcData, axis);
     obj.mirrorPairId = pairId;
     obj.mirrorAxis = axis;
     return obj;
+  }
+
+  // ── Quad group helpers ──
+
+  function findQuadGroupEntries(objData) {
+    if (!objData.quadGroupId) return [];
+    var result = [];
+    for (var i = 0; i < editorObjects.length; i++) {
+      if (editorObjects[i].data !== objData && editorObjects[i].data.quadGroupId === objData.quadGroupId) {
+        result.push(editorObjects[i]);
+      }
+    }
+    return result;
+  }
+
+  function findQuadGroupData(objData) {
+    if (!objData.quadGroupId) return [];
+    var result = [];
+    for (var i = 0; i < mapData.objects.length; i++) {
+      if (mapData.objects[i] !== objData && mapData.objects[i].quadGroupId === objData.quadGroupId) {
+        result.push(mapData.objects[i]);
+      }
+    }
+    return result;
+  }
+
+  // Rotational quad symmetry: each quadrant is a 90° rotation of the adjacent one.
+  // Roles: 'original', 'rot90', 'rot180', 'rot270'
+  // Position offsets (CCW): how much the position is rotated from the original
+  var QUAD_POS_OFFSETS = { original: 0, rot90: 90, rot180: 180, rot270: 270 };
+  // Visual rotation offsets: opposite direction so pieces face the same way relative to quadrant
+  var QUAD_ROT_OFFSETS = { original: 0, rot90: 270, rot180: 180, rot270: 90 };
+
+  function quadMirrorRotation(srcRot, srcRole, targetRole) {
+    var rot = srcRot || 0;
+    var srcOffset = QUAD_ROT_OFFSETS[srcRole] || 0;
+    var targetOffset = QUAD_ROT_OFFSETS[targetRole] || 0;
+    return ((rot - srcOffset + targetOffset) % 360 + 360) % 360;
+  }
+
+  function quadMirrorPosition(srcPos, srcRole, targetRole) {
+    var px = srcPos[0], pz = srcPos[2];
+    // Undo source position rotation to get original position
+    var srcOffset = QUAD_POS_OFFSETS[srcRole] || 0;
+    var ox = px, oz = pz;
+    if (srcOffset === 90) { ox = pz; oz = -px; }
+    else if (srcOffset === 180) { ox = -px; oz = -pz; }
+    else if (srcOffset === 270) { ox = -pz; oz = px; }
+    // Apply target position rotation
+    var targetOffset = QUAD_POS_OFFSETS[targetRole] || 0;
+    var tx = ox, tz = oz;
+    if (targetOffset === 90) { tx = -oz; tz = ox; }
+    else if (targetOffset === 180) { tx = -ox; tz = -oz; }
+    else if (targetOffset === 270) { tx = oz; tz = -ox; }
+    return [tx, srcPos[1] || 0, tz];
+  }
+
+  function syncQuadGroup(srcData) {
+    if (!srcData.quadGroupId) return;
+    var members = findQuadGroupData(srcData);
+    var srcRole = srcData.quadRole || 'original';
+
+    for (var i = 0; i < members.length; i++) {
+      var m = members[i];
+      var targetRole = m.quadRole || 'original';
+      m.type = srcData.type;
+      // Color NOT synced (independent coloring)
+      if (srcData.size) m.size = srcData.size.slice();
+      if (srcData.radius !== undefined) m.radius = srcData.radius;
+      if (srcData.height !== undefined) m.height = srcData.height;
+      if (srcData.thickness !== undefined) m.thickness = srcData.thickness;
+
+      m.position = quadMirrorPosition(srcData.position, srcRole, targetRole);
+      m.rotation = quadMirrorRotation(srcData.rotation, srcRole, targetRole);
+
+      // Rotational symmetry: no geometry flip needed
+      delete m.mirrorFlip;
+      delete m.mirrorAxis;
+    }
+
+    // Rebuild all group entries
+    var entries = findQuadGroupEntries(srcData);
+    for (var j = 0; j < entries.length; j++) {
+      rebuildSingleObject(entries[j]);
+    }
+  }
+
+  function syncAllLinked(srcData) {
+    syncMirrorPartner(srcData);
+    syncQuadGroup(srcData);
   }
 
   function addObjToScene(objData) {
@@ -425,7 +687,7 @@
 
   function mirrorSelected() {
     if (!selectedObj) return;
-    var axis = mirrorMode !== 'off' ? mirrorMode : 'z';
+    var axis = mirrorMode !== 'off' && mirrorMode !== 'quad' ? mirrorMode : 'z';
     pushUndo();
 
     if (selectedObj.data.mirrorPairId && findMirrorPartner(selectedObj.data)) {
@@ -440,7 +702,8 @@
     updateStatusBar();
   }
 
-  // Build a single mesh from object data
+  // ── Build mesh from object data ──
+
   function buildSingleMesh(obj) {
     var mat = new THREE.MeshLambertMaterial({ color: obj.color || '#6B5B4F' });
     var mesh = null;
@@ -460,7 +723,7 @@
       var hMat = new THREE.MeshLambertMaterial({ color: obj.color || '#7A6A55', side: THREE.DoubleSide });
       mesh = new THREE.Mesh(new THREE.CylinderGeometry(r2, r2, h2, 24, 1, false, 0, Math.PI), hMat);
       mesh.position.set(obj.position[0], -1 + h2 / 2 + yOff, obj.position[2]);
-    } else if (obj.type === 'ramp') {
+    } else if (obj.type === 'ramp' || obj.type === 'wedge') {
       var rsx = obj.size[0], rsy = obj.size[1], rsz = obj.size[2];
       var shape = new THREE.Shape();
       shape.moveTo(0, 0);
@@ -471,10 +734,53 @@
       extGeom.translate(-rsz / 2, 0, -rsx / 2);
       mesh = new THREE.Mesh(extGeom, mat);
       mesh.position.set(obj.position[0], -1 + yOff, obj.position[2]);
+    } else if (obj.type === 'lshape') {
+      var lw = obj.size[0], lh = obj.size[1], ld = obj.size[2];
+      var lt = obj.thickness || 1.0;
+      var lShape = new THREE.Shape();
+      // L cross-section: outer from (0,0) going clockwise
+      lShape.moveTo(-lw / 2, -ld / 2);
+      lShape.lineTo(lw / 2, -ld / 2);
+      lShape.lineTo(lw / 2, -ld / 2 + lt);
+      lShape.lineTo(-lw / 2 + lt, -ld / 2 + lt);
+      lShape.lineTo(-lw / 2 + lt, ld / 2);
+      lShape.lineTo(-lw / 2, ld / 2);
+      lShape.closePath();
+      var lGeom = new THREE.ExtrudeGeometry(lShape, { depth: lh, bevelEnabled: false });
+      // Rotate so extrude goes up (Y axis)
+      lGeom.rotateX(-Math.PI / 2);
+      mesh = new THREE.Mesh(lGeom, mat);
+      mesh.position.set(obj.position[0], -1 + yOff, obj.position[2]);
+    } else if (obj.type === 'arch') {
+      var aw = obj.size[0], ah = obj.size[1], ad = obj.size[2];
+      var openW = aw * 0.6; // opening is 60% of width
+      var openH = ah * 0.65; // opening is 65% of height
+      var archShape = new THREE.Shape();
+      // Outer rectangle
+      archShape.moveTo(-aw / 2, 0);
+      archShape.lineTo(aw / 2, 0);
+      archShape.lineTo(aw / 2, ah);
+      archShape.lineTo(-aw / 2, ah);
+      archShape.closePath();
+      // Hole: arch (rectangle with semicircular top)
+      var hole = new THREE.Path();
+      var holeHW = openW / 2;
+      var rectH = openH - holeHW; // straight part height
+      if (rectH < 0) rectH = 0;
+      hole.moveTo(-holeHW, 0);
+      hole.lineTo(-holeHW, rectH);
+      // Semicircular top
+      hole.absarc(0, rectH, holeHW, Math.PI, 0, true);
+      hole.lineTo(holeHW, 0);
+      hole.closePath();
+      archShape.holes.push(hole);
+      var archGeom = new THREE.ExtrudeGeometry(archShape, { depth: ad, bevelEnabled: false });
+      archGeom.translate(0, 0, -ad / 2);
+      mesh = new THREE.Mesh(archGeom, mat);
+      mesh.position.set(obj.position[0], -1 + yOff, obj.position[2]);
     }
 
     if (mesh && rotY !== 0) mesh.rotation.y = rotY;
-    // Apply mirror geometry flip for linked pairs
     if (mesh && obj.mirrorFlip && obj.mirrorAxis) {
       if (obj.mirrorAxis === 'z') mesh.scale.z = -1;
       else if (obj.mirrorAxis === 'x') mesh.scale.x = -1;
@@ -490,10 +796,7 @@
     var rad = (rotDeg || 0) * Math.PI / 180;
     var cosR = Math.cos(rad);
     var sinR = Math.sin(rad);
-    return {
-      x: offX * cosR + offZ * sinR,
-      z: -offX * sinR + offZ * cosR
-    };
+    return { x: offX * cosR + offZ * sinR, z: -offX * sinR + offZ * cosR };
   }
 
   function createResizeHandles(entry) {
@@ -507,7 +810,6 @@
     if (isCyl) {
       var r = d.radius || 1.5;
       var h = d.height || 3.0;
-      // 4 radius handles at cardinal directions, rotated by object rotation
       var rOff1 = rotateOffset(r, 0, rot);
       var rOff2 = rotateOffset(-r, 0, rot);
       var rOff3 = rotateOffset(0, r, rot);
@@ -516,13 +818,11 @@
       addHandle(cx + rOff2.x, baseY + 0.25, cz + rOff2.z, 'radius', -1, 0);
       addHandle(cx + rOff3.x, baseY + 0.25, cz + rOff3.z, 'radius', 0, 1);
       addHandle(cx + rOff4.x, baseY + 0.25, cz + rOff4.z, 'radius', 0, -1);
-      // Top handle (centered, no rotation offset needed)
       addHandle(cx, baseY + h, cz, 'top', 0, 0);
     } else if (d.size) {
       var hsx = d.size[0] / 2;
       var hsz = d.size[2] / 2;
       var sy = d.size[1];
-      // 4 corner handles at base, rotated by object rotation
       var c1 = rotateOffset(hsx, hsz, rot);
       var c2 = rotateOffset(hsx, -hsz, rot);
       var c3 = rotateOffset(-hsx, hsz, rot);
@@ -531,7 +831,6 @@
       addHandle(cx + c2.x, baseY + 0.25, cz + c2.z, 'corner', 1, -1);
       addHandle(cx + c3.x, baseY + 0.25, cz + c3.z, 'corner', -1, 1);
       addHandle(cx + c4.x, baseY + 0.25, cz + c4.z, 'corner', -1, -1);
-      // Top handle (centered, no rotation offset needed)
       addHandle(cx, baseY + sy, cz, 'top', 0, 0);
     }
   }
@@ -566,7 +865,6 @@
     mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
     mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
     raycaster.setFromCamera(mouse, editorCamera);
-
     var meshes = resizeHandles.map(function (h) { return h.mesh; });
     var hits = raycaster.intersectObjects(meshes, false);
     if (hits.length > 0) {
@@ -581,14 +879,11 @@
     isResizing = true;
     resizeHandle = handle;
     pushUndo();
-
     var d = selectedObj.data;
     if (d.size) resizeStartSize = d.size.slice();
     resizeStartRadius = d.radius || 1.5;
     resizeStartHeight = d.size ? d.size[1] : (d.height || 3.0);
-
     if (handle.handleType === 'top') {
-      // Create a camera-facing vertical plane through the handle position
       var camDir = new THREE.Vector3();
       editorCamera.getWorldDirection(camDir);
       camDir.y = 0;
@@ -596,12 +891,9 @@
       camDir.normalize();
       resizePlane.setFromNormalAndCoplanarPoint(camDir, handle.mesh.position.clone());
     } else {
-      // Use a horizontal plane at the handle's Y position
       var baseY = -1 + (d.position[1] || 0) + 0.25;
       resizePlane.setFromNormalAndCoplanarPoint(new THREE.Vector3(0, 1, 0), new THREE.Vector3(0, baseY, 0));
     }
-
-    // Record start intersection point
     var rect = editorRenderer.domElement.getBoundingClientRect();
     mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
     mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
@@ -611,48 +903,31 @@
 
   function updateResize(event) {
     if (!isResizing || !resizeHandle || !selectedObj) return;
-
     var rect = editorRenderer.domElement.getBoundingClientRect();
     mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
     mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
     raycaster.setFromCamera(mouse, editorCamera);
-
     var pt = new THREE.Vector3();
     if (!raycaster.ray.intersectPlane(resizePlane, pt)) return;
-
     var d = selectedObj.data;
     var isCyl = (d.type === 'cylinder' || d.type === 'halfCylinder');
-
     if (resizeHandle.handleType === 'top') {
-      // Vertical resize — track Y delta
       var deltaY = pt.y - resizeStartPoint.y;
       var newH = Math.max(0.5, Math.round((resizeStartHeight + deltaY) * 4) / 4);
-      if (isCyl) {
-        d.height = newH;
-      } else if (d.size) {
-        d.size[1] = newH;
-      }
+      if (isCyl) d.height = newH;
+      else if (d.size) d.size[1] = newH;
     } else if (resizeHandle.handleType === 'corner' && d.size) {
-      // Corner resize — compute new half-extents from center to cursor
       var cx = d.position[0], cz = d.position[2];
-      var halfX = Math.abs(pt.x - cx);
-      var halfZ = Math.abs(pt.z - cz);
-      d.size[0] = Math.max(0.5, Math.round(halfX * 2 * 4) / 4);
-      d.size[2] = Math.max(0.5, Math.round(halfZ * 2 * 4) / 4);
+      d.size[0] = Math.max(0.5, Math.round(Math.abs(pt.x - cx) * 2 * 4) / 4);
+      d.size[2] = Math.max(0.5, Math.round(Math.abs(pt.z - cz) * 2 * 4) / 4);
     } else if (resizeHandle.handleType === 'radius' && isCyl) {
-      // Radius resize — distance from center to cursor on XZ
       var cx2 = d.position[0], cz2 = d.position[2];
-      var dist = Math.sqrt((pt.x - cx2) * (pt.x - cx2) + (pt.z - cz2) * (pt.z - cz2));
-      d.radius = Math.max(0.25, Math.round(dist * 4) / 4);
+      d.radius = Math.max(0.25, Math.round(Math.sqrt((pt.x - cx2) * (pt.x - cx2) + (pt.z - cz2) * (pt.z - cz2)) * 4) / 4);
     }
-
     rebuildSingleObject(selectedObj);
-    if (boxHelper && boxHelper.parent) boxHelper.parent.remove(boxHelper);
-    boxHelper = createRotatedOutline(selectedObj, 0x00ff88);
-    editorScene.add(boxHelper);
-    updateResizeHandlePositions();
+    refreshSelectionVisuals();
     showPropsPanel(d);
-    syncMirrorPartner(d);
+    syncAllLinked(d);
   }
 
   function endResize() {
@@ -661,6 +936,33 @@
   }
 
   // ── Selection ──
+
+  function removeAllBoxHelpers() {
+    for (var i = 0; i < boxHelpers.length; i++) {
+      if (boxHelpers[i].parent) boxHelpers[i].parent.remove(boxHelpers[i]);
+    }
+    boxHelpers = [];
+  }
+
+  function refreshSelectionVisuals() {
+    removeAllBoxHelpers();
+    removeResizeHandles();
+    for (var i = 0; i < selectedObjects.length; i++) {
+      var outline = createRotatedOutline(selectedObjects[i], 0x00ff88);
+      editorScene.add(outline);
+      boxHelpers.push(outline);
+    }
+    // Spawn selection outline
+    if (selectedSpawnEntry && selectedSpawnEntry.mesh) {
+      var spawnHelper = new THREE.BoxHelper(selectedSpawnEntry.mesh, 0xffd700);
+      editorScene.add(spawnHelper);
+      boxHelpers.push(spawnHelper);
+    }
+    // Only show resize handles for single object selection
+    if (selectedObjects.length === 1) {
+      createResizeHandles(selectedObjects[0]);
+    }
+  }
 
   function createRotatedOutline(entry, color) {
     var d = entry.data;
@@ -679,29 +981,21 @@
       hz = d.size[2] / 2;
       sy = d.size[1];
     } else {
-      // Fallback to THREE.BoxHelper
       return new THREE.BoxHelper(entry.mesh, color);
     }
 
-    // Build a wireframe box in local space, then position and rotate it
     var geom = new THREE.BufferGeometry();
     var corners = [
-      [-hx, 0, -hz], [ hx, 0, -hz], [ hx, 0,  hz], [-hx, 0,  hz],
-      [-hx, sy, -hz], [ hx, sy, -hz], [ hx, sy,  hz], [-hx, sy,  hz]
+      [-hx, 0, -hz], [hx, 0, -hz], [hx, 0, hz], [-hx, 0, hz],
+      [-hx, sy, -hz], [hx, sy, -hz], [hx, sy, hz], [-hx, sy, hz]
     ];
-    // 12 edges of a box
-    var indices = [
-      0,1, 1,2, 2,3, 3,0,   // bottom
-      4,5, 5,6, 6,7, 7,4,   // top
-      0,4, 1,5, 2,6, 3,7    // verticals
-    ];
+    var indices = [0,1, 1,2, 2,3, 3,0, 4,5, 5,6, 6,7, 7,4, 0,4, 1,5, 2,6, 3,7];
     var positions = [];
     for (var i = 0; i < indices.length; i++) {
       var c = corners[indices[i]];
       positions.push(c[0], c[1], c[2]);
     }
     geom.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-
     var mat = new THREE.LineBasicMaterial({ color: color, depthTest: false, transparent: true });
     var outline = new THREE.LineSegments(geom, mat);
     outline.position.set(cx, baseY, cz);
@@ -714,48 +1008,78 @@
   function selectObject(entry) {
     deselectAll();
     if (!entry) return;
+    selectedObjects = [entry];
     selectedObj = entry;
-    selectedSpawn = null;
-    boxHelper = createRotatedOutline(entry, 0x00ff88);
-    editorScene.add(boxHelper);
-    createResizeHandles(entry);
+    selectedSpawnEntry = null;
+    refreshSelectionVisuals();
     showPropsPanel(entry.data);
   }
 
-  function selectSpawn(which) {
-    deselectAll();
-    selectedSpawn = which;
-    selectedObj = null;
-    var m = spawnMeshes[which];
-    if (m) {
-      boxHelper = new THREE.BoxHelper(m, 0xffd700);
-      editorScene.add(boxHelper);
+  function toggleObjectInSelection(entry) {
+    var idx = selectedObjects.indexOf(entry);
+    if (idx >= 0) {
+      selectedObjects.splice(idx, 1);
+    } else {
+      selectedObjects.push(entry);
     }
-    propsPanel.classList.add('hidden');
+    selectedSpawnEntry = null;
+    selectedObj = selectedObjects.length > 0 ? selectedObjects[0] : null;
+    refreshSelectionVisuals();
+    if (selectedObjects.length === 1) showPropsPanel(selectedObjects[0].data);
+    else if (selectedObjects.length > 1) showMultiPropsPanel();
+    else propsPanel.classList.add('hidden');
+  }
+
+  function selectAllObjects() {
+    selectedObjects = editorObjects.slice();
+    selectedObj = selectedObjects.length > 0 ? selectedObjects[0] : null;
+    selectedSpawnEntry = null;
+    refreshSelectionVisuals();
+    if (selectedObjects.length === 1) showPropsPanel(selectedObjects[0].data);
+    else if (selectedObjects.length > 1) showMultiPropsPanel();
+    updateStatusBar();
+  }
+
+  function selectSpawnEntry(entry) {
+    deselectAll();
+    selectedSpawnEntry = entry;
+    selectedObj = null;
+    selectedObjects = [];
+    refreshSelectionVisuals();
+    showSpawnPropsPanel(entry.data);
   }
 
   function deselectAll() {
     selectedObj = null;
-    selectedSpawn = null;
-    if (boxHelper && boxHelper.parent) boxHelper.parent.remove(boxHelper);
-    boxHelper = null;
+    selectedObjects = [];
+    selectedSpawnEntry = null;
+    removeAllBoxHelpers();
     removeResizeHandles();
     propsPanel.classList.add('hidden');
   }
 
   function showPropsPanel(data) {
     propsPanel.classList.remove('hidden');
-    document.getElementById('epropType').textContent = data.type;
+    document.getElementById('epropTypeRow').style.display = '';
+    document.getElementById('epropMultiRow').style.display = 'none';
+    document.getElementById('epropType').textContent = SHAPE_NAMES[data.type] || data.type;
+    document.getElementById('epropXRow').style.display = '';
+    document.getElementById('epropZRow').style.display = '';
+    document.getElementById('epropYRow').style.display = '';
     document.getElementById('epropX').value = data.position[0];
     document.getElementById('epropZ').value = data.position[2];
     document.getElementById('epropY').value = data.position[1] || 0;
+    document.getElementById('epropRotRow').style.display = '';
     document.getElementById('epropRot').value = data.rotation || 0;
     document.getElementById('epropColor').value = data.color || '#6B5B4F';
+    document.getElementById('epropSpawnTeamRow').style.display = 'none';
+    document.getElementById('epropMirror').style.display = '';
 
     var isCyl = (data.type === 'cylinder' || data.type === 'halfCylinder');
     document.getElementById('epropSizeRow').style.display = isCyl ? 'none' : '';
     document.getElementById('epropSZRow').style.display = isCyl ? 'none' : '';
     document.getElementById('epropRadiusRow').style.display = isCyl ? '' : 'none';
+    document.getElementById('epropThicknessRow').style.display = data.type === 'lshape' ? '' : 'none';
 
     if (isCyl) {
       document.getElementById('epropRadius').value = data.radius || 1.5;
@@ -765,9 +1089,78 @@
       document.getElementById('epropSY').value = data.size ? data.size[1] : 3;
       document.getElementById('epropSZ').value = data.size ? data.size[2] : 2;
     }
+    if (data.type === 'lshape') {
+      document.getElementById('epropThickness').value = data.thickness || 1.0;
+    }
+  }
+
+  function showMultiPropsPanel() {
+    propsPanel.classList.remove('hidden');
+    document.getElementById('epropTypeRow').style.display = 'none';
+    document.getElementById('epropMultiRow').style.display = '';
+    document.getElementById('epropMultiLabel').textContent = selectedObjects.length + ' objects selected';
+    document.getElementById('epropXRow').style.display = 'none';
+    document.getElementById('epropZRow').style.display = 'none';
+    document.getElementById('epropYRow').style.display = 'none';
+    document.getElementById('epropSizeRow').style.display = 'none';
+    document.getElementById('epropSYRow').style.display = 'none';
+    document.getElementById('epropSZRow').style.display = 'none';
+    document.getElementById('epropRadiusRow').style.display = 'none';
+    document.getElementById('epropThicknessRow').style.display = 'none';
+    document.getElementById('epropRotRow').style.display = 'none';
+    document.getElementById('epropSpawnTeamRow').style.display = 'none';
+    document.getElementById('epropMirror').style.display = 'none';
+  }
+
+  function showSpawnPropsPanel(data) {
+    propsPanel.classList.remove('hidden');
+    document.getElementById('epropTypeRow').style.display = '';
+    document.getElementById('epropMultiRow').style.display = 'none';
+    document.getElementById('epropType').textContent = 'Spawn';
+    document.getElementById('epropXRow').style.display = '';
+    document.getElementById('epropZRow').style.display = '';
+    document.getElementById('epropYRow').style.display = 'none';
+    document.getElementById('epropX').value = data.position[0];
+    document.getElementById('epropZ').value = data.position[2];
+    document.getElementById('epropSizeRow').style.display = 'none';
+    document.getElementById('epropSYRow').style.display = 'none';
+    document.getElementById('epropSZRow').style.display = 'none';
+    document.getElementById('epropRadiusRow').style.display = 'none';
+    document.getElementById('epropThicknessRow').style.display = 'none';
+    document.getElementById('epropRotRow').style.display = 'none';
+    document.getElementById('epropSpawnTeamRow').style.display = '';
+    document.getElementById('epropSpawnTeam').value = data.team || '';
+    document.getElementById('epropMirror').style.display = 'none';
   }
 
   function applyPropsToSelected() {
+    if (selectedSpawnEntry) {
+      pushUndo();
+      var sp = selectedSpawnEntry.data;
+      sp.position[0] = parseFloat(document.getElementById('epropX').value) || 0;
+      sp.position[2] = parseFloat(document.getElementById('epropZ').value) || 0;
+      var teamSel = document.getElementById('epropSpawnTeam');
+      if (teamSel) sp.team = teamSel.value;
+      rebuildSpawnMeshes();
+      // Re-select the spawn after rebuild
+      for (var si = 0; si < spawnEntries.length; si++) {
+        if (spawnEntries[si].data === sp) { selectSpawnEntry(spawnEntries[si]); break; }
+      }
+      return;
+    }
+
+    if (selectedObjects.length > 1) {
+      // Multi-select: only color applies
+      pushUndo();
+      var color = document.getElementById('epropColor').value;
+      for (var i = 0; i < selectedObjects.length; i++) {
+        selectedObjects[i].data.color = color;
+        rebuildSingleObject(selectedObjects[i]);
+      }
+      refreshSelectionVisuals();
+      return;
+    }
+
     if (!selectedObj) return;
     pushUndo();
     var d = selectedObj.data;
@@ -787,20 +1180,18 @@
       d.size[1] = Math.max(0.5, parseFloat(document.getElementById('epropSY').value) || 3);
       d.size[2] = Math.max(0.5, parseFloat(document.getElementById('epropSZ').value) || 2);
     }
+    if (d.type === 'lshape') {
+      d.thickness = Math.max(0.25, parseFloat(document.getElementById('epropThickness').value) || 1.0);
+    }
 
     rebuildSingleObject(selectedObj);
-    if (boxHelper && boxHelper.parent) boxHelper.parent.remove(boxHelper);
-    boxHelper = createRotatedOutline(selectedObj, 0x00ff88);
-    editorScene.add(boxHelper);
-    updateResizeHandlePositions();
-
-    syncMirrorPartner(d);
+    refreshSelectionVisuals();
+    syncAllLinked(d);
   }
 
   function rebuildSingleObject(entry) {
     if (entry.mesh && entry.mesh.parent) entry.mesh.parent.remove(entry.mesh);
     if (arena) {
-      // Remove old colliders by reference (not parallel index)
       var oldBoxes = entry.mesh.userData.colliderBoxes;
       if (oldBoxes) {
         for (var ci = oldBoxes.length - 1; ci >= 0; ci--) {
@@ -811,7 +1202,6 @@
       var solidIdx = arena.solids.indexOf(entry.mesh);
       if (solidIdx >= 0) arena.solids.splice(solidIdx, 1);
     }
-
     var newMesh = buildSingleMesh(entry.data);
     if (newMesh) {
       if (arena) {
@@ -850,6 +1240,15 @@
     } else if (type === 'ramp') {
       obj.size = [4, 2, 6];
       obj.color = '#4A4A4A';
+    } else if (type === 'wedge') {
+      obj.size = [2.5, 3.0, 4.0];
+      obj.color = '#5A5A5A';
+    } else if (type === 'lshape') {
+      obj.size = [4, 3, 4];
+      obj.thickness = 1.0;
+    } else if (type === 'arch') {
+      obj.size = [5, 4, 1.5];
+      obj.color = '#7A6A55';
     }
     return obj;
   }
@@ -857,13 +1256,65 @@
   function placeObjectAt(type, worldX, worldZ) {
     pushUndo();
     var obj = addObject(type);
-    obj.position[0] = Math.round(worldX * 2) / 2;
-    obj.position[2] = Math.round(worldZ * 2) / 2;
+    obj.position[0] = snapToGrid(worldX);
+    obj.position[2] = snapToGrid(worldZ);
 
     var entry = addObjToScene(obj);
     if (entry) selectObject(entry);
 
-    if (mirrorMode !== 'off') {
+    if (mirrorMode === 'quad') {
+      var onZAxis = Math.abs(obj.position[2]) < 0.3;
+      var onXAxis = Math.abs(obj.position[0]) < 0.3;
+      if (onZAxis && onXAxis) {
+        // Center — just one copy
+      } else if (onZAxis) {
+        // On Z axis — X-mirror pair only
+        var mirX = mirrorObjDataLinked(obj, 'x');
+        rebuildSingleObject(entry);
+        addObjToScene(mirX);
+      } else if (onXAxis) {
+        // On X axis — Z-mirror pair only
+        var mirZ = mirrorObjDataLinked(obj, 'z');
+        rebuildSingleObject(entry);
+        addObjToScene(mirZ);
+      } else {
+        // Full quad: 4 objects
+        var qgId = generateQuadGroupId();
+        obj.quadGroupId = qgId;
+        obj.quadRole = 'original';
+        delete obj.mirrorPairId;
+        delete obj.mirrorAxis;
+
+        var rot = obj.rotation || 0;
+        var ox = obj.position[0], oz = obj.position[2];
+
+        var qRot90 = JSON.parse(JSON.stringify(obj));
+        qRot90.id = 'obj_' + (++_nextId);
+        qRot90.position[0] = -oz;
+        qRot90.position[2] = ox;
+        qRot90.rotation = (rot + 270) % 360;
+        qRot90.quadRole = 'rot90';
+
+        var qRot180 = JSON.parse(JSON.stringify(obj));
+        qRot180.id = 'obj_' + (++_nextId);
+        qRot180.position[0] = -ox;
+        qRot180.position[2] = -oz;
+        qRot180.rotation = (rot + 180) % 360;
+        qRot180.quadRole = 'rot180';
+
+        var qRot270 = JSON.parse(JSON.stringify(obj));
+        qRot270.id = 'obj_' + (++_nextId);
+        qRot270.position[0] = oz;
+        qRot270.position[2] = -ox;
+        qRot270.rotation = (rot + 90) % 360;
+        qRot270.quadRole = 'rot270';
+
+        rebuildSingleObject(entry);
+        addObjToScene(qRot90);
+        addObjToScene(qRot180);
+        addObjToScene(qRot270);
+      }
+    } else if (mirrorMode !== 'off') {
       var onAxis = (mirrorMode === 'z' && Math.abs(obj.position[2]) < 0.3) ||
                    (mirrorMode === 'x' && Math.abs(obj.position[0]) < 0.3);
       if (!onAxis) {
@@ -876,16 +1327,61 @@
     updateStatusBar();
   }
 
-  function deleteSelected() {
-    if (!selectedObj) return;
+  function placeSpawnAt(worldX, worldZ) {
     pushUndo();
+    var team = '';
+    var hasA = false, hasB = false;
+    for (var i = 0; i < mapData.spawns.length; i++) {
+      if (mapData.spawns[i].team === 'A') hasA = true;
+      if (mapData.spawns[i].team === 'B') hasB = true;
+    }
+    if (!hasA) team = 'A';
+    else if (!hasB) team = 'B';
 
-    var partnerEntry = findMirrorPartnerEntry(selectedObj.data);
-    if (partnerEntry) {
-      removeObjectEntry(partnerEntry);
+    var spawnData = {
+      id: 'spawn_' + (_nextSpawnId++),
+      position: [snapToGrid(worldX), 0, snapToGrid(worldZ)],
+      team: team
+    };
+    mapData.spawns.push(spawnData);
+    rebuildSpawnMeshes();
+    // Select the new spawn
+    for (var si = 0; si < spawnEntries.length; si++) {
+      if (spawnEntries[si].data === spawnData) { selectSpawnEntry(spawnEntries[si]); break; }
+    }
+    updateStatusBar();
+  }
+
+  function deleteSelected() {
+    if (selectedSpawnEntry) {
+      pushUndo();
+      var spIdx = mapData.spawns.indexOf(selectedSpawnEntry.data);
+      if (spIdx >= 0) mapData.spawns.splice(spIdx, 1);
+      rebuildSpawnMeshes();
+      deselectAll();
+      updateStatusBar();
+      return;
     }
 
-    removeObjectEntry(selectedObj);
+    if (selectedObjects.length === 0) return;
+    pushUndo();
+
+    // Collect all entries to delete (including mirror/quad partners)
+    var toDelete = [];
+    for (var i = 0; i < selectedObjects.length; i++) {
+      var entry = selectedObjects[i];
+      if (toDelete.indexOf(entry) < 0) toDelete.push(entry);
+      var partnerEntry = findMirrorPartnerEntry(entry.data);
+      if (partnerEntry && toDelete.indexOf(partnerEntry) < 0) toDelete.push(partnerEntry);
+      var quadEntries = findQuadGroupEntries(entry.data);
+      for (var q = 0; q < quadEntries.length; q++) {
+        if (toDelete.indexOf(quadEntries[q]) < 0) toDelete.push(quadEntries[q]);
+      }
+    }
+
+    for (var j = 0; j < toDelete.length; j++) {
+      removeObjectEntry(toDelete[j]);
+    }
     deselectAll();
     updateStatusBar();
   }
@@ -893,7 +1389,6 @@
   function removeObjectEntry(entry) {
     if (entry.mesh && entry.mesh.parent) entry.mesh.parent.remove(entry.mesh);
     if (arena) {
-      // Remove colliders by reference (not parallel index)
       var oldBoxes = entry.mesh.userData.colliderBoxes;
       if (oldBoxes) {
         for (var ci = oldBoxes.length - 1; ci >= 0; ci--) {
@@ -915,65 +1410,150 @@
     pushUndo();
     var src = selectedObj.data;
 
-    var partner = findMirrorPartner(src);
-    if (partner) {
-      var newPairId = generateMirrorPairId();
-
-      var obj1 = JSON.parse(JSON.stringify(src));
-      obj1.id = 'obj_' + (++_nextId);
-      obj1.position[0] += 2;
-      obj1.position[2] += 2;
-      obj1.mirrorPairId = newPairId;
-
-      var obj2 = JSON.parse(JSON.stringify(partner));
-      obj2.id = 'obj_' + (++_nextId);
-      obj2.position[0] += 2;
-      obj2.position[2] += 2;
-      obj2.mirrorPairId = newPairId;
-
-      var entry1 = addObjToScene(obj1);
-      addObjToScene(obj2);
-      if (entry1) selectObject(entry1);
+    if (src.quadGroupId) {
+      var newQgId = generateQuadGroupId();
+      var groupData = [src].concat(findQuadGroupData(src));
+      var firstEntry = null;
+      for (var g = 0; g < groupData.length; g++) {
+        var obj = JSON.parse(JSON.stringify(groupData[g]));
+        obj.id = 'obj_' + (++_nextId);
+        obj.position[0] += 2;
+        obj.position[2] += 2;
+        obj.quadGroupId = newQgId;
+        delete obj.mirrorPairId;
+        var e = addObjToScene(obj);
+        if (g === 0 && e) firstEntry = e;
+      }
+      if (firstEntry) selectObject(firstEntry);
     } else {
-      var obj = JSON.parse(JSON.stringify(src));
-      obj.id = 'obj_' + (++_nextId);
-      obj.position[0] += 2;
-      obj.position[2] += 2;
-      delete obj.mirrorPairId;
-      delete obj.mirrorAxis;
-
-      var entry = addObjToScene(obj);
-      if (entry) selectObject(entry);
+      var partner = findMirrorPartner(src);
+      if (partner) {
+        var newPairId = generateMirrorPairId();
+        var obj1 = JSON.parse(JSON.stringify(src));
+        obj1.id = 'obj_' + (++_nextId);
+        obj1.position[0] += 2;
+        obj1.position[2] += 2;
+        obj1.mirrorPairId = newPairId;
+        var obj2 = JSON.parse(JSON.stringify(partner));
+        obj2.id = 'obj_' + (++_nextId);
+        obj2.position[0] += 2;
+        obj2.position[2] += 2;
+        obj2.mirrorPairId = newPairId;
+        var entry1 = addObjToScene(obj1);
+        addObjToScene(obj2);
+        if (entry1) selectObject(entry1);
+      } else {
+        var obj = JSON.parse(JSON.stringify(src));
+        obj.id = 'obj_' + (++_nextId);
+        obj.position[0] += 2;
+        obj.position[2] += 2;
+        delete obj.mirrorPairId;
+        delete obj.mirrorAxis;
+        delete obj.quadGroupId;
+        delete obj.quadRole;
+        var entry = addObjToScene(obj);
+        if (entry) selectObject(entry);
+      }
     }
     updateStatusBar();
   }
 
-  function rotateSelected() {
-    if (!selectedObj) return;
-    pushUndo();
-    selectedObj.data.rotation = ((selectedObj.data.rotation || 0) + 90) % 360;
-    rebuildSingleObject(selectedObj);
-    if (boxHelper && boxHelper.parent) boxHelper.parent.remove(boxHelper);
-    boxHelper = createRotatedOutline(selectedObj, 0x00ff88);
-    editorScene.add(boxHelper);
-    updateResizeHandlePositions();
-    showPropsPanel(selectedObj.data);
+  // ── Copy / Paste ──
 
-    syncMirrorPartner(selectedObj.data);
+  function copySelected() {
+    if (selectedObjects.length === 0) return;
+    var items = [];
+    var seen = {};
+    for (var i = 0; i < selectedObjects.length; i++) {
+      var d = selectedObjects[i].data;
+      if (seen[d.id]) continue;
+      seen[d.id] = true;
+      items.push(JSON.parse(JSON.stringify(d)));
+      // Include mirror partner if linked
+      var partner = findMirrorPartner(d);
+      if (partner && !seen[partner.id]) {
+        seen[partner.id] = true;
+        items.push(JSON.parse(JSON.stringify(partner)));
+      }
+      // Include quad group members
+      var qMembers = findQuadGroupData(d);
+      for (var q = 0; q < qMembers.length; q++) {
+        if (!seen[qMembers[q].id]) {
+          seen[qMembers[q].id] = true;
+          items.push(JSON.parse(JSON.stringify(qMembers[q])));
+        }
+      }
+    }
+    clipboard = items;
+    showEditorToast('Copied ' + items.length + ' object' + (items.length > 1 ? 's' : ''));
   }
 
-  // Move selected object on Y axis (arrow keys)
-  function moveSelectedY(delta) {
-    if (!selectedObj) return;
+  function pasteClipboard() {
+    if (!clipboard || clipboard.length === 0) return;
     pushUndo();
-    selectedObj.data.position[1] = (selectedObj.data.position[1] || 0) + delta;
-    rebuildSingleObject(selectedObj);
-    if (boxHelper && boxHelper.parent) boxHelper.parent.remove(boxHelper);
-    boxHelper = createRotatedOutline(selectedObj, 0x00ff88);
-    editorScene.add(boxHelper);
-    updateResizeHandlePositions();
-    showPropsPanel(selectedObj.data);
-    syncMirrorPartner(selectedObj.data);
+
+    var fakeEvent = { clientX: window.innerWidth / 2, clientY: window.innerHeight / 2 };
+    var gp = getGroundPoint(fakeEvent);
+    if (!gp) return;
+
+    var baseObj = clipboard[0];
+    var offsetX = snapToGrid(gp.x - baseObj.position[0]);
+    var offsetZ = snapToGrid(gp.z - baseObj.position[2]);
+
+    // Map old IDs to new IDs, old mirrorPairIds to new, old quadGroupIds to new
+    var idMap = {};
+    var mpMap = {};
+    var qgMap = {};
+    var firstEntry = null;
+
+    for (var i = 0; i < clipboard.length; i++) {
+      var obj = JSON.parse(JSON.stringify(clipboard[i]));
+      var oldId = obj.id;
+      obj.id = 'obj_' + (++_nextId);
+      idMap[oldId] = obj.id;
+      obj.position[0] += offsetX;
+      obj.position[2] += offsetZ;
+
+      if (obj.mirrorPairId) {
+        if (!mpMap[obj.mirrorPairId]) mpMap[obj.mirrorPairId] = generateMirrorPairId();
+        obj.mirrorPairId = mpMap[obj.mirrorPairId];
+      }
+      if (obj.quadGroupId) {
+        if (!qgMap[obj.quadGroupId]) qgMap[obj.quadGroupId] = generateQuadGroupId();
+        obj.quadGroupId = qgMap[obj.quadGroupId];
+      }
+
+      var entry = addObjToScene(obj);
+      if (i === 0 && entry) firstEntry = entry;
+    }
+
+    if (firstEntry) selectObject(firstEntry);
+    updateStatusBar();
+    showEditorToast('Pasted');
+  }
+
+  function rotateSelected() {
+    if (selectedObjects.length === 0) return;
+    pushUndo();
+    for (var i = 0; i < selectedObjects.length; i++) {
+      selectedObjects[i].data.rotation = ((selectedObjects[i].data.rotation || 0) + 90) % 360;
+      rebuildSingleObject(selectedObjects[i]);
+      syncAllLinked(selectedObjects[i].data);
+    }
+    refreshSelectionVisuals();
+    if (selectedObjects.length === 1) showPropsPanel(selectedObjects[0].data);
+  }
+
+  function moveSelectedY(delta) {
+    if (selectedObjects.length === 0) return;
+    pushUndo();
+    for (var i = 0; i < selectedObjects.length; i++) {
+      selectedObjects[i].data.position[1] = (selectedObjects[i].data.position[1] || 0) + delta;
+      rebuildSingleObject(selectedObjects[i]);
+      syncAllLinked(selectedObjects[i].data);
+    }
+    refreshSelectionVisuals();
+    if (selectedObjects.length === 1) showPropsPanel(selectedObjects[0].data);
   }
 
   // ── Player Walk Mode ──
@@ -982,39 +1562,27 @@
     if (playerMode) return;
     if (flyMode) {
       flyMode = false;
-      try { document.exitPointerLock(); } catch (ex) { console.warn('mapEditor: exitPointerLock failed', ex); }
+      try { document.exitPointerLock(); } catch (ex) {}
     }
-
     playerMode = true;
     deselectAll();
-
-    // Save spectator camera state
     savedSpectatorPos = editorCamera.position.clone();
     savedSpectatorYaw = flyYaw;
     savedSpectatorPitch = flyPitch;
-
-    // Drop camera to player eye height below current position
     playerPos.set(editorCamera.position.x, 0, editorCamera.position.z);
     playerYaw = flyYaw;
     playerPitch = 0;
     editorCamera.position.set(playerPos.x, 2, playerPos.z);
     editorCamera.rotation.order = 'YXZ';
     editorCamera.rotation.set(playerPitch, playerYaw, 0);
-
-    // Reset player keys
     playerKeys = { w: false, a: false, s: false, d: false, shift: false };
-
-    // Request pointer lock
     editorRenderer.domElement.requestPointerLock();
-
-    // Hide UI, show hint
     toolbar.style.display = 'none';
     propsPanel.classList.add('hidden');
     settingsPanel.classList.add('hidden');
     loadPanel.classList.add('hidden');
     statusBar.style.display = 'none';
     document.getElementById('editorPlayerHint').classList.remove('hidden');
-
     var btn = document.getElementById('editorPlayerMode');
     if (btn) btn.classList.add('player-active');
   }
@@ -1022,10 +1590,7 @@
   function exitPlayerMode() {
     if (!playerMode) return;
     playerMode = false;
-
-    try { document.exitPointerLock(); } catch (ex) { console.warn('mapEditor: exitPointerLock failed', ex); }
-
-    // Restore spectator camera state
+    try { document.exitPointerLock(); } catch (ex) {}
     if (savedSpectatorPos) {
       editorCamera.position.copy(savedSpectatorPos);
       flyYaw = savedSpectatorYaw;
@@ -1033,16 +1598,11 @@
       editorCamera.rotation.order = 'YXZ';
       editorCamera.rotation.set(flyPitch, flyYaw, 0);
     }
-
-    // Show UI
     toolbar.style.display = '';
     statusBar.style.display = '';
     document.getElementById('editorPlayerHint').classList.add('hidden');
-
     var btn = document.getElementById('editorPlayerMode');
     if (btn) btn.classList.remove('player-active');
-
-    // Reset keys
     playerKeys = { w: false, a: false, s: false, d: false, shift: false };
   }
 
@@ -1058,8 +1618,11 @@
     if (undoStack.length === 0) return;
     redoStack.push(JSON.stringify(mapData));
     mapData = JSON.parse(undoStack.pop());
+    mapData.spawns = normalizeSpawns(mapData.spawns);
     recalcNextId();
     recalcNextMirrorPairId();
+    recalcNextQuadGroupId();
+    recalcNextSpawnId();
     rebuildEditorScene();
   }
 
@@ -1067,8 +1630,11 @@
     if (redoStack.length === 0) return;
     undoStack.push(JSON.stringify(mapData));
     mapData = JSON.parse(redoStack.pop());
+    mapData.spawns = normalizeSpawns(mapData.spawns);
     recalcNextId();
     recalcNextMirrorPairId();
+    recalcNextQuadGroupId();
+    recalcNextSpawnId();
     rebuildEditorScene();
   }
 
@@ -1079,7 +1645,7 @@
     mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
     mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
     raycaster.setFromCamera(mouse, editorCamera);
-    var plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 1); // y = -1 ground plane
+    var plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 1);
     var pt = new THREE.Vector3();
     raycaster.ray.intersectPlane(plane, pt);
     return pt;
@@ -1092,21 +1658,19 @@
     raycaster.setFromCamera(mouse, editorCamera);
 
     // Check spawns first
-    var spawnArr = [];
-    if (spawnMeshes.A) spawnArr.push(spawnMeshes.A);
-    if (spawnMeshes.B) spawnArr.push(spawnMeshes.B);
-    var spawnHits = raycaster.intersectObjects(spawnArr, true);
+    var spawnMeshArr = spawnEntries.map(function (e) { return e.mesh; });
+    var spawnHits = raycaster.intersectObjects(spawnMeshArr, true);
     if (spawnHits.length > 0) {
-      var hitMesh = spawnHits[0].object;
-      if (hitMesh === spawnMeshes.A || hitMesh.parent === spawnMeshes.A) return { spawn: 'A' };
-      if (hitMesh === spawnMeshes.B || hitMesh.parent === spawnMeshes.B) return { spawn: 'B' };
+      for (var si = 0; si < spawnEntries.length; si++) {
+        if (spawnEntries[si].mesh === spawnHits[0].object) {
+          return { spawnEntry: spawnEntries[si] };
+        }
+      }
     }
 
     // Check editor objects
     var meshes = [];
-    for (var i = 0; i < editorObjects.length; i++) {
-      meshes.push(editorObjects[i].mesh);
-    }
+    for (var i = 0; i < editorObjects.length; i++) meshes.push(editorObjects[i].mesh);
     var hits = raycaster.intersectObjects(meshes, true);
     if (hits.length > 0) {
       var hitM = hits[0].object;
@@ -1134,7 +1698,7 @@
   var _uiListeners = [];
 
   function bindEditorEvents() {
-    unbindEditorEvents(); // Clear any existing listeners first
+    unbindEditorEvents();
     var canvas = editorRenderer.domElement;
 
     _boundHandlers.mousedown = function (e) { onMouseDown(e); };
@@ -1164,13 +1728,34 @@
       _uiListeners.push({ el: el, event: event, fn: fn });
     }
 
-    // Toolbar buttons
+    // Toolbar: Select and Spawn tool buttons
     var toolBtns = document.querySelectorAll('.editor-tool');
     for (var i = 0; i < toolBtns.length; i++) {
       addUI(toolBtns[i], 'click', onToolClick);
     }
 
+    // Dropdown: Place button toggles menu
+    addUI('editorPlaceBtn', 'click', function () {
+      var dd = document.getElementById('editorPlaceDropdown');
+      if (dd) dd.classList.toggle('open');
+    });
+
+    // Dropdown: Shape option buttons
+    var shapeOpts = document.querySelectorAll('.editor-shape-opt');
+    for (var s = 0; s < shapeOpts.length; s++) {
+      addUI(shapeOpts[s], 'click', onShapeOptClick);
+    }
+
     addUI('editorMirrorToggle', 'click', cycleMirrorMode);
+    addUI('editorSnapToggle', 'click', function () {
+      // Cycle: Grid+Edge → Grid → Edge → Off → Grid+Edge
+      if (gridSnap && edgeSnap) { edgeSnap = false; }
+      else if (gridSnap && !edgeSnap) { gridSnap = false; edgeSnap = true; }
+      else if (!gridSnap && edgeSnap) { edgeSnap = false; }
+      else { gridSnap = true; edgeSnap = true; }
+      updateSnapButton();
+      updateStatusBar();
+    });
     addUI('editorUndo', 'click', undo);
     addUI('editorRedo', 'click', redo);
     addUI('editorSave', 'click', onSave);
@@ -1184,38 +1769,42 @@
     addUI('epropDelete', 'click', deleteSelected);
     addUI('epropMirror', 'click', mirrorSelected);
 
-    // Panel close (X) buttons
     addUI('epropClose', 'click', function () { deselectAll(); });
     addUI('esCloseX', 'click', function () { settingsPanel.classList.add('hidden'); });
     addUI('editorLoadCloseX', 'click', function () { loadPanel.classList.add('hidden'); });
 
-    // Props panel inputs (including Y)
-    ['epropX', 'epropZ', 'epropY', 'epropSX', 'epropSY', 'epropSZ', 'epropRadius', 'epropRot', 'epropColor'].forEach(function (id) {
+    ['epropX', 'epropZ', 'epropY', 'epropSX', 'epropSY', 'epropSZ', 'epropRadius', 'epropThickness', 'epropRot', 'epropColor', 'epropSpawnTeam'].forEach(function (id) {
       addUI(id, 'change', applyPropsToSelected);
     });
 
-    // Settings panel
     addUI('esApply', 'click', onSettingsApply);
     addUI('esClose', 'click', function () { settingsPanel.classList.add('hidden'); });
+    addUI('esMakeSquare', 'click', function () {
+      var w = parseInt(document.getElementById('esArenaW').value, 10) || 60;
+      var l = parseInt(document.getElementById('esArenaL').value, 10) || 90;
+      var size = Math.max(w, l);
+      document.getElementById('esArenaW').value = size;
+      document.getElementById('esArenaL').value = size;
+    });
 
-    // Load panel
     addUI('editorLoadConfirm', 'click', onLoadConfirm);
     addUI('editorDeleteMap', 'click', onDeleteMap);
     addUI('editorLoadCancel', 'click', function () { loadPanel.classList.add('hidden'); });
   }
 
   function unbindEditorEvents() {
-    var canvas = editorRenderer.domElement;
-    canvas.removeEventListener('mousedown', _boundHandlers.mousedown);
-    canvas.removeEventListener('mousemove', _boundHandlers.mousemove);
-    canvas.removeEventListener('mouseup', _boundHandlers.mouseup);
-    canvas.removeEventListener('wheel', _boundHandlers.wheel);
-    canvas.removeEventListener('contextmenu', _boundHandlers.contextmenu);
+    var canvas = editorRenderer ? editorRenderer.domElement : null;
+    if (canvas) {
+      canvas.removeEventListener('mousedown', _boundHandlers.mousedown);
+      canvas.removeEventListener('mousemove', _boundHandlers.mousemove);
+      canvas.removeEventListener('mouseup', _boundHandlers.mouseup);
+      canvas.removeEventListener('wheel', _boundHandlers.wheel);
+      canvas.removeEventListener('contextmenu', _boundHandlers.contextmenu);
+    }
     document.removeEventListener('keydown', _boundHandlers.keydown);
     document.removeEventListener('keyup', _boundHandlers.keyup);
     document.removeEventListener('pointerlockchange', _boundHandlers.pointerlockchange);
     window.removeEventListener('resize', _boundHandlers.resize);
-
     for (var i = 0; i < _uiListeners.length; i++) {
       var l = _uiListeners[i];
       l.el.removeEventListener(l.event, l.fn);
@@ -1225,7 +1814,6 @@
 
   function onEditorPointerLockChange() {
     if (document.pointerLockElement !== editorRenderer.domElement) {
-      // Pointer lock was lost
       if (flyMode) flyMode = false;
       if (playerMode) exitPlayerMode();
     }
@@ -1235,26 +1823,60 @@
     var tool = e.target.getAttribute('data-tool');
     if (!tool) return;
     currentTool = tool;
+    // Deactivate all tool buttons and place button
     document.querySelectorAll('.editor-tool').forEach(function (b) { b.classList.remove('active'); });
+    var placeBtn = document.getElementById('editorPlaceBtn');
+    if (placeBtn) placeBtn.classList.remove('place-active');
     e.target.classList.add('active');
+    // Close dropdown if open
+    var dd = document.getElementById('editorPlaceDropdown');
+    if (dd) dd.classList.remove('open');
     updateStatusBar();
+  }
+
+  function onShapeOptClick(e) {
+    var tool = e.target.getAttribute('data-tool');
+    if (!tool) return;
+    currentTool = tool;
+    // Deactivate all tool buttons
+    document.querySelectorAll('.editor-tool').forEach(function (b) { b.classList.remove('active'); });
+    // Activate place button
+    var placeBtn = document.getElementById('editorPlaceBtn');
+    if (placeBtn) {
+      placeBtn.classList.add('place-active');
+      placeBtn.innerHTML = 'Place: ' + (SHAPE_NAMES[tool] || tool) + ' &#9662;';
+    }
+    // Mark selected option
+    document.querySelectorAll('.editor-shape-opt').forEach(function (b) { b.classList.remove('active'); });
+    e.target.classList.add('active');
+    // Close dropdown
+    var dd = document.getElementById('editorPlaceDropdown');
+    if (dd) dd.classList.remove('open');
+    updateStatusBar();
+  }
+
+  function closeDropdown() {
+    var dd = document.getElementById('editorPlaceDropdown');
+    if (dd) dd.classList.remove('open');
   }
 
   function onMouseDown(e) {
     if (playerMode) return;
     if (isOverUI(e)) return;
 
+    // Close dropdown on any click outside it
+    closeDropdown();
+
     if (e.button === 2) {
       flyMode = true;
       editorRenderer.domElement.requestPointerLock();
       return;
     }
-
     if (e.button !== 0) return;
     if (flyMode) return;
 
-    // Check resize handles first (higher priority than objects)
-    if (selectedObj && currentTool === 'select') {
+    // Check resize handles first (single selection only)
+    if (selectedObjects.length === 1 && currentTool === 'select') {
       var handleHit = getHandleHit(e);
       if (handleHit) {
         startResize(handleHit, e);
@@ -1264,36 +1886,49 @@
 
     if (currentTool === 'select') {
       var hit = getHitObject(e);
-      if (hit && hit.spawn) {
+      if (hit && hit.spawnEntry) {
         pushUndo();
-        selectSpawn(hit.spawn);
+        selectSpawnEntry(hit.spawnEntry);
         isDragging = true;
-        var sm = spawnMeshes[hit.spawn];
-        dragObjStart.set(sm.position.x, sm.position.y, sm.position.z);
+        dragObjStart.set(hit.spawnEntry.mesh.position.x, hit.spawnEntry.mesh.position.y, hit.spawnEntry.mesh.position.z);
         var gp = getGroundPoint(e);
         if (gp) dragGroundStart.copy(gp);
         dragStart.set(e.clientX, e.clientY);
       } else if (hit && hit.obj) {
-        pushUndo();
-        selectObject(hit.obj);
+        if (e.shiftKey) {
+          // Shift+click: toggle multi-select
+          toggleObjectInSelection(hit.obj);
+        } else {
+          pushUndo();
+          selectObject(hit.obj);
+        }
         isDragging = true;
         dragObjStart.set(hit.obj.data.position[0], 0, hit.obj.data.position[2]);
         var gp2 = getGroundPoint(e);
         if (gp2) dragGroundStart.copy(gp2);
         dragStart.set(e.clientX, e.clientY);
+        // Store start positions for all selected objects (multi-drag)
+        multiDragStarts = [];
+        for (var ms = 0; ms < selectedObjects.length; ms++) {
+          multiDragStarts.push({
+            entry: selectedObjects[ms],
+            startX: selectedObjects[ms].data.position[0],
+            startZ: selectedObjects[ms].data.position[2]
+          });
+        }
       } else {
         deselectAll();
       }
-    } else {
+    } else if (currentTool === 'spawn') {
       var gp3 = getGroundPoint(e);
-      if (gp3) {
-        placeObjectAt(currentTool, gp3.x, gp3.z);
-      }
+      if (gp3) placeSpawnAt(gp3.x, gp3.z);
+    } else {
+      var gp4 = getGroundPoint(e);
+      if (gp4) placeObjectAt(currentTool, gp4.x, gp4.z);
     }
   }
 
   function onMouseMove(e) {
-    // Player mode mouse look
     if (playerMode) {
       if (document.pointerLockElement === editorRenderer.domElement) {
         playerYaw -= e.movementX * 0.002;
@@ -1305,7 +1940,6 @@
       return;
     }
 
-    // Fly mode mouse look
     if (flyMode) {
       if (document.pointerLockElement === editorRenderer.domElement) {
         flyYaw -= e.movementX * 0.002;
@@ -1317,40 +1951,50 @@
       return;
     }
 
-    // Resize dragging
     if (isResizing) {
       updateResize(e);
       return;
     }
 
-    // Object/spawn dragging
-    if (isDragging && (selectedObj || selectedSpawn)) {
+    if (isDragging && (selectedObjects.length > 0 || selectedSpawnEntry)) {
       var gp = getGroundPoint(e);
       if (!gp) return;
 
       var dx = gp.x - dragGroundStart.x;
       var dz = gp.z - dragGroundStart.z;
-      var newX = Math.round((dragObjStart.x + dx) * 2) / 2;
-      var newZ = Math.round((dragObjStart.z + dz) * 2) / 2;
 
-      if (selectedSpawn) {
-        var sm = spawnMeshes[selectedSpawn];
-        sm.position.x = newX;
-        sm.position.z = newZ;
-        mapData.spawns[selectedSpawn][0] = newX;
-        mapData.spawns[selectedSpawn][2] = newZ;
-        if (boxHelper) boxHelper.update();
-      } else if (selectedObj) {
-        selectedObj.data.position[0] = newX;
-        selectedObj.data.position[2] = newZ;
-        rebuildSingleObject(selectedObj);
-        if (boxHelper && boxHelper.parent) boxHelper.parent.remove(boxHelper);
-        boxHelper = createRotatedOutline(selectedObj, 0x00ff88);
-        editorScene.add(boxHelper);
-        updateResizeHandlePositions();
-        showPropsPanel(selectedObj.data);
+      if (selectedSpawnEntry) {
+        var newX = snapToGrid(dragObjStart.x + dx);
+        var newZ = snapToGrid(dragObjStart.z + dz);
+        selectedSpawnEntry.mesh.position.x = newX;
+        selectedSpawnEntry.mesh.position.z = newZ;
+        selectedSpawnEntry.data.position[0] = newX;
+        selectedSpawnEntry.data.position[2] = newZ;
+        refreshSelectionVisuals();
+        showSpawnPropsPanel(selectedSpawnEntry.data);
+      } else if (selectedObjects.length > 0) {
+        // Compute snapped position for first object, apply same delta to all
+        var firstMds = multiDragStarts[0];
+        var rawX = firstMds.startX + dx;
+        var rawZ = firstMds.startZ + dz;
+        var snappedX = snapToGrid(rawX);
+        var snappedZ = snapToGrid(rawZ);
+        // Apply edge snapping to the first dragged object
+        var snapped = applyEdgeSnap(snappedX, snappedZ, [firstMds.entry]);
+        var snapDx = snapped[0] - firstMds.startX;
+        var snapDz = snapped[1] - firstMds.startZ;
 
-        syncMirrorPartner(selectedObj.data);
+        for (var i = 0; i < multiDragStarts.length; i++) {
+          var mds = multiDragStarts[i];
+          var nx = mds.startX + snapDx;
+          var nz = mds.startZ + snapDz;
+          mds.entry.data.position[0] = nx;
+          mds.entry.data.position[2] = nz;
+          rebuildSingleObject(mds.entry);
+          syncAllLinked(mds.entry.data);
+        }
+        refreshSelectionVisuals();
+        if (selectedObjects.length === 1) showPropsPanel(selectedObjects[0].data);
       }
     }
   }
@@ -1358,16 +2002,11 @@
   function onMouseUp(e) {
     if (e.button === 2 && flyMode) {
       flyMode = false;
-      try { document.exitPointerLock(); } catch (ex) { console.warn('mapEditor: exitPointerLock failed', ex); }
+      try { document.exitPointerLock(); } catch (ex) {}
       return;
     }
-    if (isResizing) {
-      endResize();
-      return;
-    }
-    if (isDragging) {
-      isDragging = false;
-    }
+    if (isResizing) { endResize(); return; }
+    if (isDragging) { isDragging = false; multiDragStarts = []; }
   }
 
   function onWheel(e) {
@@ -1379,8 +2018,7 @@
     } else {
       var dir = new THREE.Vector3();
       editorCamera.getWorldDirection(dir);
-      var amount = e.deltaY > 0 ? -2 : 2;
-      editorCamera.position.addScaledVector(dir, amount);
+      editorCamera.position.addScaledVector(dir, e.deltaY > 0 ? -2 : 2);
     }
   }
 
@@ -1388,7 +2026,6 @@
     var tag = document.activeElement && document.activeElement.tagName;
     if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
 
-    // Player mode keys
     if (playerMode) {
       var pk = e.key.toLowerCase();
       if (pk === 'w') playerKeys.w = true;
@@ -1396,14 +2033,10 @@
       if (pk === 's') playerKeys.s = true;
       if (pk === 'd') playerKeys.d = true;
       if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') playerKeys.shift = true;
-      if (pk === 'p' || e.key === 'Escape') {
-        exitPlayerMode();
-        e.preventDefault();
-      }
+      if (pk === 'p' || e.key === 'Escape') { exitPlayerMode(); e.preventDefault(); }
       return;
     }
 
-    // Fly keys (always tracked for when RMB fly mode activates)
     var k = e.key.toLowerCase();
     if (k === 'w') flyKeys.w = true;
     if (k === 'a') flyKeys.a = true;
@@ -1414,14 +2047,10 @@
 
     if (flyMode) return;
 
-    // P key — enter player mode
-    if (k === 'p') {
-      enterPlayerMode();
-      e.preventDefault();
-      return;
-    }
+    if (k === 'p') { enterPlayerMode(); e.preventDefault(); return; }
 
     if (e.key === 'Escape') {
+      closeDropdown();
       if (!settingsPanel.classList.contains('hidden')) { settingsPanel.classList.add('hidden'); return; }
       if (!loadPanel.classList.contains('hidden')) { loadPanel.classList.add('hidden'); return; }
       deselectAll();
@@ -1429,53 +2058,28 @@
       return;
     }
 
-    // Arrow keys — move selected object on Y axis
-    if (e.key === 'ArrowUp' && selectedObj) {
-      moveSelectedY(0.5);
-      e.preventDefault();
-      return;
-    }
-    if (e.key === 'ArrowDown' && selectedObj) {
-      moveSelectedY(-0.5);
-      e.preventDefault();
-      return;
-    }
+    if (e.key === 'ArrowUp' && selectedObjects.length > 0) { moveSelectedY(0.5); e.preventDefault(); return; }
+    if (e.key === 'ArrowDown' && selectedObjects.length > 0) { moveSelectedY(-0.5); e.preventDefault(); return; }
 
-    if (e.key === 'Delete' || e.key === 'Backspace') {
-      deleteSelected();
-      e.preventDefault();
-      return;
-    }
+    if (e.key === 'Delete' || e.key === 'Backspace') { deleteSelected(); e.preventDefault(); return; }
 
-    if (k === 'r' && !e.ctrlKey && !e.metaKey) {
-      rotateSelected();
-      e.preventDefault();
-      return;
-    }
+    if (k === 'r' && !e.ctrlKey && !e.metaKey) { rotateSelected(); e.preventDefault(); return; }
+    if (k === 'm') { mirrorSelected(); e.preventDefault(); return; }
+    if (k === 'g' && !e.ctrlKey && !e.metaKey) { toggleGridSnap(); e.preventDefault(); return; }
+    if (k === 'e' && !e.ctrlKey && !e.metaKey) { toggleEdgeSnap(); e.preventDefault(); return; }
 
-    if (k === 'm') {
-      mirrorSelected();
-      e.preventDefault();
-      return;
-    }
-
-    if ((e.ctrlKey || e.metaKey) && k === 'd') {
-      duplicateSelected();
-      e.preventDefault();
-      return;
-    }
-
-    if ((e.ctrlKey || e.metaKey) && e.shiftKey && (k === 'z')) {
-      redo();
-      e.preventDefault();
-      return;
-    }
-
-    if ((e.ctrlKey || e.metaKey) && (k === 'z')) {
-      undo();
-      e.preventDefault();
-      return;
-    }
+    // Ctrl+C: Copy
+    if ((e.ctrlKey || e.metaKey) && k === 'c') { copySelected(); e.preventDefault(); return; }
+    // Ctrl+V: Paste
+    if ((e.ctrlKey || e.metaKey) && k === 'v') { pasteClipboard(); e.preventDefault(); return; }
+    // Ctrl+A: Select all
+    if ((e.ctrlKey || e.metaKey) && k === 'a') { selectAllObjects(); e.preventDefault(); return; }
+    // Ctrl+D: Duplicate
+    if ((e.ctrlKey || e.metaKey) && k === 'd') { duplicateSelected(); e.preventDefault(); return; }
+    // Ctrl+Shift+Z: Redo
+    if ((e.ctrlKey || e.metaKey) && e.shiftKey && k === 'z') { redo(); e.preventDefault(); return; }
+    // Ctrl+Z: Undo
+    if ((e.ctrlKey || e.metaKey) && k === 'z') { undo(); e.preventDefault(); return; }
   }
 
   function onKeyUp(e) {
@@ -1488,7 +2092,6 @@
       if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') playerKeys.shift = false;
       return;
     }
-
     var k = e.key.toLowerCase();
     if (k === 'w') flyKeys.w = false;
     if (k === 'a') flyKeys.a = false;
@@ -1525,9 +2128,7 @@
     mapData.name = name;
     saveMapToServer(name, mapData).then(function () {
       showEditorToast('Saved: ' + name);
-    }).catch(function () {
-      alert('Failed to save map.');
-    });
+    }).catch(function () { alert('Failed to save map.'); });
   }
 
   function onLoadOpen() {
@@ -1558,8 +2159,11 @@
     fetchMapData(name).then(function (data) {
       pushUndo();
       mapData = data;
+      mapData.spawns = normalizeSpawns(mapData.spawns);
       recalcNextId();
       recalcNextMirrorPairId();
+      recalcNextQuadGroupId();
+      recalcNextSpawnId();
       document.getElementById('esMapName').value = name;
       rebuildEditorScene();
       loadPanel.classList.add('hidden');
@@ -1584,13 +2188,18 @@
     pushUndo();
     mapData = {
       name: 'new-map',
-      version: 1,
+      version: 2,
       arena: { width: 60, length: 90, wallHeight: 3.5 },
-      spawns: { A: [0, 0, -37], B: [0, 0, 37] },
+      spawns: [
+        { id: 'spawn_1', position: [0, 0, -37], team: 'A' },
+        { id: 'spawn_2', position: [0, 0, 37], team: 'B' }
+      ],
       objects: []
     };
     _nextId = 1;
     _nextMirrorPairId = 1;
+    _nextQuadGroupId = 1;
+    _nextSpawnId = 3;
     document.getElementById('esMapName').value = 'new-map';
     rebuildEditorScene();
     syncSettingsUI();
@@ -1608,10 +2217,6 @@
     document.getElementById('esArenaW').value = mapData.arena.width || 60;
     document.getElementById('esArenaL').value = mapData.arena.length || 90;
     document.getElementById('esWallH').value = mapData.arena.wallHeight || 3.5;
-    document.getElementById('esSpawnAX').value = mapData.spawns.A[0];
-    document.getElementById('esSpawnAZ').value = mapData.spawns.A[2];
-    document.getElementById('esSpawnBX').value = mapData.spawns.B[0];
-    document.getElementById('esSpawnBZ').value = mapData.spawns.B[2];
   }
 
   function onSettingsApply() {
@@ -1620,10 +2225,6 @@
     mapData.arena.width = Math.max(20, parseInt(document.getElementById('esArenaW').value, 10) || 60);
     mapData.arena.length = Math.max(20, parseInt(document.getElementById('esArenaL').value, 10) || 90);
     mapData.arena.wallHeight = Math.max(1, parseFloat(document.getElementById('esWallH').value) || 3.5);
-    mapData.spawns.A[0] = parseFloat(document.getElementById('esSpawnAX').value) || 0;
-    mapData.spawns.A[2] = parseFloat(document.getElementById('esSpawnAZ').value) || -37;
-    mapData.spawns.B[0] = parseFloat(document.getElementById('esSpawnBX').value) || 0;
-    mapData.spawns.B[2] = parseFloat(document.getElementById('esSpawnBZ').value) || 37;
     rebuildEditorScene();
     settingsPanel.classList.add('hidden');
   }
@@ -1631,8 +2232,14 @@
   // ── Status ──
 
   function updateStatusBar() {
-    var toolText = 'Tool: ' + currentTool.charAt(0).toUpperCase() + currentTool.slice(1);
-    if (mirrorMode !== 'off') toolText += '  |  Mirror: ' + mirrorMode.toUpperCase() + '-axis';
+    var toolName = SHAPE_NAMES[currentTool] || currentTool.charAt(0).toUpperCase() + currentTool.slice(1);
+    var toolText = 'Tool: ' + toolName;
+    if (mirrorMode !== 'off') {
+      var mirrorLabel = mirrorMode === 'quad' ? 'Quad' : mirrorMode.toUpperCase() + '-axis';
+      toolText += '  |  Mirror: ' + mirrorLabel;
+    }
+    var snapLabel = gridSnap && edgeSnap ? 'Grid+Edge' : gridSnap ? 'Grid' : edgeSnap ? 'Edge' : 'Off';
+    toolText += '  |  Snap: ' + snapLabel;
     if (toolLabel) toolLabel.textContent = toolText;
     if (objCount) objCount.textContent = 'Objects: ' + (mapData ? mapData.objects.length : 0);
   }
@@ -1649,32 +2256,26 @@
   function editorRenderLoop() {
     if (!editorActive) return;
 
-    // Player walk mode movement
     if (playerMode) {
       var speed = playerKeys.shift ? 8 : 5;
       var dt = 1 / 60;
-
       var dir = new THREE.Vector3();
       editorCamera.getWorldDirection(dir);
       dir.y = 0; dir.normalize();
       var right = new THREE.Vector3().crossVectors(dir, new THREE.Vector3(0, 1, 0)).normalize();
-
       if (playerKeys.w) playerPos.addScaledVector(dir, speed * dt);
       if (playerKeys.s) playerPos.addScaledVector(dir, -speed * dt);
       if (playerKeys.a) playerPos.addScaledVector(right, -speed * dt);
       if (playerKeys.d) playerPos.addScaledVector(right, speed * dt);
-
       if (arena) resolveCollisions2D(playerPos, 0.3, arena.colliders);
       editorCamera.position.set(playerPos.x, 2, playerPos.z);
     }
 
-    // Fly mode movement
     if (flyMode) {
       var fdir = new THREE.Vector3();
       editorCamera.getWorldDirection(fdir);
       fdir.y = 0; fdir.normalize();
       var fright = new THREE.Vector3().crossVectors(fdir, new THREE.Vector3(0, 1, 0)).normalize();
-
       if (flyKeys.w) editorCamera.position.addScaledVector(fdir, flySpeed);
       if (flyKeys.s) editorCamera.position.addScaledVector(fdir, -flySpeed);
       if (flyKeys.a) editorCamera.position.addScaledVector(fright, -flySpeed);
@@ -1683,8 +2284,10 @@
       if (flyKeys.shift) editorCamera.position.y -= flySpeed;
     }
 
-    // Update box helper (only BoxHelper has .update; custom outlines are static)
-    if (boxHelper && typeof boxHelper.update === 'function') boxHelper.update();
+    // Update BoxHelper instances (spawn outlines)
+    for (var i = 0; i < boxHelpers.length; i++) {
+      if (typeof boxHelpers[i].update === 'function') boxHelpers[i].update();
+    }
 
     editorRenderer.render(editorScene, editorCamera);
     requestAnimationFrame(editorRenderLoop);

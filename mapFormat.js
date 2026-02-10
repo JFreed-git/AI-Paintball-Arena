@@ -13,7 +13,8 @@
  *   fetchMapList()                 — GET map list from server
  *   fetchMapData(name)             — GET map from server
  *   recalcNextMirrorPairId(mapData) — recompute mirror pair IDs
- *   computeColliderForMesh(mesh)    — compute Box3 collider for a mesh
+ *   normalizeSpawns(spawns)          — convert old/new spawn formats to array
+ *   computeColliderForMesh(mesh)    — compute Box3 collider(s) for a mesh
  *
  * DEPENDENCIES: Three.js, game.js (scene global), physics.js (GROUND_Y)
  *
@@ -132,7 +133,10 @@
       name: 'Default Arena',
       version: 1,
       arena: { width: 60, length: 90, wallHeight: 3.5 },
-      spawns: { A: [0, 0, -37], B: [0, 0, 37] },
+      spawns: [
+        { id: 'spawn_1', position: [0, 0, -37], team: 'A' },
+        { id: 'spawn_2', position: [0, 0, 37], team: 'B' }
+      ],
       objects: objects
     };
   };
@@ -152,6 +156,30 @@
     return max + 1;
   };
 
+  // ── Normalize spawns to array format ──
+  // Handles backward compatibility: old {A:[x,y,z], B:[x,y,z]} → new array format
+
+  window.normalizeSpawns = function (spawns) {
+    if (Array.isArray(spawns)) return spawns;
+    // Old format: { A: [x,y,z], B: [x,y,z] }
+    var arr = [];
+    var id = 1;
+    if (spawns && spawns.A) {
+      arr.push({ id: 'spawn_' + id++, position: spawns.A.slice(), team: 'A' });
+    }
+    if (spawns && spawns.B) {
+      arr.push({ id: 'spawn_' + id++, position: spawns.B.slice(), team: 'B' });
+    }
+    // Handle additional teams if present
+    var keys = spawns ? Object.keys(spawns) : [];
+    for (var i = 0; i < keys.length; i++) {
+      if (keys[i] !== 'A' && keys[i] !== 'B') {
+        arr.push({ id: 'spawn_' + id++, position: spawns[keys[i]].slice(), team: keys[i] });
+      }
+    }
+    return arr;
+  };
+
   // ── Compute colliders for a mesh ──
   // Returns an ARRAY of Box3 colliders.
   // Ramps get staircase colliders (approximating the triangular cross-section)
@@ -165,51 +193,118 @@
 
   window.computeColliderForMesh = function (mesh) {
     var obj = mesh.userData.mapObj;
-    if (!obj || obj.type !== 'ramp') {
+    if (!obj) {
       return [new THREE.Box3().setFromObject(mesh)];
     }
 
-    // Centered geometry: translate(-rsz/2, 0, -rsx/2) applied to ExtrudeGeometry.
-    //   Geom X: -rsz/2 (tall wall) to rsz/2 (slope base)
-    //   Geom Y: 0 to rsy (height)
-    //   Geom Z: -rsx/2 to rsx/2 (width)
-    var rsx = obj.size[0], rsy = obj.size[1], rsz = obj.size[2];
-    var result = [];
-    var N = 5;
+    // --- Ramp & Wedge: staircase approximation ---
+    // Both use the same right-triangle ExtrudeGeometry. Staircase steps allow
+    // walking up the slope (Y-skip logic in resolveCollisions2D).
+    if (obj.type === 'ramp' || obj.type === 'wedge') {
+      var rsx = obj.size[0], rsy = obj.size[1], rsz = obj.size[2];
+      var result = [];
+      var N = 5;
 
-    // Staircase: N steps from tall wall (X=-rsz/2) to slope base (X=rsz/2).
-    // Step i covers X from -rsz/2 + rsz*i/N to -rsz/2 + rsz*(i+1)/N.
-    // Step height = slope height at its outer (lower) edge = rsy*(N-i-1)/N.
-    for (var i = 0; i < N; i++) {
-      var stepHeight = rsy * (N - i - 1) / N;
-      if (stepHeight < 0.05) continue;
-      var stepDepth = rsz / N;
-      var helper = new THREE.Mesh(
-        new THREE.BoxGeometry(stepDepth, stepHeight, rsx)
+      for (var i = 0; i < N; i++) {
+        var stepHeight = rsy * (N - i - 1) / N;
+        if (stepHeight < 0.05) continue;
+        var stepDepth = rsz / N;
+        var helper = new THREE.Mesh(
+          new THREE.BoxGeometry(stepDepth, stepHeight, rsx)
+        );
+        helper.position.set(
+          -rsz / 2 + rsz * i / N + stepDepth / 2,
+          stepHeight / 2,
+          0
+        );
+        mesh.add(helper);
+        mesh.updateMatrixWorld(true);
+        result.push(new THREE.Box3().setFromObject(helper));
+        mesh.remove(helper);
+      }
+
+      var wallHelper = new THREE.Mesh(
+        new THREE.BoxGeometry(0.3, rsy, rsx)
       );
-      helper.position.set(
-        -rsz / 2 + rsz * i / N + stepDepth / 2, // X center of step
-        stepHeight / 2,                            // Y center
-        0                                          // Z center (full width)
-      );
-      mesh.add(helper);
+      wallHelper.position.set(-rsz / 2, rsy / 2, 0);
+      mesh.add(wallHelper);
       mesh.updateMatrixWorld(true);
-      result.push(new THREE.Box3().setFromObject(helper));
-      mesh.remove(helper);
+      result.push(new THREE.Box3().setFromObject(wallHelper));
+      mesh.remove(wallHelper);
+
+      return result;
     }
 
-    // Tall wall: thin collider at X=-rsz/2, full height and width.
-    // Blocks approach from behind the ramp; skipped when player stands on top.
-    var wallHelper = new THREE.Mesh(
-      new THREE.BoxGeometry(0.3, rsy, rsx)
-    );
-    wallHelper.position.set(-rsz / 2, rsy / 2, 0);
-    mesh.add(wallHelper);
-    mesh.updateMatrixWorld(true);
-    result.push(new THREE.Box3().setFromObject(wallHelper));
-    mesh.remove(wallHelper);
+    // --- L-Shape: 2 AABBs for the two legs ---
+    // The L cross-section after centering and rotateX(-PI/2) has:
+    //   Bottom horizontal leg: full width (lw), thickness (lt) in Z, at Z=ld/2-lt/2
+    //   Left vertical leg: thickness (lt) in X, remaining depth (ld-lt) in Z, at X=-lw/2+lt/2
+    if (obj.type === 'lshape') {
+      var lw = obj.size[0], lh = obj.size[1], ld = obj.size[2];
+      var lt = obj.thickness || 1.0;
+      var result = [];
 
-    return result;
+      // Bottom horizontal leg
+      var leg1 = new THREE.Mesh(new THREE.BoxGeometry(lw, lh, lt));
+      leg1.position.set(0, lh / 2, ld / 2 - lt / 2);
+      mesh.add(leg1);
+      mesh.updateMatrixWorld(true);
+      result.push(new THREE.Box3().setFromObject(leg1));
+      mesh.remove(leg1);
+
+      // Left vertical leg
+      var leg2 = new THREE.Mesh(new THREE.BoxGeometry(lt, lh, ld - lt));
+      leg2.position.set(-lw / 2 + lt / 2, lh / 2, -lt / 2);
+      mesh.add(leg2);
+      mesh.updateMatrixWorld(true);
+      result.push(new THREE.Box3().setFromObject(leg2));
+      mesh.remove(leg2);
+
+      return result;
+    }
+
+    // --- Arch: 3 AABBs (2 pillars + top lintel) ---
+    // Opening is 60% width, 65% height. Pillars are full-height on the sides,
+    // lintel spans the opening width above the opening height.
+    if (obj.type === 'arch') {
+      var aw = obj.size[0], ah = obj.size[1], ad = obj.size[2];
+      var openW = aw * 0.6;
+      var openH = ah * 0.65;
+      var pillarW = (aw - openW) / 2;
+      var result = [];
+
+      // Left pillar (full height)
+      var leftPillar = new THREE.Mesh(new THREE.BoxGeometry(pillarW, ah, ad));
+      leftPillar.position.set(-aw / 2 + pillarW / 2, ah / 2, 0);
+      mesh.add(leftPillar);
+      mesh.updateMatrixWorld(true);
+      result.push(new THREE.Box3().setFromObject(leftPillar));
+      mesh.remove(leftPillar);
+
+      // Right pillar (full height)
+      var rightPillar = new THREE.Mesh(new THREE.BoxGeometry(pillarW, ah, ad));
+      rightPillar.position.set(aw / 2 - pillarW / 2, ah / 2, 0);
+      mesh.add(rightPillar);
+      mesh.updateMatrixWorld(true);
+      result.push(new THREE.Box3().setFromObject(rightPillar));
+      mesh.remove(rightPillar);
+
+      // Top lintel (above opening, between pillars)
+      var lintelH = ah - openH;
+      if (lintelH > 0.05) {
+        var lintel = new THREE.Mesh(new THREE.BoxGeometry(openW, lintelH, ad));
+        lintel.position.set(0, openH + lintelH / 2, 0);
+        mesh.add(lintel);
+        mesh.updateMatrixWorld(true);
+        result.push(new THREE.Box3().setFromObject(lintel));
+        mesh.remove(lintel);
+      }
+
+      return result;
+    }
+
+    // Default: single AABB
+    return [new THREE.Box3().setFromObject(mesh)];
   };
 
   // ── Build arena from map data ──
@@ -228,7 +323,6 @@
     var halfL = al / 2;
 
     var wallMat = new THREE.MeshLambertMaterial({ color: 0x8B7355 });
-    var ringMat = new THREE.MeshBasicMaterial({ color: 0xffd700, side: THREE.DoubleSide });
 
     function addSolidBox(x, y, z, sx, sy, sz, mat) {
       var geom = new THREE.BoxGeometry(sx, sy, sz);
@@ -277,7 +371,7 @@
         var halfMat = new THREE.MeshLambertMaterial({ color: obj.color || '#7A6A55', side: THREE.DoubleSide });
         mesh = new THREE.Mesh(new THREE.CylinderGeometry(r2, r2, h2, 24, 1, false, 0, Math.PI), halfMat);
         mesh.position.set(obj.position[0], -1 + h2 / 2 + yOff, obj.position[2]);
-      } else if (obj.type === 'ramp') {
+      } else if (obj.type === 'ramp' || obj.type === 'wedge') {
         var rsx = obj.size[0], rsy = obj.size[1], rsz = obj.size[2];
         var shape = new THREE.Shape();
         shape.moveTo(0, 0);
@@ -288,6 +382,45 @@
         var extGeom = new THREE.ExtrudeGeometry(shape, extrudeSettings);
         extGeom.translate(-rsz / 2, 0, -rsx / 2);
         mesh = new THREE.Mesh(extGeom, mat);
+        mesh.position.set(obj.position[0], -1 + yOff, obj.position[2]);
+      } else if (obj.type === 'lshape') {
+        var lw = obj.size[0], lh = obj.size[1], ld = obj.size[2];
+        var lt = obj.thickness || 1.0;
+        var lShape = new THREE.Shape();
+        lShape.moveTo(-lw / 2, -ld / 2);
+        lShape.lineTo(lw / 2, -ld / 2);
+        lShape.lineTo(lw / 2, -ld / 2 + lt);
+        lShape.lineTo(-lw / 2 + lt, -ld / 2 + lt);
+        lShape.lineTo(-lw / 2 + lt, ld / 2);
+        lShape.lineTo(-lw / 2, ld / 2);
+        lShape.closePath();
+        var lGeom = new THREE.ExtrudeGeometry(lShape, { depth: lh, bevelEnabled: false });
+        lGeom.rotateX(-Math.PI / 2);
+        mesh = new THREE.Mesh(lGeom, mat);
+        mesh.position.set(obj.position[0], -1 + yOff, obj.position[2]);
+      } else if (obj.type === 'arch') {
+        var aw2 = obj.size[0], ah2 = obj.size[1], ad2 = obj.size[2];
+        var openW = aw2 * 0.6;
+        var openH = ah2 * 0.65;
+        var archShape = new THREE.Shape();
+        archShape.moveTo(-aw2 / 2, 0);
+        archShape.lineTo(aw2 / 2, 0);
+        archShape.lineTo(aw2 / 2, ah2);
+        archShape.lineTo(-aw2 / 2, ah2);
+        archShape.closePath();
+        var hole = new THREE.Path();
+        var holeHW = openW / 2;
+        var rectH = openH - holeHW;
+        if (rectH < 0) rectH = 0;
+        hole.moveTo(-holeHW, 0);
+        hole.lineTo(-holeHW, rectH);
+        hole.absarc(0, rectH, holeHW, Math.PI, 0, true);
+        hole.lineTo(holeHW, 0);
+        hole.closePath();
+        archShape.holes.push(hole);
+        var archGeom = new THREE.ExtrudeGeometry(archShape, { depth: ad2, bevelEnabled: false });
+        archGeom.translate(0, 0, -ad2 / 2);
+        mesh = new THREE.Mesh(archGeom, new THREE.MeshLambertMaterial({ color: obj.color || '#7A6A55', side: THREE.DoubleSide }));
         mesh.position.set(obj.position[0], -1 + yOff, obj.position[2]);
       }
 
@@ -308,25 +441,35 @@
       }
     }
 
-    // Spawns
-    var spawnA = new THREE.Vector3(
-      mapData.spawns.A[0], mapData.spawns.A[1], mapData.spawns.A[2]
-    );
-    var spawnB = new THREE.Vector3(
-      mapData.spawns.B[0], mapData.spawns.B[1], mapData.spawns.B[2]
-    );
+    // Spawns — normalize to array format (backward compat with old {A,B} maps)
+    var spawnsList = window.normalizeSpawns(mapData.spawns);
 
-    // Gold spawn rings
-    function addGoldSpawnRing(pos) {
-      var ring = new THREE.RingGeometry(0.8, 1.2, 64);
-      var ringMesh = new THREE.Mesh(ring, ringMat);
-      ringMesh.position.set(pos.x, -0.99, pos.z);
-      ringMesh.rotation.x = -Math.PI / 2;
-      ringMesh.renderOrder = 1;
-      group.add(ringMesh);
+    // Find team A and B for backward compatibility with game modes
+    var spawnA = new THREE.Vector3(0, 0, -10);
+    var spawnB = new THREE.Vector3(0, 0, 10);
+    for (var si = 0; si < spawnsList.length; si++) {
+      var sp = spawnsList[si];
+      if (sp.team === 'A') {
+        spawnA.set(sp.position[0], sp.position[1] || 0, sp.position[2]);
+      } else if (sp.team === 'B') {
+        spawnB.set(sp.position[0], sp.position[1] || 0, sp.position[2]);
+      }
     }
-    addGoldSpawnRing(spawnA);
-    addGoldSpawnRing(spawnB);
+
+    // Color-coded spawn rings (gold=teamless, red=A, blue=B, green=C, orange=D)
+    var spawnTeamColors = { 'A': 0xff4444, 'B': 0x4488ff, 'C': 0x44ff44, 'D': 0xff8844 };
+    for (var si2 = 0; si2 < spawnsList.length; si2++) {
+      var sp2 = spawnsList[si2];
+      var spColor = spawnTeamColors[sp2.team] || 0xffd700;
+      var spRingMat = new THREE.MeshBasicMaterial({ color: spColor, side: THREE.DoubleSide });
+      var ring = new THREE.RingGeometry(0.8, 1.2, 64);
+      var spRingMesh = new THREE.Mesh(ring, spRingMat);
+      spRingMesh.position.set(sp2.position[0], -0.99, sp2.position[2]);
+      spRingMesh.rotation.x = -Math.PI / 2;
+      spRingMesh.renderOrder = 1;
+      spRingMesh.userData.isSpawnRing = true;
+      group.add(spRingMesh);
+    }
 
     // Auto-generate waypoints: grid ~7-unit spacing, Y-aware via raycast
     var wpSpacing = 7;
@@ -362,9 +505,9 @@
       new THREE.Vector3(0, 0, 3), new THREE.Vector3(0, 0, -3)
     ];
     var spawnPositions = [spawnA, spawnB];
-    for (var si = 0; si < spawnPositions.length; si++) {
+    for (var spi = 0; spi < spawnPositions.length; spi++) {
       for (var oi = 0; oi < spawnOffsets.length; oi++) {
-        var swp = spawnPositions[si].clone().add(spawnOffsets[oi]);
+        var swp = spawnPositions[spi].clone().add(spawnOffsets[oi]);
         var sInside = false;
         for (var c = 0; c < colliders.length; c++) {
           if (colliders[c].containsPoint(swp)) { sInside = true; break; }
@@ -433,7 +576,8 @@
       colliders: colliders,
       solids: solids,
       waypoints: waypoints,
-      spawns: { A: spawnA, B: spawnB }
+      spawns: { A: spawnA, B: spawnB },
+      spawnsList: spawnsList
     };
   };
 

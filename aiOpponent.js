@@ -49,7 +49,7 @@ class AIOpponent {
     };
     this._aimErrorRad = aimErrors[this.difficulty] || aimErrors.Easy;
 
-    // Create Player instance via composition — same default weapon as player
+    // Create Player instance via composition
     this.player = new Player({
       position: spawn ? new THREE.Vector3(spawn.x, GROUND_Y + EYE_HEIGHT, spawn.z) : undefined,
       feetY: GROUND_Y,
@@ -61,6 +61,11 @@ class AIOpponent {
       cameraAttached: false,
       weapon: new Weapon()
     });
+
+    // Apply Marksman hero to get proper hitbox segments, weapon, and stats
+    if (typeof applyHeroToPlayer === 'function') {
+      applyHeroToPlayer(this.player, 'marksman');
+    }
 
     // --- Playstyle System ---
     this._playstyles = {
@@ -463,13 +468,23 @@ class AIOpponent {
       // Apply aim error: AI intentionally aims slightly off-target
       var aimDir = this._applyAimError(perfectDir, this._aimErrorRad);
       var self = this;
+      // Build target with segments if available, else fall back to position+radius
+      var aiTargets = [];
+      var aiTargetEntities = [];
+      if (ctx.playerSegments && ctx.playerSegments.length > 0) {
+        aiTargets.push({ segments: ctx.playerSegments });
+        if (ctx.playerEntity) aiTargetEntities.push(ctx.playerEntity);
+      } else {
+        aiTargets.push({ position: ctx.playerPos, radius: ctx.playerRadius || 0.35 });
+      }
       var result = sharedFireWeapon(this.weapon, origin, aimDir, {
         spreadOverride: this.weapon.spreadRad,
         solids: this.arena.solids,
-        targets: [{ position: ctx.playerPos, radius: ctx.playerRadius || 0.35 }],
+        targets: aiTargets,
+        projectileTargetEntities: aiTargetEntities,
         tracerColor: 0xff6666,
-        onHit: function () {
-          if (ctx.onPlayerHit) ctx.onPlayerHit(self.weapon.damage);
+        onHit: function (target, point, dist, pelletIdx, damageMultiplier) {
+          if (ctx.onPlayerHit) ctx.onPlayerHit(self.weapon.damage * (damageMultiplier || 1.0));
         }
       });
       if (result.magazineEmpty) {

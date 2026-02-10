@@ -12,6 +12,15 @@
  *   physics.js (GROUND_Y, EYE_HEIGHT), weapon.js (Weapon),
  *   weaponModels.js (buildWeaponModel — optional, fallback if absent)
  *
+ * SEGMENTED HITBOX SYSTEM:
+ *   Each player has an array of hitbox segments (head, torso, legs, etc.) stored
+ *   in _hitboxConfig. Each segment has name, width, height, depth, offsetX,
+ *   offsetY, offsetZ (relative to feet/center), and damageMultiplier. offsetX and
+ *   offsetZ default to 0 for backward compat. Segments are repositioned each frame
+ *   in _syncMeshPosition() via _updateHitboxes(). getHitSegments() returns the
+ *   current positioned segments for collision testing. getHitTarget() is kept for
+ *   backward compat (returns a bounding sphere enclosing all segments).
+ *
  * WEAPON ATTACHMENT SYSTEM:
  *   The player mesh uses a swappable weapon attachment point (_weaponAttachPoint),
  *   a THREE.Group positioned where the gun is held. The active weapon model is a
@@ -24,6 +33,12 @@
  */
 
 (function () {
+
+  var DEFAULT_HITBOX_CONFIG = [
+    { name: "head",  width: 0.5, height: 0.5, depth: 0.5, offsetX: 0, offsetY: 2.95, offsetZ: 0, damageMultiplier: 2.0 },
+    { name: "torso", width: 0.6, height: 0.9, depth: 0.5, offsetX: 0, offsetY: 2.05, offsetZ: 0, damageMultiplier: 1.0 },
+    { name: "legs",  width: 0.5, height: 1.1, depth: 0.5, offsetX: 0, offsetY: 0.55, offsetZ: 0, damageMultiplier: 0.75 }
+  ];
 
   function Player(opts) {
     opts = opts || {};
@@ -63,6 +78,11 @@
     this._meshGroup = new THREE.Group();
     this._buildMesh();
     this._computeMeshMetrics();
+
+    // Segmented hitbox
+    this._hitboxConfig = DEFAULT_HITBOX_CONFIG;
+    this._hitSegments = [];
+    this._buildHitSegments();
 
     // Place mesh at initial position
     this._syncMeshPosition();
@@ -140,6 +160,52 @@
     }
   };
 
+  // --- Segmented Hitbox ---
+
+  Player.prototype.setHitboxConfig = function (config) {
+    if (Array.isArray(config) && config.length > 0) {
+      this._hitboxConfig = config;
+    } else {
+      this._hitboxConfig = DEFAULT_HITBOX_CONFIG;
+    }
+    this._buildHitSegments();
+    this._updateHitboxes();
+  };
+
+  Player.prototype._buildHitSegments = function () {
+    this._hitSegments = [];
+    for (var i = 0; i < this._hitboxConfig.length; i++) {
+      var seg = this._hitboxConfig[i];
+      this._hitSegments.push({
+        name: seg.name,
+        box: new THREE.Box3(),
+        damageMultiplier: seg.damageMultiplier || 1.0
+      });
+    }
+  };
+
+  Player.prototype._updateHitboxes = function () {
+    var posX = this.position.x;
+    var posZ = this.position.z;
+    var feetY = this.feetY;
+    for (var i = 0; i < this._hitboxConfig.length; i++) {
+      var cfg = this._hitboxConfig[i];
+      var seg = this._hitSegments[i];
+      var hw = cfg.width / 2;
+      var hh = cfg.height / 2;
+      var hd = cfg.depth / 2;
+      var cx = posX + (cfg.offsetX || 0);
+      var cy = feetY + cfg.offsetY;
+      var cz = posZ + (cfg.offsetZ || 0);
+      seg.box.min.set(cx - hw, cy - hh, cz - hd);
+      seg.box.max.set(cx + hw, cy + hh, cz + hd);
+    }
+  };
+
+  Player.prototype.getHitSegments = function () {
+    return this._hitSegments;
+  };
+
   // --- Weapon Model Swap ---
 
   /**
@@ -210,6 +276,7 @@
       this.feetY + this._meshFeetOffset,
       this.position.z
     );
+    this._updateHitboxes();
   };
 
   Player.prototype.syncCameraFromPlayer = function () {
@@ -230,6 +297,16 @@
   };
 
   Player.prototype.getHitTarget = function () {
+    // Backward compat: bounding sphere enclosing all segments
+    if (this._hitSegments.length > 0) {
+      var merged = this._hitSegments[0].box.clone();
+      for (var i = 1; i < this._hitSegments.length; i++) {
+        merged.union(this._hitSegments[i].box);
+      }
+      var center = merged.getCenter(new THREE.Vector3());
+      var sphere = merged.getBoundingSphere(new THREE.Sphere());
+      return { position: center, radius: sphere.radius };
+    }
     return {
       position: this.getHitCenter(),
       radius: this._hitRadius
