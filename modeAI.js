@@ -280,19 +280,12 @@
         dt
       );
       // Sync mesh and camera from physics
+      state.player._hitboxYaw = camera.rotation.y;
       state.player._syncMeshPosition();
       state.player.syncCameraFromPlayer();
     }
 
-    var now = performance.now();
-    if (state.inputEnabled) {
-      handlePlayerShooting(input, now);
-    }
-    updateReload(now);
-
-    // Update live projectiles
-    if (typeof updateProjectiles === 'function') updateProjectiles(dt);
-
+    // Update AI BEFORE shooting/projectiles so AI hitboxes are fresh for hit detection
     if (state.ai && state.match.roundActive) {
       // In spectator mode, AI targets the stationary player position, not the free camera
       var aiTargetPos = window.devSpectatorMode
@@ -313,6 +306,18 @@
         }
       });
     }
+
+    var now = performance.now();
+    if (state.inputEnabled) {
+      handlePlayerShooting(input, now);
+    }
+    updateReload(now);
+
+    // Update live projectiles (all entity hitboxes are now fresh)
+    if (typeof updateProjectiles === 'function') updateProjectiles(dt);
+
+    // Update hitbox visualization after all positions are current
+    if (window.devShowHitboxes && window.updateHitboxVisuals) window.updateHitboxVisuals();
 
     updateHUD();
     state.loopHandle = requestAnimationFrame(tick);

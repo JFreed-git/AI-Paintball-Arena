@@ -100,6 +100,7 @@
     // Segmented hitbox
     this._hitboxConfig = DEFAULT_HITBOX_CONFIG;
     this._hitSegments = [];
+    this._hitboxYaw = 0;  // Player's own facing yaw (set by game mode, independent of visual mesh rotation)
     this._buildHitSegments();
 
     // Place mesh at initial position
@@ -290,7 +291,11 @@
         this._hitSegments.push({
           name: cfg.name,
           shape: 'box',
-          box: new THREE.Box3(),
+          center: new THREE.Vector3(),
+          halfW: (cfg.width || 0.5) / 2,
+          halfH: (cfg.height || 0.5) / 2,
+          halfD: (cfg.depth || 0.5) / 2,
+          yaw: 0,
           damageMultiplier: cfg.damageMultiplier || 1.0
         });
       }
@@ -301,22 +306,24 @@
     var posX = this.position.x;
     var posZ = this.position.z;
     var feetY = this.feetY;
+    var yaw = this._hitboxYaw;
+    var cosY = Math.cos(yaw);
+    var sinY = Math.sin(yaw);
     for (var i = 0; i < this._hitboxConfig.length; i++) {
       var cfg = this._hitboxConfig[i];
       var seg = this._hitSegments[i];
-      var cx = posX + (cfg.offsetX || 0);
+      var ox = cfg.offsetX || 0;
+      var oz = cfg.offsetZ || 0;
+      // Rotate offset by player yaw
+      var rx = cosY * ox + sinY * oz;
+      var rz = -sinY * ox + cosY * oz;
+      var cx = posX + rx;
       var cy = feetY + cfg.offsetY;
-      var cz = posZ + (cfg.offsetZ || 0);
-      var shape = seg.shape || 'box';
+      var cz = posZ + rz;
 
-      if (shape === 'sphere' || shape === 'cylinder' || shape === 'capsule') {
-        seg.center.set(cx, cy, cz);
-      } else {
-        var hw = cfg.width / 2;
-        var hh = cfg.height / 2;
-        var hd = cfg.depth / 2;
-        seg.box.min.set(cx - hw, cy - hh, cz - hd);
-        seg.box.max.set(cx + hw, cy + hh, cz + hd);
+      seg.center.set(cx, cy, cz);
+      if (seg.shape === 'box') {
+        seg.yaw = yaw;
       }
     }
   };
@@ -473,7 +480,15 @@
             new THREE.Vector3(seg.center.x + seg.radius, seg.center.y + seg.halfHeight, seg.center.z + seg.radius)
           );
         } else {
-          segBox = seg.box;
+          // OBB: compute axis-aligned bounding box of rotated box
+          var cosY = Math.abs(Math.cos(seg.yaw || 0));
+          var sinY = Math.abs(Math.sin(seg.yaw || 0));
+          var aabbHalfW = cosY * seg.halfW + sinY * seg.halfD;
+          var aabbHalfD = sinY * seg.halfW + cosY * seg.halfD;
+          segBox = new THREE.Box3(
+            new THREE.Vector3(seg.center.x - aabbHalfW, seg.center.y - seg.halfH, seg.center.z - aabbHalfD),
+            new THREE.Vector3(seg.center.x + aabbHalfW, seg.center.y + seg.halfH, seg.center.z + aabbHalfD)
+          );
         }
         if (!initialized) {
           merged.copy(segBox);
@@ -563,6 +578,7 @@
     var dz = targetPos.z - this.position.z;
     var yaw = Math.atan2(dx, dz);
     this._meshGroup.rotation.set(0, yaw, 0);
+    this._hitboxYaw = yaw;
   };
 
   // --- Damage ---

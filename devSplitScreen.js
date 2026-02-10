@@ -489,6 +489,10 @@
         updateFullPhysics(active.player, physInput, _state.arena, dt);
       }
 
+      // Sync mesh/hitbox after physics so hitboxes are fresh for projectile testing
+      active.player._hitboxYaw = camera.rotation.y;
+      active.player._syncMeshPosition();
+
       // Sync camera to player position
       syncCamToPlayer(active);
 
@@ -557,19 +561,18 @@
       inactive.cam.rotation.order = 'YXZ';
     }
 
-    // Update player meshes - face direction of their cameras
+    // Update player meshes - face direction of their own cameras
     if (_state.p1.player) {
-      _state.p1.player._meshGroup.rotation.set(0, _state.p1.yaw || camera.rotation.y, 0);
+      var p1Yaw = (_state.activePlayer === 1) ? camera.rotation.y : (_state.p1.yaw || 0);
+      _state.p1.player._hitboxYaw = p1Yaw;
+      _state.p1.player._meshGroup.rotation.set(0, p1Yaw, 0);
       _state.p1.player._syncMeshPosition();
     }
     if (_state.p2.player) {
-      _state.p2.player._meshGroup.rotation.set(0, _state.p2.yaw || camera.rotation.y, 0);
+      var p2Yaw = (_state.activePlayer === 2) ? camera.rotation.y : (_state.p2.yaw || 0);
+      _state.p2.player._hitboxYaw = p2Yaw;
+      _state.p2.player._meshGroup.rotation.set(0, p2Yaw, 0);
       _state.p2.player._syncMeshPosition();
-    }
-
-    // For active player, use live camera yaw for mesh rotation
-    if (active && active.player) {
-      active.player._meshGroup.rotation.set(0, camera.rotation.y, 0);
     }
 
     // Update 3D health bars
@@ -578,6 +581,9 @@
         ps.player.update3DHealthBar(camera.position, _state.arena ? _state.arena.solids : []);
       }
     });
+
+    // Update hitbox visualization after all positions are current
+    if (window.devShowHitboxes && window.updateHitboxVisuals) window.updateHitboxVisuals();
 
     // HUD
     updateSSHUD();

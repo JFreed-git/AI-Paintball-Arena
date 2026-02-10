@@ -32,6 +32,7 @@
   }
   window.devGodMode = false;
   window.devShowHitboxes = false;
+  window.updateHitboxVisuals = updateHitboxVisuals;
 
   // Helper: get the active game state (works for both AI and LAN modes)
   function getActiveState() {
@@ -403,12 +404,10 @@
                 vis._segHalfHeight = seg.halfHeight;
               }
             } else {
-              // box: use center + scale from box min/max
-              var segBox = seg.box;
-              var center = segBox.getCenter(new THREE.Vector3());
-              var size = segBox.getSize(new THREE.Vector3());
-              vis.position.copy(center);
-              vis.scale.set(size.x, size.y, size.z);
+              // box: OBB with center + half-extents + yaw
+              vis.position.copy(seg.center);
+              vis.scale.set(seg.halfW * 2, seg.halfH * 2, seg.halfD * 2);
+              vis.rotation.set(0, seg.yaw || 0, 0);
             }
           }
         }

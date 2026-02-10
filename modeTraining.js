@@ -297,18 +297,11 @@
       { colliders: state.arena.colliders, solids: state.arena.solids },
       dt
     );
+    state.player._hitboxYaw = camera.rotation.y;
     state.player._syncMeshPosition();
     state.player.syncCameraFromPlayer();
 
-    // Shooting
-    var now = performance.now();
-    handlePlayerShooting(input, now);
-    updateReload(now);
-
-    // Update live projectiles
-    if (typeof updateProjectiles === 'function') updateProjectiles(dt);
-
-    // Update bots
+    // Update bots and targets BEFORE shooting/projectiles so hitboxes are fresh
     for (var i = 0; i < state.bots.length; i++) {
       state.bots[i].update(dt, camera.position);
       // Reset kill-counted flag on respawn
@@ -316,11 +309,20 @@
         state.bots[i]._countedKill = false;
       }
     }
-
-    // Update static targets
     for (var t = 0; t < state.targets.length; t++) {
       state.targets[t].update();
     }
+
+    // Shooting
+    var now = performance.now();
+    handlePlayerShooting(input, now);
+    updateReload(now);
+
+    // Update live projectiles (all entity hitboxes are now fresh)
+    if (typeof updateProjectiles === 'function') updateProjectiles(dt);
+
+    // Update hitbox visualization after all positions are current
+    if (window.devShowHitboxes && window.updateHitboxVisuals) window.updateHitboxVisuals();
 
     updateHUD();
     state.loopHandle = requestAnimationFrame(tick);

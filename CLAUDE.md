@@ -59,7 +59,7 @@ All JS files use IIFEs `(function() { ... })()` for scope isolation. Public APIs
 
 | File | Purpose |
 |------|---------|
-| `player.js` | Unified `Player` class used by all modes. Holds position/physics state, health, weapon, 3D mesh, 3D health bar, and **segmented hitbox** with multiple shape types (box/sphere/cylinder/capsule, with damage multipliers and offsetX/offsetY/offsetZ positioning). Compatible with `updateFullPhysics()` (same property shape). Features a **weapon attachment point** system — `_weaponAttachPoint` is a `THREE.Group` for swappable weapon models via `swapWeaponModel(modelType)`. Body meshes tagged with `userData.isBodyPart = true` for hero recoloring. `_jumpVelocity` is overridable per hero. `setHitboxConfig(config)` sets hitbox segments from hero data; `getHitSegments()` returns positioned segments for collision (shape-aware: box→AABB, sphere/cylinder/capsule→center+radius+halfHeight); `getHitTarget()` returns a bounding sphere for backward compat. `buildCapsuleGeometry()` utility for Three.js r128 (no native CapsuleGeometry). All player meshes are data-driven via `_buildMeshFromBodyParts()` — no hardcoded geometry. `DEFAULT_BODY_PARTS` (head sphere + torso cylinder) is used when no hero bodyParts are set. `rebuildMesh()` disposes old mesh children, rebuilds from current `_bodyParts`, recomputes metrics, preserves the health bar, and re-hides if camera-attached. Called by `applyHeroToPlayer()` whenever a hero is applied. |
+| `player.js` | Unified `Player` class used by all modes. Holds position/physics state, health, weapon, 3D mesh, 3D health bar, and **segmented hitbox** with multiple shape types (box/sphere/cylinder/capsule, with damage multipliers and offsetX/offsetY/offsetZ positioning). Compatible with `updateFullPhysics()` (same property shape). Features a **weapon attachment point** system — `_weaponAttachPoint` is a `THREE.Group` for swappable weapon models via `swapWeaponModel(modelType)`. Body meshes tagged with `userData.isBodyPart = true` for hero recoloring. `_jumpVelocity` is overridable per hero. `setHitboxConfig(config)` sets hitbox segments from hero data; `getHitSegments()` returns positioned segments for collision (shape-aware: box→OBB with center+halfExtents+yaw, sphere/cylinder/capsule→center+radius+halfHeight); `getHitTarget()` returns a bounding sphere for backward compat. `buildCapsuleGeometry()` utility for Three.js r128 (no native CapsuleGeometry). All player meshes are data-driven via `_buildMeshFromBodyParts()` — no hardcoded geometry. `DEFAULT_BODY_PARTS` (head sphere + torso cylinder) is used when no hero bodyParts are set. `rebuildMesh()` disposes old mesh children, rebuilds from current `_bodyParts`, recomputes metrics, preserves the health bar, and re-hides if camera-attached. Called by `applyHeroToPlayer()` whenever a hero is applied. |
 | `arenaBuilder.js` | Shared arena construction helpers. `arenaAddSolidBox()`, `arenaAddFloor()`, `arenaAddPerimeterWalls()`, `arenaAddTrees()`. Shared tree materials in `ARENA_TREE_MATERIALS`. Uses `GROUND_Y` from physics.js. |
 | `arenaCompetitive.js` | Competitive arena layout. `buildPaintballArenaSymmetric()` returns `{group, colliders, solids, waypoints, spawns: {A, B}}`. Z-symmetric cover placement, AI waypoint graph (25-point), gold spawn rings, and scenery trees. Uses `arenaBuilder.js` helpers. |
 | `arenaTraining.js` | Training range arena. `buildTrainingRangeArena()` returns `{group, colliders, solids, spawns, targetPositions, botPatrolPaths}`. 80x100m arena with 3 shooting lanes (targets at 15/25/35m), open field with cover, and bot patrol routes. Uses `arenaBuilder.js` helpers. |
@@ -87,7 +87,7 @@ All JS files use IIFEs `(function() { ... })()` for scope isolation. Public APIs
 | File | Purpose |
 |------|---------|
 | `game.js` | Application bootstrap. Creates Three.js `scene`, `camera`, `renderer` as bare globals. Camera is added to scene so children render. Runs the master render loop. Manages first-person weapon viewmodel (camera-attached): `setFirstPersonWeapon(modelType, fpOffset, fpRotation)`, `clearFirstPersonWeapon()`. Viewmodel uses `depthTest:false` to render on top. `fpOffset` and `fpRotation` are optional `{x,y,z}` objects for custom weapon positioning; defaults to `{0.28, -0.22, -0.45}` and `{0.05, -0.15, 0}`. |
-| `devConsole.js` | Password-protected developer console. God mode, unlimited ammo, spectator camera, kill enemy, heal player, hitbox visualization (color-coded wireframe shapes per segment: red=head, green=torso, blue=legs, yellow=custom — geometry matches actual shape type), AI state display, map editor access. Toggle with 'C' key. |
+| `devConsole.js` | Password-protected developer console. God mode, unlimited ammo, spectator camera, kill enemy, heal player, hitbox visualization (color-coded wireframe shapes per segment: red=head, green=torso, blue=legs, yellow=custom — geometry matches actual shape type), AI state display, map editor access. Toggle with 'C' key. Exposes `window.updateHitboxVisuals` so game mode ticks can call it after all entity updates for lag-free debug wireframes. |
 | `server.js` | Node.js/Express + Socket.IO relay server. Serves static files, manages rooms (2 players per room), stores per-room settings (rounds to win), forwards messages. No game logic. Serves read-only REST API for maps and heroes (editing happens in the Electron dev workbench). Seeds built-in heroes to `heroes/` on startup. |
 
 ### Dev Workbench (Electron App)
@@ -159,19 +159,19 @@ hitbox: [
 
 | Shape | Fields | Notes |
 |-------|--------|-------|
-| `box` (default) | width, height, depth | AABB. Segments without a `shape` field default to box for backward compat. |
+| `box` (default) | width, height, depth | OBB (oriented bounding box). Rotates with the player's yaw. Segments without a `shape` field default to box for backward compat. |
 | `sphere` | radius | Single radius, centered at offset position |
 | `cylinder` | radius, height | Y-axis aligned finite cylinder with flat caps |
 | `capsule` | radius, height | Y-axis aligned, height includes hemispherical caps. Enforces `height >= 2*radius`. |
 
 **Common fields (all shapes):** name, shape, offsetX, offsetY, offsetZ, damageMultiplier.
 
-- `offsetX`, `offsetY`, `offsetZ` position the segment center relative to the player's feet position (offsetX/offsetZ default to 0 for backward compat)
+- `offsetX`, `offsetY`, `offsetZ` position the segment center relative to the player's feet position (offsetX/offsetZ default to 0 for backward compat). Offsets are **rotated by the player's yaw** so off-center hitboxes follow the player's facing direction.
 - `damageMultiplier` scales damage on hit (2.0 = headshot double damage)
-- Segments are repositioned each frame in `Player._updateHitboxes()`: box shapes update AABB min/max, sphere/cylinder/capsule shapes update center Vector3
+- Segments are repositioned each frame in `Player._updateHitboxes()`: reads yaw from `_hitboxYaw` (the player's own look direction, **independent** of `_meshGroup.rotation.y`), rotates `(offsetX, offsetZ)` by yaw, updates center Vector3 for all shapes, and stores yaw on box segments for OBB intersection. `_hitboxYaw` is set by each game mode from the player's camera direction (for human players) or by `faceToward()` (for AI/bots). This separation ensures hitboxes follow where the player is looking, not where their visual model faces for aesthetics.
 - `Player.getHitSegments()` returns the positioned segments for collision — `testHitSegments()` in `projectiles.js` dispatches by `seg.shape` to the appropriate ray intersection function
-- `Player.getHitTarget()` returns a backward-compat bounding sphere enclosing all segments (works with all shapes)
-- Ray intersection functions: `rayHitsSphereDetailed()`, `rayHitsCylinder()`, `rayHitsCapsule()` in `projectiles.js`
+- `Player.getHitTarget()` returns a backward-compat bounding sphere enclosing all segments (computes AABB of rotated OBBs for box shapes)
+- Ray intersection functions: `rayHitsSphereDetailed()`, `rayHitsCylinder()`, `rayHitsCapsule()`, `rayHitsOBB()` in `projectiles.js`. `rayHitsOBB()` transforms the ray into the box's local space (rotate by -yaw) then uses the standard slab method.
 - `buildCapsuleGeometry(radius, totalHeight, radialSegs, heightSegs)` in `player.js` — Three.js r128 has no CapsuleGeometry, so this uses `LatheGeometry` with a hemisphere+sides profile. Exposed on `window` for use by devHeroEditor.js and devConsole.js.
 - The hero editor provides interactive 3D hitbox editing: shape dropdown per segment (box/sphere/cylinder/capsule) with conditional form fields, click to select, drag to move in 3D, shape-specific resize handles (box: 6 handles, sphere: 4, cylinder/capsule: 4), toggle model visibility to inspect hitboxes clearly
 - Dev console hitbox visualization shows color-coded wireframe shapes per segment (geometry matched to actual shape/dimensions)
@@ -264,6 +264,8 @@ Movement is full 3D — horizontal XZ walking plus vertical gravity, jumping, an
 - `arena.colliders` (Box3 array) = movement collision.
 
 **Combat** uses visible traveling projectiles by default (`projectileSpeed: 120` m/s), with hitscan as a fallback when `projectileSpeed` is 0/null. Player hitboxes are **segmented shapes** (head/torso/legs) supporting box, sphere, cylinder, and capsule shape types, with per-segment damage multipliers — headshots deal 2x damage, leg shots 0.75x. `sharedFireWeapon()` in `projectiles.js` is the single entry point for all weapon firing across all modes. `testHitSegments()` dispatches ray intersection by shape type. `updateProjectiles(dt)` must be called each frame by the active game mode to advance live projectiles.
+
+**Tick ordering requirement:** Each game mode's tick function must update ALL entity physics and call `_syncMeshPosition()` BEFORE `handlePlayerShooting()`/`sharedFireWeapon()` and `updateProjectiles(dt)`. This ensures hitboxes are at their current-frame positions when tested by rays and projectiles. If entities update after projectile testing, hitboxes lag one frame behind the visual mesh. After all updates, call `if (window.devShowHitboxes && window.updateHitboxVisuals) window.updateHitboxVisuals();` to keep debug wireframes in sync.
 
 ## Networking Protocol (Socket.IO events)
 

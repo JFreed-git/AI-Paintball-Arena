@@ -251,10 +251,74 @@
     return { hit: true, distance: tmin, point: point };
   }
 
+  // Ray-OBB intersection (Y-axis rotation only)
+  // Transforms ray into box-local space, then uses slab method
+  function rayHitsOBB(origin, dir, center, halfW, halfH, halfD, yaw, maxDist) {
+    var cosY = Math.cos(yaw);
+    var sinY = Math.sin(yaw);
+
+    // Translate ray origin relative to box center, then rotate by -yaw into local space
+    var relX = origin.x - center.x;
+    var relY = origin.y - center.y;
+    var relZ = origin.z - center.z;
+    var localOX = cosY * relX - sinY * relZ;
+    var localOY = relY;
+    var localOZ = sinY * relX + cosY * relZ;
+
+    var localDX = cosY * dir.x - sinY * dir.z;
+    var localDY = dir.y;
+    var localDZ = sinY * dir.x + cosY * dir.z;
+
+    // Standard slab test against centered AABB [-halfW..halfW, -halfH..halfH, -halfD..halfD]
+    var tmin = 0;
+    var tmax = maxDist;
+
+    // X axis
+    if (Math.abs(localDX) < 1e-8) {
+      if (localOX < -halfW || localOX > halfW) return { hit: false };
+    } else {
+      var t1x = (-halfW - localOX) / localDX;
+      var t2x = (halfW - localOX) / localDX;
+      if (t1x > t2x) { var tmp = t1x; t1x = t2x; t2x = tmp; }
+      tmin = Math.max(tmin, t1x);
+      tmax = Math.min(tmax, t2x);
+      if (tmin > tmax) return { hit: false };
+    }
+
+    // Y axis
+    if (Math.abs(localDY) < 1e-8) {
+      if (localOY < -halfH || localOY > halfH) return { hit: false };
+    } else {
+      var t1y = (-halfH - localOY) / localDY;
+      var t2y = (halfH - localOY) / localDY;
+      if (t1y > t2y) { var tmp2 = t1y; t1y = t2y; t2y = tmp2; }
+      tmin = Math.max(tmin, t1y);
+      tmax = Math.min(tmax, t2y);
+      if (tmin > tmax) return { hit: false };
+    }
+
+    // Z axis
+    if (Math.abs(localDZ) < 1e-8) {
+      if (localOZ < -halfD || localOZ > halfD) return { hit: false };
+    } else {
+      var t1z = (-halfD - localOZ) / localDZ;
+      var t2z = (halfD - localOZ) / localDZ;
+      if (t1z > t2z) { var tmp3 = t1z; t1z = t2z; t2z = tmp3; }
+      tmin = Math.max(tmin, t1z);
+      tmax = Math.min(tmax, t2z);
+      if (tmin > tmax) return { hit: false };
+    }
+
+    if (tmin > maxDist) return { hit: false };
+    // Hit point in world space (parameter t is preserved across rotation)
+    var point = origin.clone().add(dir.clone().multiplyScalar(tmin));
+    return { hit: true, distance: tmin, point: point };
+  }
+
   // Test ray against an array of hitbox segments, return closest hit
-  // Segments can be: {shape:'box', box}, {shape:'sphere', center, radius},
+  // Segments can be: {shape:'box', center, halfW, halfH, halfD, yaw}, {shape:'sphere', center, radius},
   //   {shape:'cylinder', center, radius, halfHeight}, {shape:'capsule', center, radius, halfHeight}
-  // Default shape (absent or 'box') uses AABB path.
+  // Default shape (absent or 'box') uses OBB path (supports Y-rotation).
   // Returns {hit: true, segment, distance, point, damageMultiplier} or {hit: false}
   function testHitSegments(origin, dir, segments, maxDist) {
     var closestDist = maxDist;
@@ -272,8 +336,8 @@
       } else if (shape === 'capsule') {
         result = rayHitsCapsule(origin, dir, seg.center, seg.radius, seg.halfHeight, closestDist);
       } else {
-        // 'box' or absent — AABB path
-        result = rayHitsAABB(origin, dir, seg.box.min, seg.box.max, closestDist);
+        // 'box' or absent — OBB path (supports Y-rotation)
+        result = rayHitsOBB(origin, dir, seg.center, seg.halfW, seg.halfH, seg.halfD, seg.yaw || 0, closestDist);
       }
 
       if (result.hit && result.distance < closestDist) {

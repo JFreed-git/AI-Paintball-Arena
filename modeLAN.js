@@ -467,6 +467,7 @@
       { colliders: state.arena.colliders, solids: state.arena.solids },
       dt
     );
+    state.players.host._hitboxYaw = camera.rotation.y;
     state.players.host._syncMeshPosition();
     state.players.host.syncCameraFromPlayer();
 
@@ -508,19 +509,28 @@
       );
     })();
 
+    // Sync client mesh/hitbox BEFORE shooting/projectiles so hitboxes are fresh
+    var remotePlayer = state.players.client;
+    // Set hitbox yaw from client's own forward vector (where THEY are looking)
+    var riFwd = state.remoteInputLatest && state.remoteInputLatest.forward;
+    if (riFwd && Array.isArray(riFwd) && riFwd.length === 3) {
+      remotePlayer._hitboxYaw = Math.atan2(riFwd[0], riFwd[2]);
+    }
+    remotePlayer._meshGroup.rotation.set(0, remotePlayer._hitboxYaw, 0);
+    remotePlayer._syncMeshPosition();
+
     var now = performance.now();
     handleShooting(state.players.host, now);
     handleShooting(state.players.client, now);
     handleReload(state.players.host, now);
     handleReload(state.players.client, now);
 
-    // Update live projectiles
+    // Update live projectiles (all entity hitboxes are now fresh)
     if (typeof updateProjectiles === 'function') updateProjectiles(dt);
 
-    // Update remote player mesh position and facing
-    var remotePlayer = state.players.client;
-    remotePlayer._syncMeshPosition();
-    remotePlayer.faceToward(state.players.host.position);
+    // Update hitbox visualization after all positions are current
+    if (window.devShowHitboxes && window.updateHitboxVisuals) window.updateHitboxVisuals();
+
     remotePlayer.update3DHealthBar(camera.position, state.arena.solids, { checkLOS: true });
 
     maybeSendSnapshot(now);
@@ -545,6 +555,7 @@
       feetY: p.feetY,
       grounded: p.grounded,
       health: p.health,
+      yaw: p._hitboxYaw,
       ammo: p.weapon.ammo,
       magSize: p.weapon.magSize,
       reloading: p.weapon.reloading,
@@ -576,13 +587,16 @@
       var newRemoteSnap = {
         pos: new THREE.Vector3(H.pos[0], H.pos[1], H.pos[2]),
         feetY: (typeof H.feetY === 'number') ? H.feetY : GROUND_Y,
+        yaw: (typeof H.yaw === 'number') ? H.yaw : 0,
         receiveTime: performance.now()
       };
       _remoteFrom = _remoteTo;
       _remoteTo = newRemoteSnap;
 
-      // Apply health immediately (no interpolation needed)
+      // Apply health and yaw immediately
       state.players.host.health = H.health;
+      state.players.host._hitboxYaw = newRemoteSnap.yaw;
+      state.players.host._meshGroup.rotation.set(0, newRemoteSnap.yaw, 0);
       state.players.host.lastDamagedAt = (H.health < state.players.host.maxHealth) ? performance.now() : state.players.host.lastDamagedAt;
 
       // If first snapshot, snap directly
@@ -590,9 +604,6 @@
         state.players.host.position.copy(newRemoteSnap.pos);
         state.players.host.feetY = newRemoteSnap.feetY;
         state.players.host._syncMeshPosition();
-        if (state.players.client) {
-          state.players.host.faceToward(camera.position);
-        }
       }
     }
 
@@ -692,6 +703,10 @@
           _predictedVVel = localP.verticalVelocity;
           _predictedGrounded = localP.grounded;
 
+          // Sync mesh and hitbox after prediction physics
+          localP._hitboxYaw = camera.rotation.y;
+          localP._syncMeshPosition();
+
           camera.position.copy(_predictedPos);
         }
       }
@@ -707,7 +722,6 @@
           hostP.feetY = _remoteFrom.feetY + (_remoteTo.feetY - _remoteFrom.feetY) * interpT;
           hostP.position.y = hostP.feetY + EYE_HEIGHT;
           hostP._syncMeshPosition();
-          hostP.faceToward(camera.position);
           hostP.update3DHealthBar(camera.position, state.arena ? state.arena.solids : [], { checkLOS: true });
         }
       } else if (_remoteTo && state.players.host) {
@@ -735,6 +749,9 @@
 
       // Update visual projectiles on client
       if (typeof updateProjectiles === 'function') updateProjectiles(dt);
+
+      // Update hitbox visualization after all positions are current
+      if (window.devShowHitboxes && window.updateHitboxVisuals) window.updateHitboxVisuals();
     }
 
     state.loopHandle = requestAnimationFrame(tick);
