@@ -10,8 +10,11 @@
  * EXPORTS (window):
  *   applySpread(dir, spreadRad)       — apply random cone spread to a direction
  *   rayHitsSphere(...)                — sphere intersection test (legacy/training targets)
+ *   rayHitsSphereDetailed(...)        — sphere intersection returning {hit, distance, point}
+ *   rayHitsCylinder(...)              — Y-axis cylinder intersection
+ *   rayHitsCapsule(...)               — Y-axis capsule intersection (cylinder + hemispheres)
  *   rayHitsAABB(origin, dir, boxMin, boxMax, maxDist) — ray-AABB slab intersection
- *   testHitSegments(origin, dir, segments, maxDist)   — test ray against hitbox segments
+ *   testHitSegments(origin, dir, segments, maxDist)   — test ray against hitbox segments (dispatches by shape)
  *   spawnTracer(origin, end, ...)     — visual tracer from origin to endpoint
  *   fireHitscan(origin, dir, opts)    — single-ray hitscan (low-level)
  *   sharedFireWeapon(weapon, origin, dir, opts) — unified multi-pellet firing
@@ -24,8 +27,9 @@
  * DESIGN NOTES:
  *   - sharedFireWeapon checks weapon.projectileSpeed. If null/0, it uses hitscan.
  *     When projectileSpeed > 0, it spawns projectile entities instead.
- *   - Targets can have either `segments` (array of {box, damageMultiplier}) for
- *     segmented hitboxes or `position`+`radius` for legacy sphere hitboxes.
+ *   - Targets can have `segments` (array of shape-typed hitboxes: box→{box},
+ *     sphere→{center,radius}, cylinder/capsule→{center,radius,halfHeight})
+ *     or `position`+`radius` for legacy sphere hitboxes.
  *   - Projectiles move each frame, test collision against solids and target segments,
  *     and self-clean on hit, wall collision, or max range.
  */
@@ -70,6 +74,152 @@
     return dist2 <= radius * radius;
   }
 
+  // Ray-sphere intersection returning {hit, distance, point}
+  function rayHitsSphereDetailed(origin, dir, center, radius, maxDist) {
+    var ocx = origin.x - center.x;
+    var ocy = origin.y - center.y;
+    var ocz = origin.z - center.z;
+    var b = ocx * dir.x + ocy * dir.y + ocz * dir.z;
+    var c = ocx * ocx + ocy * ocy + ocz * ocz - radius * radius;
+    var disc = b * b - c;
+    if (disc < 0) return { hit: false };
+    var sqrtDisc = Math.sqrt(disc);
+    var t0 = -b - sqrtDisc;
+    var t1 = -b + sqrtDisc;
+    var t = (t0 >= 0) ? t0 : t1;
+    if (t < 0 || t > maxDist) return { hit: false };
+    var point = origin.clone().add(dir.clone().multiplyScalar(t));
+    return { hit: true, distance: t, point: point };
+  }
+
+  // Ray-cylinder intersection (Y-axis aligned, finite height with caps)
+  // center = center of the cylinder, radius, halfHeight
+  function rayHitsCylinder(origin, dir, center, radius, halfHeight, maxDist) {
+    var ox = origin.x - center.x;
+    var oz = origin.z - center.z;
+    var dx = dir.x;
+    var dz = dir.z;
+    var dy = dir.y;
+    var oy = origin.y - center.y;
+
+    var bestT = maxDist + 1;
+    var bestPoint = null;
+
+    // Infinite cylinder test in XZ
+    var a = dx * dx + dz * dz;
+    if (a > 1e-12) {
+      var b = 2 * (ox * dx + oz * dz);
+      var c = ox * ox + oz * oz - radius * radius;
+      var disc = b * b - 4 * a * c;
+      if (disc >= 0) {
+        var sqrtDisc = Math.sqrt(disc);
+        var inv2a = 1 / (2 * a);
+        var t0 = (-b - sqrtDisc) * inv2a;
+        var t1 = (-b + sqrtDisc) * inv2a;
+        for (var ti = 0; ti < 2; ti++) {
+          var t = ti === 0 ? t0 : t1;
+          if (t < 0 || t > maxDist) continue;
+          var hitY = oy + dy * t;
+          if (hitY >= -halfHeight && hitY <= halfHeight && t < bestT) {
+            bestT = t;
+            bestPoint = origin.clone().add(dir.clone().multiplyScalar(t));
+          }
+        }
+      }
+    }
+
+    // Cap disc tests (top and bottom)
+    if (Math.abs(dy) > 1e-8) {
+      for (var ci = 0; ci < 2; ci++) {
+        var capY = ci === 0 ? halfHeight : -halfHeight;
+        var tCap = (capY - oy) / dy;
+        if (tCap < 0 || tCap > maxDist || tCap >= bestT) continue;
+        var hx = ox + dx * tCap;
+        var hz = oz + dz * tCap;
+        if (hx * hx + hz * hz <= radius * radius) {
+          bestT = tCap;
+          bestPoint = origin.clone().add(dir.clone().multiplyScalar(tCap));
+        }
+      }
+    }
+
+    if (bestPoint && bestT <= maxDist) {
+      return { hit: true, distance: bestT, point: bestPoint };
+    }
+    return { hit: false };
+  }
+
+  // Ray-capsule intersection (Y-axis aligned)
+  // Capsule = cylinder body + 2 hemisphere caps
+  // halfHeight = half of total capsule height (including caps)
+  function rayHitsCapsule(origin, dir, center, radius, halfHeight, maxDist) {
+    var bodyHalfH = Math.max(0, halfHeight - radius);
+
+    // If degenerate (body height <= 0), it's just a sphere
+    if (bodyHalfH <= 0) {
+      return rayHitsSphereDetailed(origin, dir, center, radius, maxDist);
+    }
+
+    var bestT = maxDist + 1;
+    var bestPoint = null;
+
+    // Test cylinder body (no caps — capped by hemisphere tests)
+    var ox = origin.x - center.x;
+    var oz = origin.z - center.z;
+    var dx = dir.x;
+    var dz = dir.z;
+    var dy = dir.y;
+    var oy = origin.y - center.y;
+
+    var a = dx * dx + dz * dz;
+    if (a > 1e-12) {
+      var b = 2 * (ox * dx + oz * dz);
+      var c = ox * ox + oz * oz - radius * radius;
+      var disc = b * b - 4 * a * c;
+      if (disc >= 0) {
+        var sqrtDisc = Math.sqrt(disc);
+        var inv2a = 1 / (2 * a);
+        var t0 = (-b - sqrtDisc) * inv2a;
+        var t1 = (-b + sqrtDisc) * inv2a;
+        for (var ti = 0; ti < 2; ti++) {
+          var t = ti === 0 ? t0 : t1;
+          if (t < 0 || t > maxDist) continue;
+          var hitY = oy + dy * t;
+          if (hitY >= -bodyHalfH && hitY <= bodyHalfH && t < bestT) {
+            bestT = t;
+            bestPoint = origin.clone().add(dir.clone().multiplyScalar(t));
+          }
+        }
+      }
+    }
+
+    // Test top hemisphere (center at cy + bodyHalfH)
+    var topCenter = new THREE.Vector3(center.x, center.y + bodyHalfH, center.z);
+    var topResult = rayHitsSphereDetailed(origin, dir, topCenter, radius, maxDist);
+    if (topResult.hit && topResult.distance < bestT) {
+      // Only accept hits on the upper hemisphere (hit.y >= topCenter.y)
+      if (topResult.point.y >= topCenter.y - 0.001) {
+        bestT = topResult.distance;
+        bestPoint = topResult.point;
+      }
+    }
+
+    // Test bottom hemisphere (center at cy - bodyHalfH)
+    var botCenter = new THREE.Vector3(center.x, center.y - bodyHalfH, center.z);
+    var botResult = rayHitsSphereDetailed(origin, dir, botCenter, radius, maxDist);
+    if (botResult.hit && botResult.distance < bestT) {
+      if (botResult.point.y <= botCenter.y + 0.001) {
+        bestT = botResult.distance;
+        bestPoint = botResult.point;
+      }
+    }
+
+    if (bestPoint && bestT <= maxDist) {
+      return { hit: true, distance: bestT, point: bestPoint };
+    }
+    return { hit: false };
+  }
+
   // Ray-AABB intersection using slab method
   // Returns {hit: true, distance, point} or {hit: false}
   function rayHitsAABB(origin, dir, boxMin, boxMax, maxDist) {
@@ -102,7 +252,9 @@
   }
 
   // Test ray against an array of hitbox segments, return closest hit
-  // segments: [{box: THREE.Box3, damageMultiplier: number, name: string}, ...]
+  // Segments can be: {shape:'box', box}, {shape:'sphere', center, radius},
+  //   {shape:'cylinder', center, radius, halfHeight}, {shape:'capsule', center, radius, halfHeight}
+  // Default shape (absent or 'box') uses AABB path.
   // Returns {hit: true, segment, distance, point, damageMultiplier} or {hit: false}
   function testHitSegments(origin, dir, segments, maxDist) {
     var closestDist = maxDist;
@@ -110,8 +262,20 @@
 
     for (var i = 0; i < segments.length; i++) {
       var seg = segments[i];
-      var box = seg.box;
-      var result = rayHitsAABB(origin, dir, box.min, box.max, closestDist);
+      var result;
+      var shape = seg.shape || 'box';
+
+      if (shape === 'sphere') {
+        result = rayHitsSphereDetailed(origin, dir, seg.center, seg.radius, closestDist);
+      } else if (shape === 'cylinder') {
+        result = rayHitsCylinder(origin, dir, seg.center, seg.radius, seg.halfHeight, closestDist);
+      } else if (shape === 'capsule') {
+        result = rayHitsCapsule(origin, dir, seg.center, seg.radius, seg.halfHeight, closestDist);
+      } else {
+        // 'box' or absent — AABB path
+        result = rayHitsAABB(origin, dir, seg.box.min, seg.box.max, closestDist);
+      }
+
       if (result.hit && result.distance < closestDist) {
         closestDist = result.distance;
         closestResult = {
@@ -520,9 +684,13 @@
     }
 
     // Remove dead projectiles (iterate in reverse to preserve indices)
+    // Guard: clearAllProjectiles() may have been called during onHit (e.g. endRound),
+    // which empties _liveProjectiles mid-iteration. Skip already-removed entries.
     for (var r = toRemove.length - 1; r >= 0; r--) {
       var idx = toRemove[r];
+      if (idx >= _liveProjectiles.length) continue;
       var dead = _liveProjectiles[idx];
+      if (!dead) continue;
       scene.remove(dead.mesh);
       try { dead.geom.dispose(); dead.mat.dispose(); } catch (e) {}
       _liveProjectiles.splice(idx, 1);
@@ -541,6 +709,9 @@
   // Expose
   window.applySpread = applySpread;
   window.rayHitsSphere = rayHitsSphere;
+  window.rayHitsSphereDetailed = rayHitsSphereDetailed;
+  window.rayHitsCylinder = rayHitsCylinder;
+  window.rayHitsCapsule = rayHitsCapsule;
   window.rayHitsAABB = rayHitsAABB;
   window.testHitSegments = testHitSegments;
   window.spawnTracer = spawnTracer;
