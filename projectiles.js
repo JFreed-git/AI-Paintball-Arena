@@ -686,9 +686,12 @@
     // Remove dead projectiles (iterate in reverse to preserve indices)
     // Guard: clearAllProjectiles() may have been called during onHit (e.g. endRound),
     // which empties _liveProjectiles mid-iteration. Skip already-removed entries.
+    // Deduplicate toRemove to prevent double-removal shifting wrong indices.
+    var seen = {};
     for (var r = toRemove.length - 1; r >= 0; r--) {
       var idx = toRemove[r];
-      if (idx >= _liveProjectiles.length) continue;
+      if (seen[idx] || idx >= _liveProjectiles.length) continue;
+      seen[idx] = true;
       var dead = _liveProjectiles[idx];
       if (!dead) continue;
       scene.remove(dead.mesh);

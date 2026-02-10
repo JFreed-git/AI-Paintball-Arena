@@ -209,9 +209,8 @@
         var stepHeight = rsy * (N - i - 1) / N;
         if (stepHeight < 0.05) continue;
         var stepDepth = rsz / N;
-        var helper = new THREE.Mesh(
-          new THREE.BoxGeometry(stepDepth, stepHeight, rsx)
-        );
+        var stepGeom = new THREE.BoxGeometry(stepDepth, stepHeight, rsx);
+        var helper = new THREE.Mesh(stepGeom);
         helper.position.set(
           -rsz / 2 + rsz * i / N + stepDepth / 2,
           stepHeight / 2,
@@ -221,16 +220,17 @@
         mesh.updateMatrixWorld(true);
         result.push(new THREE.Box3().setFromObject(helper));
         mesh.remove(helper);
+        stepGeom.dispose();
       }
 
-      var wallHelper = new THREE.Mesh(
-        new THREE.BoxGeometry(0.3, rsy, rsx)
-      );
+      var wallGeom = new THREE.BoxGeometry(0.3, rsy, rsx);
+      var wallHelper = new THREE.Mesh(wallGeom);
       wallHelper.position.set(-rsz / 2, rsy / 2, 0);
       mesh.add(wallHelper);
       mesh.updateMatrixWorld(true);
       result.push(new THREE.Box3().setFromObject(wallHelper));
       mesh.remove(wallHelper);
+      wallGeom.dispose();
 
       return result;
     }
@@ -245,20 +245,24 @@
       var result = [];
 
       // Bottom horizontal leg
-      var leg1 = new THREE.Mesh(new THREE.BoxGeometry(lw, lh, lt));
+      var leg1Geom = new THREE.BoxGeometry(lw, lh, lt);
+      var leg1 = new THREE.Mesh(leg1Geom);
       leg1.position.set(0, lh / 2, ld / 2 - lt / 2);
       mesh.add(leg1);
       mesh.updateMatrixWorld(true);
       result.push(new THREE.Box3().setFromObject(leg1));
       mesh.remove(leg1);
+      leg1Geom.dispose();
 
       // Left vertical leg
-      var leg2 = new THREE.Mesh(new THREE.BoxGeometry(lt, lh, ld - lt));
+      var leg2Geom = new THREE.BoxGeometry(lt, lh, ld - lt);
+      var leg2 = new THREE.Mesh(leg2Geom);
       leg2.position.set(-lw / 2 + lt / 2, lh / 2, -lt / 2);
       mesh.add(leg2);
       mesh.updateMatrixWorld(true);
       result.push(new THREE.Box3().setFromObject(leg2));
       mesh.remove(leg2);
+      leg2Geom.dispose();
 
       return result;
     }
@@ -274,30 +278,36 @@
       var result = [];
 
       // Left pillar (full height)
-      var leftPillar = new THREE.Mesh(new THREE.BoxGeometry(pillarW, ah, ad));
+      var lpGeom = new THREE.BoxGeometry(pillarW, ah, ad);
+      var leftPillar = new THREE.Mesh(lpGeom);
       leftPillar.position.set(-aw / 2 + pillarW / 2, ah / 2, 0);
       mesh.add(leftPillar);
       mesh.updateMatrixWorld(true);
       result.push(new THREE.Box3().setFromObject(leftPillar));
       mesh.remove(leftPillar);
+      lpGeom.dispose();
 
       // Right pillar (full height)
-      var rightPillar = new THREE.Mesh(new THREE.BoxGeometry(pillarW, ah, ad));
+      var rpGeom = new THREE.BoxGeometry(pillarW, ah, ad);
+      var rightPillar = new THREE.Mesh(rpGeom);
       rightPillar.position.set(aw / 2 - pillarW / 2, ah / 2, 0);
       mesh.add(rightPillar);
       mesh.updateMatrixWorld(true);
       result.push(new THREE.Box3().setFromObject(rightPillar));
       mesh.remove(rightPillar);
+      rpGeom.dispose();
 
       // Top lintel (above opening, between pillars)
       var lintelH = ah - openH;
       if (lintelH > 0.05) {
-        var lintel = new THREE.Mesh(new THREE.BoxGeometry(openW, lintelH, ad));
+        var ltGeom = new THREE.BoxGeometry(openW, lintelH, ad);
+        var lintel = new THREE.Mesh(ltGeom);
         lintel.position.set(0, openH + lintelH / 2, 0);
         mesh.add(lintel);
         mesh.updateMatrixWorld(true);
         result.push(new THREE.Box3().setFromObject(lintel));
         mesh.remove(lintel);
+        ltGeom.dispose();
       }
 
       return result;
@@ -338,15 +348,15 @@
     var floorGeom = new THREE.PlaneGeometry(halfW * 2 + 10, halfL * 2 + 10);
     var floorMesh = new THREE.Mesh(floorGeom, new THREE.MeshBasicMaterial({ visible: false }));
     floorMesh.rotation.x = -Math.PI / 2;
-    floorMesh.position.y = -1;
+    floorMesh.position.y = GROUND_Y;
     group.add(floorMesh);
     solids.push(floorMesh);
 
     // Perimeter walls
-    addSolidBox(0, wallHeight / 2 - 1, -halfL, halfW * 2, wallHeight, 0.5, wallMat);
-    addSolidBox(0, wallHeight / 2 - 1,  halfL, halfW * 2, wallHeight, 0.5, wallMat);
-    addSolidBox(-halfW, wallHeight / 2 - 1, 0, 0.5, wallHeight, halfL * 2, wallMat);
-    addSolidBox( halfW, wallHeight / 2 - 1, 0, 0.5, wallHeight, halfL * 2, wallMat);
+    addSolidBox(0, wallHeight / 2 + GROUND_Y, -halfL, halfW * 2, wallHeight, 0.5, wallMat);
+    addSolidBox(0, wallHeight / 2 + GROUND_Y,  halfL, halfW * 2, wallHeight, 0.5, wallMat);
+    addSolidBox(-halfW, wallHeight / 2 + GROUND_Y, 0, 0.5, wallHeight, halfL * 2, wallMat);
+    addSolidBox( halfW, wallHeight / 2 + GROUND_Y, 0, 0.5, wallHeight, halfL * 2, wallMat);
 
     // Build objects from map data
     var objs = mapData.objects || [];
@@ -361,16 +371,16 @@
         var sx = obj.size[0], sy = obj.size[1], sz = obj.size[2];
         var geom = new THREE.BoxGeometry(sx, sy, sz);
         mesh = new THREE.Mesh(geom, mat);
-        mesh.position.set(obj.position[0], -1 + sy / 2 + yOff, obj.position[2]);
+        mesh.position.set(obj.position[0], GROUND_Y + sy / 2 + yOff, obj.position[2]);
       } else if (obj.type === 'cylinder') {
         var r = obj.radius || 1.5, h = obj.height || 3.0;
         mesh = new THREE.Mesh(new THREE.CylinderGeometry(r, r, h, 24), mat);
-        mesh.position.set(obj.position[0], -1 + h / 2 + yOff, obj.position[2]);
+        mesh.position.set(obj.position[0], GROUND_Y + h / 2 + yOff, obj.position[2]);
       } else if (obj.type === 'halfCylinder') {
         var r2 = obj.radius || 2.0, h2 = obj.height || 3.0;
         var halfMat = new THREE.MeshLambertMaterial({ color: obj.color || '#7A6A55', side: THREE.DoubleSide });
         mesh = new THREE.Mesh(new THREE.CylinderGeometry(r2, r2, h2, 24, 1, false, 0, Math.PI), halfMat);
-        mesh.position.set(obj.position[0], -1 + h2 / 2 + yOff, obj.position[2]);
+        mesh.position.set(obj.position[0], GROUND_Y + h2 / 2 + yOff, obj.position[2]);
       } else if (obj.type === 'ramp' || obj.type === 'wedge') {
         var rsx = obj.size[0], rsy = obj.size[1], rsz = obj.size[2];
         var shape = new THREE.Shape();
@@ -382,7 +392,7 @@
         var extGeom = new THREE.ExtrudeGeometry(shape, extrudeSettings);
         extGeom.translate(-rsz / 2, 0, -rsx / 2);
         mesh = new THREE.Mesh(extGeom, mat);
-        mesh.position.set(obj.position[0], -1 + yOff, obj.position[2]);
+        mesh.position.set(obj.position[0], GROUND_Y + yOff, obj.position[2]);
       } else if (obj.type === 'lshape') {
         var lw = obj.size[0], lh = obj.size[1], ld = obj.size[2];
         var lt = obj.thickness || 1.0;
@@ -397,7 +407,7 @@
         var lGeom = new THREE.ExtrudeGeometry(lShape, { depth: lh, bevelEnabled: false });
         lGeom.rotateX(-Math.PI / 2);
         mesh = new THREE.Mesh(lGeom, mat);
-        mesh.position.set(obj.position[0], -1 + yOff, obj.position[2]);
+        mesh.position.set(obj.position[0], GROUND_Y + yOff, obj.position[2]);
       } else if (obj.type === 'arch') {
         var aw2 = obj.size[0], ah2 = obj.size[1], ad2 = obj.size[2];
         var openW = aw2 * 0.6;
@@ -421,7 +431,7 @@
         var archGeom = new THREE.ExtrudeGeometry(archShape, { depth: ad2, bevelEnabled: false });
         archGeom.translate(0, 0, -ad2 / 2);
         mesh = new THREE.Mesh(archGeom, new THREE.MeshLambertMaterial({ color: obj.color || '#7A6A55', side: THREE.DoubleSide }));
-        mesh.position.set(obj.position[0], -1 + yOff, obj.position[2]);
+        mesh.position.set(obj.position[0], GROUND_Y + yOff, obj.position[2]);
       }
 
       if (mesh) {
@@ -541,10 +551,10 @@
       var trunk = new THREE.Mesh(
         new THREE.CylinderGeometry(trunkR * 0.7, trunkR, trunkH, 8), trunkMat
       );
-      trunk.position.set(x, -1 + trunkH / 2, z);
+      trunk.position.set(x, GROUND_Y + trunkH / 2, z);
       group.add(trunk);
       var canopy = new THREE.Mesh(new THREE.ConeGeometry(canopyR, canopyH, 8), tmat);
-      canopy.position.set(x, -1 + trunkH + canopyH / 2, z);
+      canopy.position.set(x, GROUND_Y + trunkH + canopyH / 2, z);
       group.add(canopy);
     }
 

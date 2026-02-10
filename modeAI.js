@@ -247,6 +247,7 @@
   }
 
   function updateReload(now) {
+    if (!state || !state.player || !state.player.weapon) return;
     if (sharedHandleReload(state.player.weapon, now)) {
       sharedSetReloadingUI(false, state.hud.reloadIndicator);
       updateHUD();

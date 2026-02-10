@@ -111,7 +111,6 @@ function init() {
 
   // Controls + Menu
   bindPlayerControls(renderer);
-  bindUI();
 
   // Start loop
   animate();
@@ -126,8 +125,11 @@ function init() {
   }
 
   // Load custom menu configs (overrides hardcoded HTML with saved configs)
+  // loadCustomMenus() calls bindUI() after rendering, so we don't call it separately
   if (typeof loadCustomMenus === 'function') {
     loadCustomMenus();
+  } else {
+    bindUI();
   }
 }
 

@@ -148,7 +148,10 @@
     return (typeof GROUND_Y !== 'undefined') ? GROUND_Y : -1;
   }
 
+  var _hePreviewInited = false;
   window._initHeroEditorPreview = function () {
+    if (_hePreviewInited) return;
+    _hePreviewInited = true;
     var canvas = document.getElementById('heroPreviewCanvas');
     if (!canvas) return;
 
@@ -1465,7 +1468,10 @@
   var _wmbDragging = false;
   var _wmbLastMouse = { x: 0, y: 0 };
 
+  var _wmbPreviewInited = false;
   window._initWmbPreview = function () {
+    if (_wmbPreviewInited) return;
+    _wmbPreviewInited = true;
     var canvas = document.getElementById('wmbPreviewCanvas');
     if (!canvas) return;
 

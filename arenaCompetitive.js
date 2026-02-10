@@ -131,8 +131,8 @@ function buildPaintballArenaSymmetric() {
 
   // Spawns opposite along Z axis
   var spawnZ = arenaHalfL - 8;
-  var spawnA = new THREE.Vector3(0, 2, -spawnZ); // Player (camera/eye)
-  var spawnB = new THREE.Vector3(0, 0,  spawnZ); // AI (grounded body)
+  var spawnA = new THREE.Vector3(0, 0, -spawnZ);
+  var spawnB = new THREE.Vector3(0, 0,  spawnZ);
 
   // Gold spawn rings on floor (use RingGeometry rotated flat)
   function addGoldSpawnRing(pos) {

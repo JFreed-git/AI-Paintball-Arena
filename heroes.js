@@ -197,7 +197,9 @@
       return Promise.all(promises);
     }).then(function (heroes) {
       if (heroes && heroes.length) {
-        window.HEROES = heroes;
+        // Filter out any invalid entries (nulls from failed fetches)
+        var valid = heroes.filter(function (h) { return h && h.id; });
+        if (valid.length) window.HEROES = valid;
       }
     }).catch(function () {
       // Keep built-in heroes as fallback
@@ -220,7 +222,7 @@
    */
   function applyHeroToPlayer(player, heroId) {
     if (!player) return null;
-    var hero = getHeroById(heroId) || HEROES[0];
+    var hero = getHeroById(heroId) || window.HEROES[0] || BUILTIN_HEROES[0];
 
     // Apply weapon
     player.weapon = new Weapon(hero.weapon);

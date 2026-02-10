@@ -44,7 +44,7 @@
       timerRef.id = 0;
     }
     timerRef.id = setTimeout(function () {
-      if (!timerRef || timerRef.id === null) return;
+      if (!timerRef || !timerRef.id) return;
       bannerEl.classList.add('hidden');
       timerRef.id = 0;
     }, ms);
@@ -81,7 +81,7 @@
     }
 
     var timer = setInterval(function () {
-      if (opts.timerRef && opts.timerRef.id === null) return;
+      if (opts.timerRef && !opts.timerRef.id) return;
       remain -= 1;
       if (remain > 0) {
         el.textContent = String(remain);

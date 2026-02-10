@@ -327,7 +327,7 @@ io.on('connection', (socket) => {
   socket.on('disconnect', () => {
     if (!currentRoom) return;
     const room = rooms.get(currentRoom);
-    if (!room) return;
+    if (!room) { currentRoom = null; return; }
 
     room.players.delete(socket.id);
 
@@ -338,10 +338,8 @@ io.on('connection', (socket) => {
     } else {
       // Client left
       io.to(room.hostId).emit('clientLeft', { clientId: socket.id });
-      if (room.players.size === 1) {
-        // Only host remains; keep the room open
-      }
     }
+    currentRoom = null;
   });
 });
 

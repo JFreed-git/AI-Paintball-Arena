@@ -565,7 +565,7 @@
   var _remoteTo = null;    // same shape
 
   function applySnapshotOnClient(snap) {
-    if (!snap) return;
+    if (!snap || !state) return;
     // Skip stale snapshots
     if (snap.t && _lastSnapshotTime && snap.t < _lastSnapshotTime) return;
     _lastSnapshotTime = snap.t || 0;
@@ -728,7 +728,9 @@
         });
       }
 
-      sharedSetCrosshairBySprint(!!input.sprint, state.players.client.weapon.spreadRad, state.players.client.weapon.sprintSpreadRad);
+      if (state.players.client && state.players.client.weapon) {
+        sharedSetCrosshairBySprint(!!input.sprint, state.players.client.weapon.spreadRad, state.players.client.weapon.sprintSpreadRad);
+      }
       sharedSetSprintUI(!!input.sprint, state.hud.sprintIndicator);
 
       // Update visual projectiles on client
@@ -988,11 +990,11 @@
     if (state) {
       if (state.bannerTimerRef && state.bannerTimerRef.id) {
         clearTimeout(state.bannerTimerRef.id);
-        state.bannerTimerRef.id = null;
+        state.bannerTimerRef.id = 0;
       }
       if (state.countdownTimerRef && state.countdownTimerRef.id) {
-        clearTimeout(state.countdownTimerRef.id);
-        state.countdownTimerRef.id = null;
+        clearInterval(state.countdownTimerRef.id);
+        state.countdownTimerRef.id = 0;
       }
       if (state.heroSelectTimerRef && state.heroSelectTimerRef.id) {
         clearTimeout(state.heroSelectTimerRef.id);
