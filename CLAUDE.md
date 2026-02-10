@@ -40,14 +40,14 @@ All JS files use IIFEs `(function() { ... })()` for scope isolation. Public APIs
 | `heroSelectUI.js` | Card-based hero selection overlay (timed + untimed modes) |
 | `menuRenderer.js` | Menu config → DOM renderer, `loadCustomMenus()` from `/api/menus` |
 | `menuNavigation.js` | Menu toggle via `showOnlyMenu(id)`, settings persistence |
-| `input.js` | Keyboard/mouse input, pointer lock. Exports `getInputState()` |
+| `input.js` | Keyboard/mouse input, pointer lock. Exports `getInputState()`. V key = melee |
 | `environment.js` | Scene setup — lights, sky, fog, ground plane |
 | `player.js` | `Player` class — segmented hitbox, body parts mesh, weapon attachment |
 | `arenaBuilder.js` | Shared arena construction helpers |
 | `arenaCompetitive.js` | Competitive arena with waypoints and symmetric spawns |
 | `arenaTraining.js` | Training range with shooting lanes and bot patrol routes |
 | `mapFormat.js` | Map JSON serialization, 7 shape types, shape-accurate colliders |
-| `projectiles.js` | `sharedFireWeapon()`, projectile/hitscan, ray intersection per shape |
+| `projectiles.js` | `sharedFireWeapon()`, `sharedMeleeAttack()`, projectile/hitscan, ray intersection per shape |
 | `aiOpponent.js` | 7-state AI with A* pathfinding and 3 playstyles |
 | `trainingBot.js` | Simple patrol bots for training range |
 | `modeAI.js` | Single-player vs AI game mode |

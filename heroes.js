@@ -105,6 +105,11 @@
           sprintSpreadPx: 20,
           color: '#00ffaa'
         },
+        meleeDamage: 25,
+        meleeRange: 2.0,
+        meleeCooldownMs: 600,
+        meleeSwingMs: 350,
+        meleeUseHitMultiplier: true,
         abilities: []
       },
 
@@ -166,6 +171,11 @@
           sprintSpreadPx: 40,
           color: '#ff8844'
         },
+        meleeDamage: 40,
+        meleeRange: 3.0,
+        meleeCooldownMs: 600,
+        meleeSwingMs: 350,
+        meleeUseHitMultiplier: true,
         abilities: []
       },
 

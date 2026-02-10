@@ -1241,6 +1241,11 @@
       projectileSpeed: parseFloat(document.getElementById('heProjectileSpeed').value) || 0,
       projectileGravity: parseFloat(document.getElementById('heProjectileGravity').value) || 0,
       splashRadius: 0,
+      meleeDamage: parseInt(document.getElementById('heMeleeDamage').value) || 30,
+      meleeRange: parseFloat(document.getElementById('heMeleeRange').value) || 2.5,
+      meleeCooldownMs: parseInt(document.getElementById('heMeleeCooldownMs').value) || 600,
+      meleeSwingMs: parseInt(document.getElementById('heMeleeSwingMs').value) || 350,
+      meleeUseHitMultiplier: document.getElementById('heMeleeUseHitMult').checked,
       scope: scopeConfig,
       modelType: document.getElementById('heModelType').value || 'rifle',
       tracerColor: parseInt(tracerHex.replace('#', ''), 16),
@@ -1406,6 +1411,12 @@
     document.getElementById('hePellets').value = w.pellets || 1;
     document.getElementById('heProjectileSpeed').value = (typeof w.projectileSpeed === 'number') ? w.projectileSpeed : 120;
     document.getElementById('heProjectileGravity').value = (typeof w.projectileGravity === 'number') ? w.projectileGravity : 0;
+
+    document.getElementById('heMeleeDamage').value = (typeof w.meleeDamage === 'number') ? w.meleeDamage : 30;
+    document.getElementById('heMeleeRange').value = (typeof w.meleeRange === 'number') ? w.meleeRange : 2.5;
+    document.getElementById('heMeleeCooldownMs').value = (typeof w.meleeCooldownMs === 'number') ? w.meleeCooldownMs : 600;
+    document.getElementById('heMeleeSwingMs').value = (typeof w.meleeSwingMs === 'number') ? w.meleeSwingMs : 350;
+    document.getElementById('heMeleeUseHitMult').checked = (w.meleeUseHitMultiplier !== undefined) ? !!w.meleeUseHitMultiplier : true;
 
     var scope = w.scope || {};
     document.getElementById('heScopeType').value = scope.type || 'none';

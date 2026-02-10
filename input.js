@@ -25,7 +25,7 @@ function resetCameraToDefaults() {
 }
 
 /* Paintball input state (inputs live here; physics elsewhere) */
-const INPUT_STATE = { fireDown: false, sprint: false, reloadPressed: false, jump: false, moveX: 0, moveZ: 0 };
+const INPUT_STATE = { fireDown: false, sprint: false, reloadPressed: false, jump: false, meleePressed: false, moveX: 0, moveZ: 0 };
 let _w = false, _a = false, _s = false, _d = false;
 function recomputeMoveAxes() {
   INPUT_STATE.moveZ = (_w ? 1 : 0) + (_s ? -1 : 0);
@@ -44,6 +44,10 @@ function getInputState() {
   if (INPUT_STATE.jump) {
     out.jump = true;
     INPUT_STATE.jump = false;
+  }
+  if (INPUT_STATE.meleePressed) {
+    out.meleePressed = true;
+    INPUT_STATE.meleePressed = false;
   }
   return out;
 }
@@ -172,6 +176,7 @@ function onGlobalKeyDown(e) {
     case 'ShiftLeft': INPUT_STATE.sprint = true; break;
     case 'KeyR': INPUT_STATE.reloadPressed = true; break;
     case 'Space': INPUT_STATE.jump = true; break;
+    case 'KeyV': INPUT_STATE.meleePressed = true; break;
   }
 }
 
@@ -220,6 +225,7 @@ window.addEventListener('message', function (evt) {
         case 'ShiftLeft': INPUT_STATE.sprint = true; break;
         case 'KeyR': INPUT_STATE.reloadPressed = true; break;
         case 'Space': INPUT_STATE.jump = true; break;
+        case 'KeyV': INPUT_STATE.meleePressed = true; break;
       }
       break;
     case 'svKeyUp':

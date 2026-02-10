@@ -246,6 +246,52 @@
     }
   }
 
+  // Melee state
+  var _meleeSwinging = false;
+  var _meleeSwingEnd = 0;
+
+  function handleMelee(input, now) {
+    if (!state || !state.player || !state.player.alive) return;
+    var w = state.player.weapon;
+
+    // Check swing in progress
+    if (_meleeSwinging) {
+      if (now >= _meleeSwingEnd) _meleeSwinging = false;
+      return;
+    }
+
+    if (!input.meleePressed) return;
+    if (w.reloading) return;
+    if ((now - w.lastMeleeTime) < w.meleeCooldownMs) return;
+
+    // Perform melee
+    var dir = new THREE.Vector3();
+    camera.getWorldDirection(dir);
+
+    var aiTargets = [];
+    if (state.ai && state.ai.player && state.ai.player.alive) {
+      aiTargets.push({ segments: state.ai.player.getHitSegments(), entity: state.ai });
+    }
+
+    sharedMeleeAttack(w, camera.position.clone(), dir, {
+      solids: state.arena.solids,
+      targets: aiTargets,
+      onHit: function (target, point, dist, totalDamage) {
+        state.ai.takeDamage(totalDamage);
+        updateHUD();
+        if (!state.ai.alive && state.match.roundActive) {
+          endRound('player');
+        }
+      }
+    });
+
+    // Start swing animation + block firing
+    _meleeSwinging = true;
+    _meleeSwingEnd = now + w.meleeSwingMs;
+    if (typeof window.triggerFPMeleeSwing === 'function') window.triggerFPMeleeSwing(w.meleeSwingMs);
+    if (state.player.triggerMeleeSwing) state.player.triggerMeleeSwing(w.meleeSwingMs);
+  }
+
   function updateReload(now) {
     if (!state || !state.player || !state.player.weapon) return;
     if (sharedHandleReload(state.player.weapon, now)) {
@@ -309,7 +355,8 @@
 
     var now = performance.now();
     if (state.inputEnabled) {
-      handlePlayerShooting(input, now);
+      handleMelee(input, now);
+      if (!_meleeSwinging) handlePlayerShooting(input, now);
     }
     updateReload(now);
 
@@ -404,6 +451,8 @@
     setCrosshairSpread(BASE_CROSSHAIR_SPREAD_PX);
     if (typeof clearFirstPersonWeapon === 'function') clearFirstPersonWeapon();
 
+    _meleeSwinging = false;
+    _meleeSwingEnd = 0;
     window.paintballActive = false;
     if (showMenu) {
       try { document.exitPointerLock(); } catch (e) { console.warn('exitPointerLock failed:', e); }

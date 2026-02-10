@@ -81,6 +81,70 @@ window.clearFirstPersonWeapon = function () {
   window.setFirstPersonWeapon(null);
 };
 
+// ------- First-person melee swing animation -------
+var _fpSwingActive = false;
+
+window.triggerFPMeleeSwing = function (durationMs) {
+  if (!_fpWeaponGroup || _fpSwingActive) return;
+  _fpSwingActive = true;
+
+  var origPos = _fpWeaponGroup.position.clone();
+  var origRot = { x: _fpWeaponGroup.rotation.x, y: _fpWeaponGroup.rotation.y, z: _fpWeaponGroup.rotation.z };
+
+  // Keyframes: [progress, posOffset(x,y,z), rotOffset(x,y,z)]
+  var keys = [
+    [0.0,  0, 0, 0,         0, 0, 0],
+    [0.2,  0, 0.03, 0.08,   -0.1, 0, 0],
+    [0.5,  -0.15, 0.05, -0.2, 0.1, 0.5, 0.2],
+    [0.7,  -0.08, 0.02, -0.1, 0.05, 0.3, 0.1],
+    [1.0,  0, 0, 0,         0, 0, 0]
+  ];
+
+  function hermite(t) { return t * t * (3 - 2 * t); }
+
+  function sampleKeyframes(progress) {
+    // Find surrounding keyframes
+    var a = keys[0], b = keys[keys.length - 1];
+    for (var i = 0; i < keys.length - 1; i++) {
+      if (progress >= keys[i][0] && progress <= keys[i + 1][0]) {
+        a = keys[i];
+        b = keys[i + 1];
+        break;
+      }
+    }
+    var span = b[0] - a[0];
+    var t = span > 0 ? hermite((progress - a[0]) / span) : 0;
+    return {
+      px: a[1] + (b[1] - a[1]) * t,
+      py: a[2] + (b[2] - a[2]) * t,
+      pz: a[3] + (b[3] - a[3]) * t,
+      rx: a[4] + (b[4] - a[4]) * t,
+      ry: a[5] + (b[5] - a[5]) * t,
+      rz: a[6] + (b[6] - a[6]) * t
+    };
+  }
+
+  var startTime = performance.now();
+  function animateSwing() {
+    if (!_fpWeaponGroup) { _fpSwingActive = false; return; }
+    var elapsed = performance.now() - startTime;
+    var progress = Math.min(1, elapsed / durationMs);
+    var s = sampleKeyframes(progress);
+
+    _fpWeaponGroup.position.set(origPos.x + s.px, origPos.y + s.py, origPos.z + s.pz);
+    _fpWeaponGroup.rotation.set(origRot.x + s.rx, origRot.y + s.ry, origRot.z + s.rz);
+
+    if (progress < 1) {
+      requestAnimationFrame(animateSwing);
+    } else {
+      _fpWeaponGroup.position.copy(origPos);
+      _fpWeaponGroup.rotation.set(origRot.x, origRot.y, origRot.z);
+      _fpSwingActive = false;
+    }
+  }
+  requestAnimationFrame(animateSwing);
+};
+
 // ------- Initialization -------
 function init() {
   // Scene

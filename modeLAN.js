@@ -285,7 +285,7 @@
       weapon: w
     });
     // Attach input object for multiplayer
-    p.input = { moveX: 0, moveZ: 0, sprint: false, jump: false, fireDown: false, reloadPressed: false, forward: new THREE.Vector3(0, 0, -1) };
+    p.input = { moveX: 0, moveZ: 0, sprint: false, jump: false, fireDown: false, reloadPressed: false, meleeDown: false, forward: new THREE.Vector3(0, 0, -1) };
     // Store yaw/pitch for network sync
     p.yaw = (opts && typeof opts.yaw === 'number') ? opts.yaw : 0;
     p.pitch = (opts && typeof opts.pitch === 'number') ? opts.pitch : 0;
@@ -345,6 +345,84 @@
     if (sharedHandleReload(p.weapon, now)) {
       if (isLocalPlayer(p)) sharedSetReloadingUI(false, state.hud.reloadIndicator);
     }
+  }
+
+  // Per-player melee swing state
+  var _meleeSwingState = { host: { swinging: false, swingEnd: 0 }, client: { swinging: false, swingEnd: 0 } };
+
+  function handleMelee(p, now) {
+    var key = (p === state.players.host) ? 'host' : 'client';
+    var ms = _meleeSwingState[key];
+    var w = p.weapon;
+    var inp = p.input;
+
+    // Check swing in progress
+    if (ms.swinging) {
+      if (now >= ms.swingEnd) ms.swinging = false;
+      return false; // still swinging — block shooting
+    }
+
+    if (!inp.meleeDown) return true; // no melee requested, allow shooting
+    if (w.reloading) return true;
+    if ((now - w.lastMeleeTime) < w.meleeCooldownMs) return true;
+
+    // Compute direction
+    var dir;
+    if (isLocalPlayer(p) && isHost) {
+      dir = new THREE.Vector3();
+      camera.getWorldDirection(dir);
+    } else {
+      if (inp.forward && inp.forward.isVector3) {
+        dir = inp.forward.clone().normalize();
+      } else if (inp.forward && Array.isArray(inp.forward) && inp.forward.length === 3) {
+        dir = new THREE.Vector3(inp.forward[0], inp.forward[1], inp.forward[2]).normalize();
+      } else {
+        dir = new THREE.Vector3(0, 0, -1);
+      }
+    }
+
+    var origin = isLocalPlayer(p)
+      ? camera.position.clone()
+      : p.position.clone();
+
+    var other = (p === state.players.host) ? state.players.client : state.players.host;
+    var meleeTargets = [];
+    if (other && other.alive) {
+      meleeTargets.push({ segments: other.getHitSegments(), entity: other });
+    }
+
+    sharedMeleeAttack(w, origin, dir, {
+      solids: state.arena.solids,
+      targets: meleeTargets,
+      onHit: function (target, point, dist, totalDamage) {
+        if (other && other.alive) {
+          if (window.devGodMode && isLocalPlayer(other)) return;
+          other.takeDamage(totalDamage);
+          if (isLocalPlayer(other)) updateHUDForPlayer(other);
+          if (isHost && state.match && state.match.roundActive && !other.alive) {
+            endRound((p === state.players.host) ? 'p1' : 'p2');
+          }
+        }
+      }
+    });
+
+    // Start swing animation
+    ms.swinging = true;
+    ms.swingEnd = now + w.meleeSwingMs;
+    if (isLocalPlayer(p)) {
+      if (typeof window.triggerFPMeleeSwing === 'function') window.triggerFPMeleeSwing(w.meleeSwingMs);
+    }
+    // Third-person animation on the attacker mesh (visible to remote)
+    if (p.triggerMeleeSwing) p.triggerMeleeSwing(w.meleeSwingMs);
+
+    // Emit melee event for remote visual
+    if (isHost && socket) {
+      socket.emit('melee', { playerId: key, swingMs: w.meleeSwingMs });
+    }
+
+    if (isLocalPlayer(p)) updateHUDForPlayer(p);
+    inp.meleeDown = false;
+    return false; // block shooting this tick
   }
 
   function handleShooting(p, now) {
@@ -455,6 +533,7 @@
     state.players.host.input.sprint = enabledLocal && !!localInput.sprint;
     state.players.host.input.jump = enabledLocal && !!localInput.jump;
     state.players.host.input.fireDown = enabledLocal && !!localInput.fireDown;
+    state.players.host.input.meleeDown = enabledLocal && !!localInput.meleePressed;
     if (enabledLocal && localInput.reloadPressed) state.players.host.input.reloadPressed = true;
 
     sharedSetCrosshairBySprint(!!localInput.sprint, state.players.host.weapon.spreadRad, state.players.host.weapon.sprintSpreadRad);
@@ -481,6 +560,7 @@
     // survive rapid socket overwrites between ticks
     if (activeRound && (ri.jump || state._remoteJumpPending)) state.players.client.input.jump = true;
     state.players.client.input.fireDown = activeRound && !!ri.fireDown;
+    state.players.client.input.meleeDown = activeRound && !!ri.meleeDown;
     if (activeRound && (ri.reloadPressed || state._remoteReloadPending)) state.players.client.input.reloadPressed = true;
 
     if (!state.players.client || !state.players.client.input) return;
@@ -525,8 +605,10 @@
     remotePlayer._syncMeshPosition();
 
     var now = performance.now();
-    handleShooting(state.players.host, now);
-    handleShooting(state.players.client, now);
+    var hostCanShoot = handleMelee(state.players.host, now);
+    var clientCanShoot = handleMelee(state.players.client, now);
+    if (hostCanShoot && !_meleeSwingState.host.swinging) handleShooting(state.players.host, now);
+    if (clientCanShoot && !_meleeSwingState.client.swinging) handleShooting(state.players.client, now);
     handleReload(state.players.host, now);
     handleReload(state.players.client, now);
     state._remoteReloadPending = false;
@@ -745,6 +827,7 @@
           jump: !!input.jump,
           fireDown: !!input.fireDown,
           reloadPressed: !!input.reloadPressed,
+          meleeDown: !!input.meleePressed,
           forward: [forward.x, forward.y, forward.z],
           t: performance.now()
         });
@@ -918,6 +1001,19 @@
       setHUDVisible(false);
     });
 
+    socket.on('melee', function (payload) {
+      if (isHost) return;
+      if (!payload || !state) return;
+      var swingMs = payload.swingMs || 350;
+      // Play TP swing animation on the attacker's player mesh
+      var attacker = (payload.playerId === 'host') ? state.players.host : state.players.client;
+      if (attacker && attacker.triggerMeleeSwing) attacker.triggerMeleeSwing(swingMs);
+      // If the attacker is local player, also play FP animation
+      if (isLocalPlayer(attacker) && typeof window.triggerFPMeleeSwing === 'function') {
+        window.triggerFPMeleeSwing(swingMs);
+      }
+    });
+
     socket.on('shot', function (payload) {
       if (isHost) return;
       if (!payload || !Array.isArray(payload.o)) return;
@@ -1047,6 +1143,8 @@
     _lastSnapshotTime = 0;
     _remoteFrom = null;
     _remoteTo = null;
+    _meleeSwingState.host.swinging = false;
+    _meleeSwingState.client.swinging = false;
     window.multiplayerActive = false;
     state = null;
   };

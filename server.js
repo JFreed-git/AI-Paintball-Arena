@@ -185,7 +185,7 @@ function ensureHeroesDir() {
         { name: "legs", width: 0.5, height: 1.1, depth: 0.5, offsetY: 0.55, damageMultiplier: 0.75 }
       ],
       modelType: 'standard',
-      weapon: { cooldownMs: 166, magSize: 6, reloadTimeSec: 2.5, damage: 20, spreadRad: 0, sprintSpreadRad: 0.012, maxRange: 200, pellets: 1, projectileSpeed: 120, projectileGravity: 0, splashRadius: 0, scope: { type: 'scope', zoomFOV: 35, overlay: null, spreadMultiplier: 0.15 }, modelType: 'rifle', tracerColor: 0x66ffcc, crosshair: { style: 'cross', baseSpreadPx: 8, sprintSpreadPx: 20, color: '#00ffaa' }, abilities: [] },
+      weapon: { cooldownMs: 166, magSize: 6, reloadTimeSec: 2.5, damage: 20, spreadRad: 0, sprintSpreadRad: 0.012, maxRange: 200, pellets: 1, projectileSpeed: 120, projectileGravity: 0, splashRadius: 0, scope: { type: 'scope', zoomFOV: 35, overlay: null, spreadMultiplier: 0.15 }, modelType: 'rifle', tracerColor: 0x66ffcc, crosshair: { style: 'cross', baseSpreadPx: 8, sprintSpreadPx: 20, color: '#00ffaa' }, meleeDamage: 25, meleeRange: 2.0, meleeCooldownMs: 600, meleeSwingMs: 350, meleeUseHitMultiplier: true, abilities: [] },
       bodyParts: [
         { name: "head", shape: "sphere", radius: 0.25, offsetX: 0, offsetY: 1.6, offsetZ: 0, rotationX: 0, rotationY: 0, rotationZ: 0 },
         { name: "torso", shape: "cylinder", radius: 0.275, height: 0.9, offsetX: 0, offsetY: 1.1, offsetZ: 0, rotationX: 0, rotationY: 0, rotationZ: 0 }
@@ -201,7 +201,7 @@ function ensureHeroesDir() {
         { name: "legs", width: 0.55, height: 1.1, depth: 0.55, offsetY: 0.55, damageMultiplier: 0.75 }
       ],
       modelType: 'standard',
-      weapon: { cooldownMs: 600, magSize: 4, reloadTimeSec: 3.0, damage: 8, spreadRad: 0.06, sprintSpreadRad: 0.10, maxRange: 60, pellets: 8, projectileSpeed: 120, projectileGravity: 0, splashRadius: 0, scope: { type: 'ironsights', zoomFOV: 55, overlay: null, spreadMultiplier: 0.5 }, modelType: 'shotgun', tracerColor: 0xff8844, crosshair: { style: 'circle', baseSpreadPx: 24, sprintSpreadPx: 40, color: '#ff8844' }, abilities: [] },
+      weapon: { cooldownMs: 600, magSize: 4, reloadTimeSec: 3.0, damage: 8, spreadRad: 0.06, sprintSpreadRad: 0.10, maxRange: 60, pellets: 8, projectileSpeed: 120, projectileGravity: 0, splashRadius: 0, scope: { type: 'ironsights', zoomFOV: 55, overlay: null, spreadMultiplier: 0.5 }, modelType: 'shotgun', tracerColor: 0xff8844, crosshair: { style: 'circle', baseSpreadPx: 24, sprintSpreadPx: 40, color: '#ff8844' }, meleeDamage: 40, meleeRange: 3.0, meleeCooldownMs: 600, meleeSwingMs: 350, meleeUseHitMultiplier: true, abilities: [] },
       bodyParts: [
         { name: "head", shape: "sphere", radius: 0.275, offsetX: 0, offsetY: 1.6, offsetZ: 0, rotationX: 0, rotationY: 0, rotationZ: 0 },
         { name: "torso", shape: "cylinder", radius: 0.3, height: 0.9, offsetX: 0, offsetY: 1.1, offsetZ: 0, rotationX: 0, rotationY: 0, rotationZ: 0 }
@@ -335,6 +335,9 @@ io.on('connection', (socket) => {
     if (!room) return;
     socket.to(currentRoom).emit('heroSelect', payload);
   });
+
+  // Relay melee visual events from host to clients
+  relayHostEvent('melee');
 
   // Relay shot visual events from host to clients (for tracers)
   socket.on('shot', (payload) => {

@@ -44,6 +44,11 @@
     "projectileSpeed": 120,
     "projectileGravity": 0,
     "splashRadius": 0,
+    "meleeDamage": 60,
+    "meleeRange": 5,
+    "meleeCooldownMs": 600,
+    "meleeSwingMs": 500,
+    "meleeUseHitMultiplier": true,
     "scope": {
       "type": "ironsights",
       "zoomFOV": 55,

@@ -366,6 +366,58 @@
     }
   };
 
+  // --- Third-Person Melee Swing Animation ---
+
+  Player.prototype.triggerMeleeSwing = function (durationMs) {
+    if (!this._weaponAttachPoint) return;
+    var attach = this._weaponAttachPoint;
+    var origRot = { x: attach.rotation.x, y: attach.rotation.y, z: attach.rotation.z };
+
+    // Keyframes matching FP animation timing: [progress, rotOffset(x,y,z)]
+    var keys = [
+      [0.0,  0, 0, 0],
+      [0.2,  -0.1, 0, 0],
+      [0.5,  0.1, 0.5, 0.2],
+      [0.7,  0.05, 0.3, 0.1],
+      [1.0,  0, 0, 0]
+    ];
+
+    function hermite(t) { return t * t * (3 - 2 * t); }
+
+    function sampleKeyframes(progress) {
+      var a = keys[0], b = keys[keys.length - 1];
+      for (var i = 0; i < keys.length - 1; i++) {
+        if (progress >= keys[i][0] && progress <= keys[i + 1][0]) {
+          a = keys[i];
+          b = keys[i + 1];
+          break;
+        }
+      }
+      var span = b[0] - a[0];
+      var t = span > 0 ? hermite((progress - a[0]) / span) : 0;
+      return {
+        rx: a[1] + (b[1] - a[1]) * t,
+        ry: a[2] + (b[2] - a[2]) * t,
+        rz: a[3] + (b[3] - a[3]) * t
+      };
+    }
+
+    var startTime = performance.now();
+    function animateSwing() {
+      var elapsed = performance.now() - startTime;
+      var progress = Math.min(1, elapsed / durationMs);
+      var s = sampleKeyframes(progress);
+      attach.rotation.set(origRot.x + s.rx, origRot.y + s.ry, origRot.z + s.rz);
+
+      if (progress < 1) {
+        requestAnimationFrame(animateSwing);
+      } else {
+        attach.rotation.set(origRot.x, origRot.y, origRot.z);
+      }
+    }
+    requestAnimationFrame(animateSwing);
+  };
+
   // --- Mesh Rebuild ---
 
   Player.prototype.rebuildMesh = function () {

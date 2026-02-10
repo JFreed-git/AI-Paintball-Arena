@@ -453,6 +453,40 @@ class AIOpponent {
 
   // --- Helper: Shooting logic ---
 
+  _tryMelee(ctx) {
+    if (!ctx.playerPos) return false;
+    var now = performance.now();
+    var w = this.weapon;
+    if ((now - w.lastMeleeTime) < w.meleeCooldownMs) return false;
+    if (w.reloading) return false;
+
+    var dist = this.position.distanceTo(ctx.playerPos);
+    if (dist > w.meleeRange) return false;
+
+    var origin = this.eyePos;
+    var dir = ctx.playerPos.clone().sub(origin).normalize();
+
+    var meleeTargets = [];
+    if (ctx.playerSegments && ctx.playerSegments.length > 0) {
+      meleeTargets.push({ segments: ctx.playerSegments });
+    } else {
+      meleeTargets.push({ position: ctx.playerPos, radius: ctx.playerRadius || 0.35 });
+    }
+
+    var self = this;
+    sharedMeleeAttack(w, origin, dir, {
+      solids: this.arena.solids,
+      targets: meleeTargets,
+      onHit: function (target, point, dist, totalDamage) {
+        if (ctx.onPlayerHit) ctx.onPlayerHit(totalDamage);
+      }
+    });
+
+    // Play TP swing animation on AI's player mesh
+    if (this.player.triggerMeleeSwing) this.player.triggerMeleeSwing(w.meleeSwingMs);
+    return true;
+  }
+
   _tryShoot(ctx, hasLOS) {
     if (!hasLOS || this.weapon.reloading) return;
     var now = performance.now();
@@ -461,6 +495,9 @@ class AIOpponent {
     // Per-LOS-acquisition reaction delay: AI can't shoot until reaction time has passed
     // since it first gained line of sight (resets each time LOS is lost and regained)
     if ((now - this._losGainedTime) < this._currentReactionDelay * 1000) return;
+
+    // Try melee first if close enough
+    if (this._tryMelee(ctx)) return;
 
     if (canShoot && this.weapon.ammo > 0) {
       var origin = this.eyePos;

@@ -185,6 +185,71 @@
     updateHUD();
   };
 
+  // ── Melee ──
+  var _meleeSwinging = false;
+  var _meleeSwingEnd = 0;
+
+  function handleMelee(input, now) {
+    if (!state || !state.player || !state.player.alive) return;
+    var w = state.player.weapon;
+
+    if (_meleeSwinging) {
+      if (now >= _meleeSwingEnd) _meleeSwinging = false;
+      return;
+    }
+    if (!input.meleePressed) return;
+    if (w.reloading) return;
+    if ((now - w.lastMeleeTime) < w.meleeCooldownMs) return;
+
+    var dir = new THREE.Vector3();
+    camera.getWorldDirection(dir);
+
+    // Build melee targets from bots
+    var meleeTargets = [];
+    for (var bi = 0; bi < state.bots.length; bi++) {
+      var bot = state.bots[bi];
+      if (bot.alive && bot.player) {
+        meleeTargets.push({ segments: bot.player.getHitSegments(), entity: bot, type: 'bot' });
+      }
+    }
+    // Also include static targets
+    for (var ti = 0; ti < state.targets.length; ti++) {
+      var tgt = state.targets[ti];
+      var ht = tgt.getHitTarget();
+      if (ht) meleeTargets.push({ position: ht.position, radius: ht.radius, entity: tgt, type: 'target' });
+    }
+
+    sharedMeleeAttack(w, camera.position.clone(), dir, {
+      solids: state.arena.solids,
+      targets: meleeTargets,
+      onHit: function (target, point, dist, totalDamage) {
+        if (target.type === 'target') {
+          target.entity.onHit();
+        } else if (target.type === 'bot') {
+          target.entity.takeDamage(totalDamage);
+        } else if (typeof target.takeDamage === 'function') {
+          target.takeDamage(totalDamage);
+        }
+        state.stats.hits++;
+      }
+    });
+
+    state.stats.shots++;
+    // Check bot kills
+    for (var i = 0; i < state.bots.length; i++) {
+      if (!state.bots[i].alive && !state.bots[i]._countedKill) {
+        state.stats.kills++;
+        state.bots[i]._countedKill = true;
+      }
+    }
+
+    _meleeSwinging = true;
+    _meleeSwingEnd = now + w.meleeSwingMs;
+    if (typeof window.triggerFPMeleeSwing === 'function') window.triggerFPMeleeSwing(w.meleeSwingMs);
+    if (state.player.triggerMeleeSwing) state.player.triggerMeleeSwing(w.meleeSwingMs);
+    updateHUD();
+  }
+
   // ── Shooting ──
 
   function handlePlayerShooting(input, now) {
@@ -313,9 +378,10 @@
       state.targets[t].update();
     }
 
-    // Shooting
+    // Melee + Shooting
     var now = performance.now();
-    handlePlayerShooting(input, now);
+    handleMelee(input, now);
+    if (!_meleeSwinging) handlePlayerShooting(input, now);
     updateReload(now);
 
     // Update live projectiles (all entity hitboxes are now fresh)
@@ -458,6 +524,8 @@
     setCrosshairSpread(0);
     if (typeof clearFirstPersonWeapon === 'function') clearFirstPersonWeapon();
 
+    _meleeSwinging = false;
+    _meleeSwingEnd = 0;
     window.trainingRangeActive = false;
     if (showMenu) {
       try { document.exitPointerLock(); } catch (e) {}

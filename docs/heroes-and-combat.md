@@ -50,10 +50,32 @@ All weapons use visible traveling projectiles (`projectileSpeed: 120` m/s by def
 - Each game mode calls `updateProjectiles(dt)` in its tick function
 - LAN networking: host sends `{o, d, c, s, g}` (origin, direction, color, speed, gravity) for projectile shots; client spawns visual-only projectiles. Legacy hitscan format `{o, e, c}` still supported.
 
+### Melee System
+
+Every weapon has per-weapon melee stats. Press `V` to melee attack. Melee performs an instant forward raycast from eye position up to `meleeRange`, tested against target hit segments using the same `testHitSegments()` as projectile/hitscan. The weapon swings forward visually (both first-person and third-person), and the player cannot fire during the swing animation.
+
+**Weapon melee fields:**
+- `meleeDamage` (30) — base melee damage
+- `meleeRange` (2.5) — max melee reach in meters
+- `meleeCooldownMs` (600) — time between melee attacks
+- `meleeSwingMs` (350) — swing animation duration (also blocks firing)
+- `meleeUseHitMultiplier` (true) — whether segment damage multipliers apply (e.g., headshot 2x). When false, melee always does flat `meleeDamage`.
+
+**Flow per tick:**
+1. Check `meleePressed` + cooldown elapsed + not reloading + not already swinging
+2. Instant raycast forward for hit detection (uses `sharedMeleeAttack()` in `projectiles.js`)
+3. Apply damage: `meleeDamage * (meleeUseHitMultiplier ? segment.damageMultiplier : 1.0)`
+4. Start swing animation on FP weapon (`triggerFPMeleeSwing()` in `game.js`) + TP weapon (`Player.triggerMeleeSwing()` in `player.js`)
+5. Block firing until swing completes
+
+**AI melee:** The AI opponent (`aiOpponent.js`) checks melee range in `_tryShoot()` and melees instead of shooting when the player is within `weapon.meleeRange`.
+
+**LAN networking:** Host performs hit detection, applies damage, and emits `'melee'` event `{playerId, swingMs}` so the client plays the third-person swing animation on the attacker's Player mesh.
+
 ### Current Heroes
 
-- **Marksman** (id: `marksman`): 100 HP, 4.5/8.5 walk/sprint speed. Rifle with scope (35 FOV zoom, 0.15x spread multiplier when scoped). 6-round mag, 166ms cooldown, 20 damage, 120 m/s projectile speed. Hitbox: head (2x), torso (1x), legs (0.75x).
-- **Brawler** (id: `brawler`): 120 HP, 4.2/8.0 walk/sprint speed. 8-pellet shotgun with iron sights (55 FOV zoom). 4-round mag, 600ms cooldown, 13 damage per pellet, 0.06 base spread, 120 m/s projectile speed. Slightly wider hitbox segments.
+- **Marksman** (id: `marksman`): 100 HP, 4.5/8.5 walk/sprint speed. Rifle with scope (35 FOV zoom, 0.15x spread multiplier when scoped). 6-round mag, 166ms cooldown, 20 damage, 120 m/s projectile speed. Melee: 25 damage, 2.0m range. Hitbox: head (2x), torso (1x), legs (0.75x).
+- **Brawler** (id: `brawler`): 120 HP, 4.2/8.0 walk/sprint speed. 8-pellet shotgun with iron sights (55 FOV zoom). 4-round mag, 600ms cooldown, 13 damage per pellet, 0.06 base spread, 120 m/s projectile speed. Melee: 40 damage, 3.0m range. Slightly wider hitbox segments.
 
 ### Hero Application Flow
 
@@ -109,9 +131,14 @@ bodyParts: [
 - `abilities` ([]) — weapon-specific abilities
 - `fpOffset` ({x, y, z}) — optional first-person weapon position offset (default: `{0.28, -0.22, -0.45}`)
 - `fpRotation` ({x, y, z}) — optional first-person weapon rotation (default: `{0.05, -0.15, 0}`)
+- `meleeDamage` (30) — melee attack damage
+- `meleeRange` (2.5) — melee reach in meters
+- `meleeCooldownMs` (600) — time between melee attacks
+- `meleeSwingMs` (350) — swing animation duration (blocks firing)
+- `meleeUseHitMultiplier` (true) — apply segment damage multipliers to melee
 
 **Mutable state (reset each round):**
-- `ammo`, `reloading`, `reloadEnd`, `lastShotTime`
+- `ammo`, `reloading`, `reloadEnd`, `lastShotTime`, `lastMeleeTime`
 
 ## Key Files
 
@@ -123,7 +150,7 @@ bodyParts: [
 | `abilities.js` | `AbilityManager` — cooldown tracking, passive lookup; activation still TODO |
 | `heroSelectUI.js` | Card-based hero selection overlay, timed for competitive, untimed for training |
 | `player.js` | `Player` class — segmented hitbox, body parts mesh, weapon attachment, `rebuildMesh()` |
-| `projectiles.js` | `sharedFireWeapon()`, projectile spawning/updating, ray intersection per shape type |
+| `projectiles.js` | `sharedFireWeapon()`, `sharedMeleeAttack()`, projectile spawning/updating, ray intersection per shape type |
 | `aiOpponent.js` | 7-state AI with A* pathfinding, uses segmented hitboxes for shooting |
 | `crosshair.js` | Crosshair styles (cross/circle), spread rendering, sprint spread |
 | `hud.js` | Shared HUD — reload state machine, health bar, ammo display |

@@ -61,6 +61,13 @@
     // Area damage radius on impact. 0 = single-target only.
     this.splashRadius      = (opts.splashRadius !== undefined)      ? opts.splashRadius      : 0;
 
+    // --- Melee ---
+    this.meleeDamage         = (typeof opts.meleeDamage === 'number')         ? opts.meleeDamage         : 30;
+    this.meleeRange          = (typeof opts.meleeRange === 'number')          ? opts.meleeRange          : 2.5;
+    this.meleeCooldownMs     = (typeof opts.meleeCooldownMs === 'number')     ? opts.meleeCooldownMs     : 600;
+    this.meleeSwingMs        = (typeof opts.meleeSwingMs === 'number')        ? opts.meleeSwingMs        : 350;
+    this.meleeUseHitMultiplier = (opts.meleeUseHitMultiplier !== undefined)   ? !!opts.meleeUseHitMultiplier : true;
+
     // --- Scope / ADS (Aim Down Sights) ---
     // null = no ADS, or { type: 'scope'|'ironsights', zoomFOV: 30, overlay: null, spreadMultiplier: 0.2 }
     this.scope = opts.scope || null;
@@ -86,10 +93,11 @@
     this.abilities = opts.abilities || [];
 
     // --- Per-Instance Mutable State ---
-    this.ammo        = this.magSize;
-    this.reloading   = false;
-    this.reloadEnd   = 0;
+    this.ammo         = this.magSize;
+    this.reloading    = false;
+    this.reloadEnd    = 0;
     this.lastShotTime = 0;
+    this.lastMeleeTime = 0;
   }
 
   /**
@@ -97,10 +105,11 @@
    * Does NOT change static stats — those are defined by the weapon type.
    */
   Weapon.prototype.reset = function () {
-    this.ammo        = this.magSize;
-    this.reloading   = false;
-    this.reloadEnd   = 0;
+    this.ammo         = this.magSize;
+    this.reloading    = false;
+    this.reloadEnd    = 0;
     this.lastShotTime = 0;
+    this.lastMeleeTime = 0;
   };
 
   window.Weapon = Weapon;

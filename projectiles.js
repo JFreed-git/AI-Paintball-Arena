@@ -773,6 +773,76 @@
     _liveProjectiles.length = 0;
   }
 
+  // --- Melee Attack ---
+  // Instant forward raycast for melee hit detection.
+  // opts: { targets, solids, onHit }
+  // Returns { hit, target, point, damageMultiplier }
+  function sharedMeleeAttack(weapon, origin, dir, opts) {
+    opts = opts || {};
+    var maxDist = weapon.meleeRange || 2.5;
+    var solids = Array.isArray(opts.solids) ? opts.solids : [];
+    var targets = Array.isArray(opts.targets) ? opts.targets : [];
+    var onHit = opts.onHit || null;
+    var baseDamage = weapon.meleeDamage || 30;
+    var useMultiplier = (weapon.meleeUseHitMultiplier !== undefined) ? weapon.meleeUseHitMultiplier : true;
+
+    // Check wall block first — is there geometry closer than meleeRange?
+    var wallDist = maxDist;
+    try {
+      var raycaster = new THREE.Raycaster(origin, dir, 0, maxDist);
+      var worldHits = raycaster.intersectObjects(solids, true);
+      if (worldHits.length > 0) wallDist = worldHits[0].distance;
+    } catch (e) {}
+
+    // Test targets for closest hit before wall
+    var closestDist = wallDist;
+    var closestTarget = null;
+    var closestPoint = null;
+    var closestMultiplier = 1.0;
+
+    for (var t = 0; t < targets.length; t++) {
+      var tgt = targets[t];
+      if (!tgt) continue;
+      if (tgt.segments && tgt.segments.length > 0) {
+        var segResult = testHitSegments(origin, dir, tgt.segments, closestDist);
+        if (segResult.hit && segResult.distance < closestDist) {
+          closestDist = segResult.distance;
+          closestTarget = tgt;
+          closestPoint = segResult.point;
+          closestMultiplier = segResult.damageMultiplier;
+        }
+      } else if (tgt.position) {
+        var r = tgt.radius || 0.35;
+        if (rayHitsSphere(origin, dir, tgt.position, r, closestDist)) {
+          var d = tgt.position.clone().sub(origin).dot(dir);
+          if (d > 0 && d < closestDist) {
+            closestDist = d;
+            closestTarget = tgt;
+            closestPoint = origin.clone().add(dir.clone().multiplyScalar(d));
+            closestMultiplier = 1.0;
+          }
+        }
+      }
+    }
+
+    var dmgMult = useMultiplier ? closestMultiplier : 1.0;
+    var totalDamage = baseDamage * dmgMult;
+
+    if (closestTarget && onHit) {
+      onHit(closestTarget, closestPoint, closestDist, totalDamage, dmgMult);
+    }
+
+    weapon.lastMeleeTime = performance.now();
+
+    return {
+      hit: !!closestTarget,
+      target: closestTarget,
+      point: closestPoint,
+      damage: totalDamage,
+      damageMultiplier: dmgMult
+    };
+  }
+
   // Expose
   window.applySpread = applySpread;
   window.rayHitsSphere = rayHitsSphere;
@@ -788,4 +858,5 @@
   window.spawnVisualProjectile = spawnVisualProjectile;
   window.updateProjectiles = updateProjectiles;
   window.clearAllProjectiles = clearAllProjectiles;
+  window.sharedMeleeAttack = sharedMeleeAttack;
 })();
