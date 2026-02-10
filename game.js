@@ -133,6 +133,42 @@ function init() {
   } else {
     bindUI();
   }
+
+  // ── SplitView auto-start (iframe clients from dev workbench) ──
+  var urlParams = new URLSearchParams(window.location.search);
+  if (urlParams.get('splitView') === '1') {
+    window._splitViewMode = true;
+    document.body.classList.add('split-view-mode');
+    // Suppress alert() so join failures don't block retry loop
+    window.alert = function () {};
+
+    var autoHost = urlParams.get('autoHost');
+    var autoJoin = urlParams.get('autoJoin');
+    var mapName = urlParams.get('map') || '__default__';
+    var rounds = parseInt(urlParams.get('rounds'), 10) || 2;
+
+    if (autoHost) {
+      setTimeout(function () {
+        if (typeof hostLanGame === 'function') {
+          hostLanGame(autoHost, { roundsToWin: rounds }, mapName);
+        }
+      }, 500);
+    } else if (autoJoin) {
+      var joinAttempts = 0;
+      var maxAttempts = 10;
+      setTimeout(function tryJoin() {
+        // Stop retrying once connected
+        if (window.multiplayerActive) return;
+        joinAttempts++;
+        if (typeof joinLanGame === 'function') {
+          joinLanGame(autoJoin);
+        }
+        if (joinAttempts < maxAttempts) {
+          setTimeout(tryJoin, 1000);
+        }
+      }, 2000);
+    }
+  }
 }
 
 // ------- Main loop -------

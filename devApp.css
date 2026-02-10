@@ -1093,3 +1093,32 @@ body {
 .mb-align-guide {
     pointer-events: none;
 }
+
+/* ===== Split-Screen Iframes ===== */
+
+.ss-iframe {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 50%;
+    height: 100%;
+    border: none;
+}
+
+.ss-iframe-right {
+    left: 50%;
+}
+
+.ss-iframe-inactive {
+    opacity: 0.6;
+}
+
+#ssInputOverlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 200;
+    cursor: crosshair;
+}

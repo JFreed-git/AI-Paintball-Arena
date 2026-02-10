@@ -477,9 +477,11 @@
     state.players.client.input.moveX = activeRound ? (ri.moveX || 0) : 0;
     state.players.client.input.moveZ = activeRound ? (ri.moveZ || 0) : 0;
     state.players.client.input.sprint = activeRound && !!ri.sprint;
-    state.players.client.input.jump = activeRound && !!ri.jump;
+    // Use pending accumulators (set in socket handler) so one-shot flags
+    // survive rapid socket overwrites between ticks
+    if (activeRound && (ri.jump || state._remoteJumpPending)) state.players.client.input.jump = true;
     state.players.client.input.fireDown = activeRound && !!ri.fireDown;
-    if (activeRound && ri.reloadPressed) state.players.client.input.reloadPressed = true;
+    if (activeRound && (ri.reloadPressed || state._remoteReloadPending)) state.players.client.input.reloadPressed = true;
 
     if (!state.players.client || !state.players.client.input) return;
     if (ri.forward && Array.isArray(ri.forward) && ri.forward.length === 3) {
@@ -507,6 +509,9 @@
         { colliders: state.arena.colliders, solids: state.arena.solids },
         dt
       );
+      // Consume accumulated one-shot jump flag after physics uses it
+      inp.jump = false;
+      state._remoteJumpPending = false;
     })();
 
     // Sync client mesh/hitbox BEFORE shooting/projectiles so hitboxes are fresh
@@ -524,6 +529,7 @@
     handleShooting(state.players.client, now);
     handleReload(state.players.host, now);
     handleReload(state.players.client, now);
+    state._remoteReloadPending = false;
 
     // Update live projectiles (all entity hitboxes are now fresh)
     if (typeof updateProjectiles === 'function') updateProjectiles(dt);
@@ -623,13 +629,15 @@
           _predictedGrounded = serverGrounded;
           _predictedVVel = 0;
         } else {
-          // Smooth correction
+          // Smooth correction — lerp position toward server
           _predictedPos.lerp(serverPos, LERP_RATE);
           _predictedFeetY += (serverFeetY - _predictedFeetY) * LERP_RATE;
-          // Reconcile eye position Y with feet
           _predictedPos.y = _predictedFeetY + EYE_HEIGHT;
-          _predictedGrounded = serverGrounded;
-          if (serverGrounded) _predictedVVel = 0;
+          // Don't hard-set grounded/vVel from server snapshots here.
+          // Stale snapshots (sent before the host processes a jump input)
+          // would kill an in-progress predicted jump by zeroing vVel.
+          // Instead, let prediction physics derive grounded state from
+          // the lerped position — it self-corrects via ground detection.
         }
         camera.position.copy(_predictedPos);
       } else {
@@ -867,6 +875,11 @@
     socket.on('input', function (payload) {
       if (!isHost) return;
       if (!state || !state.players || !state.players.client) return;
+      // Accumulate one-shot flags before overwrite — socket events can arrive
+      // faster than host ticks, so {jump:true} would be lost if the next
+      // event overwrites with {jump:false} before the tick reads it.
+      if (payload && payload.jump) state._remoteJumpPending = true;
+      if (payload && payload.reloadPressed) state._remoteReloadPending = true;
       state.remoteInputLatest = payload || {};
     });
 

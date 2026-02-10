@@ -137,6 +137,7 @@
     window._heroSelectOpen = false;
     var overlay = document.getElementById('heroSelectOverlay');
     if (overlay) overlay.classList.add('hidden');
+    if (window._splitViewMode) return; // parent overlay owns pointer lock
     // Re-lock pointer
     if (typeof renderer !== 'undefined' && renderer && renderer.domElement && renderer.domElement.requestPointerLock) {
       renderer.domElement.requestPointerLock();
@@ -212,6 +213,11 @@
     var hintEl = document.getElementById('heroSelectHint');
     if (hintEl) hintEl.textContent = 'Click a hero to confirm your pick';
 
+    // Notify parent (dev workbench) that hero select opened so overlay passthrough activates
+    if (window._splitViewMode && window.parent !== window) {
+      window.parent.postMessage({ type: 'svHeroSelectOpen' }, '*');
+    }
+
     // Start countdown
     var remaining = seconds;
     if (_preRoundTimerRef) clearInterval(_preRoundTimerRef);
@@ -257,6 +263,12 @@
     window._heroSelectOpen = false;
     var overlay = document.getElementById('heroSelectOverlay');
     if (overlay) overlay.classList.add('hidden');
+
+    // Notify parent that hero select closed so overlay recaptures input
+    if (window._splitViewMode && window.parent !== window) {
+      window.parent.postMessage({ type: 'svHeroSelectClosed' }, '*');
+      return; // skip pointer lock — parent overlay owns it
+    }
 
     // Re-lock pointer
     if (typeof renderer !== 'undefined' && renderer && renderer.domElement && renderer.domElement.requestPointerLock) {
