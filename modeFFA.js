@@ -159,6 +159,14 @@
         if (!state) return;
         state.inputEnabled = true;
         state.match.roundActive = true;
+        // Kick AI bots into action now that round is active
+        var ids = Object.keys(state.players);
+        for (var j = 0; j < ids.length; j++) {
+          var e = state.players[ids[j]];
+          if (e && e.isAI && e.aiInstance) {
+            e.aiInstance._enterState('SPAWN_RUSH');
+          }
+        }
       }
     });
   }
