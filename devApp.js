@@ -336,13 +336,19 @@ function getPanelElementId(panelId) {
 
     // Hide menu builder preview
     var mbPreview = document.getElementById('mbPreviewContainer');
-    if (mbPreview) mbPreview.classList.add('hidden');
+    if (mbPreview) {
+      mbPreview.classList.add('hidden');
+      mbPreview.classList.remove('viewport-mode');
+    }
     var mbToolbar = document.getElementById('mbViewportToolbar');
     if (mbToolbar) mbToolbar.classList.add('hidden');
 
     // Hide audio manager viewport
     var amViewport = document.getElementById('amViewportContainer');
-    if (amViewport) amViewport.classList.add('hidden');
+    if (amViewport) {
+      amViewport.classList.add('hidden');
+      amViewport.classList.remove('viewport-mode');
+    }
 
     if (sidebar) sidebar.classList.remove('expanded');
     _prevExpandedPanel = null;
