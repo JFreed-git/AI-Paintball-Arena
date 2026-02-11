@@ -108,6 +108,33 @@ function getGroundHeight(pos, solids, feetY, grounded) {
   return bestY;
 }
 
+// Resolve ceiling collisions: when jumping upward, prevent head from entering blocks above.
+// Must run BEFORE resolveCollisions2D so the body band no longer overlaps ceiling blocks.
+function resolveCeilingCollisions(state, colliders) {
+  if (!colliders || colliders.length === 0) return;
+  if (state.verticalVelocity <= 0) return; // Only when moving upward
+
+  var radius = state.radius || 0.3;
+  var bandTop = state.feetY + EYE_HEIGHT + 0.2; // Match band max from resolveCollisions2D
+
+  for (var i = 0; i < colliders.length; i++) {
+    var box = colliders[i];
+
+    // Only blocks whose bottom face is between our body bottom and head
+    if (box.min.y <= state.feetY + 0.2) continue; // Block bottom at or below body bottom
+    if (box.min.y >= bandTop) continue;            // Block bottom above our head
+
+    // Check XZ overlap (same expansion as resolveCollisions2D)
+    if (state.position.x < box.min.x - radius || state.position.x > box.max.x + radius) continue;
+    if (state.position.z < box.min.z - radius || state.position.z > box.max.z + radius) continue;
+
+    // Ceiling hit: push player down so head clears block bottom (with epsilon)
+    state.feetY = box.min.y - EYE_HEIGHT - 0.2 - 1e-3;
+    state.verticalVelocity = 0;
+    bandTop = state.feetY + EYE_HEIGHT + 0.2; // Update for remaining colliders
+  }
+}
+
 // Resolve collisions against an array of AABBs (THREE.Box3) in XZ plane with sliding.
 // position: THREE.Vector3 (modified in-place)
 // radius: number (capsule radius approximation)
@@ -215,12 +242,17 @@ function updateFullPhysics(state, input, arena, dt) {
     }
   }
 
-  // 7. Resolve 2D collisions with dynamic feetY
+  // 7. Ceiling collision check (prevent head from entering blocks when jumping)
+  if (arena && Array.isArray(arena.colliders)) {
+    resolveCeilingCollisions(state, arena.colliders);
+  }
+
+  // 8. Resolve 2D collisions with dynamic feetY
   if (arena && Array.isArray(arena.colliders)) {
     resolveCollisions2D(state.position, state.radius || 0.3, arena.colliders, state.feetY);
   }
 
-  // 8. Recheck ground after collision push-out (may have been pushed to different XZ)
+  // 9. Recheck ground after collision push-out (may have been pushed to different XZ)
   var groundH2 = getGroundHeight(state.position, solids, state.feetY, state.grounded);
   if (state.grounded) {
     if (groundH2 < state.feetY - MAX_STEP_HEIGHT) {
@@ -231,7 +263,7 @@ function updateFullPhysics(state, input, arena, dt) {
     }
   }
 
-  // 9. Set eye-height position
+  // 10. Set eye-height position
   state.position.y = state.feetY + EYE_HEIGHT;
 }
 
