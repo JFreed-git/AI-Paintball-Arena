@@ -110,8 +110,8 @@ function getGroundHeight(pos, solids, feetY, grounded) {
 
 // Resolve ceiling collisions: when jumping upward, prevent head from entering blocks above.
 // Must run BEFORE resolveCollisions2D so the body band no longer overlaps ceiling blocks.
-// Only resolves as ceiling when the player is centered under the block (true ceiling hit).
-// Side collisions while jumping are left for resolveCollisions2D to handle horizontally.
+// Only resolves as ceiling when the player is inside the block's actual footprint (not just
+// clipping the edge — that's a side collision for the XZ resolver to handle).
 function resolveCeilingCollisions(state, colliders) {
   if (!colliders || colliders.length === 0) return;
   if (state.verticalVelocity <= 0) return; // Only when moving upward
@@ -135,17 +135,15 @@ function resolveCeilingCollisions(state, colliders) {
     if (state.position.x < exMinX || state.position.x > exMaxX) continue;
     if (state.position.z < exMinZ || state.position.z > exMaxZ) continue;
 
-    // Compare penetration depths: vertical (head into block bottom) vs horizontal
-    var vertPen = headY - box.min.y;
+    // Determine if this is a side collision or a ceiling collision.
+    // If the player is only within the radius-expansion zone (not inside the actual
+    // block footprint), they're clipping the edge — that's a side collision.
     var penLeft = state.position.x - exMinX;
     var penRight = exMaxX - state.position.x;
     var penFront = state.position.z - exMinZ;
     var penBack = exMaxZ - state.position.z;
     var minHorizPen = Math.min(penLeft, penRight, penFront, penBack);
-
-    // Only resolve as ceiling if player is centered under block.
-    // If horizontal penetration is smaller, it's a side collision — skip.
-    if (vertPen > minHorizPen) continue;
+    if (minHorizPen <= radius) continue; // Edge clip — side collision, skip
 
     // Ceiling hit: push player down so head clears block bottom
     state.feetY = box.min.y - EYE_HEIGHT - 1e-3;
