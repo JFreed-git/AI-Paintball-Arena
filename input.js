@@ -65,7 +65,7 @@ function bindPlayerControls(renderer) {
     // Click canvas to acquire pointer lock when a game mode is active
     renderer.domElement.addEventListener('click', function () {
       if (window._splitViewMode) return; // parent overlay handles lock
-      var anyActive = window.paintballActive || window.multiplayerActive || window.trainingRangeActive || window._splitScreenActive;
+      var anyActive = window.paintballActive || window.multiplayerActive || window.trainingRangeActive || window.ffaActive || window._splitScreenActive;
       if (!anyActive) return;
       if (window._heroSelectOpen || window.devConsoleOpen) return;
       if (document.pointerLockElement === renderer.domElement) return; // already locked
@@ -81,7 +81,7 @@ function bindPlayerControls(renderer) {
 
 function onMouseMove(event) {
   if (window._splitScreenActive) return; // iframes handle their own mouse via postMessage
-  if (!window.paintballActive && !window.multiplayerActive && !window.trainingRangeActive) return;
+  if (!window.paintballActive && !window.multiplayerActive && !window.trainingRangeActive && !window.ffaActive) return;
   if (window._heroSelectOpen) return;
 
   // Raycasting mouse coords (kept for completeness)
@@ -139,6 +139,10 @@ function onPointerLockChange() {
         try { if (typeof stopMultiplayerInternal === 'function') stopMultiplayerInternal(); } catch {}
         showOnlyMenu('mainMenu');
         setHUDVisible(false);
+      } else if (window.ffaActive) {
+        try { if (typeof stopFFAInternal === 'function') stopFFAInternal(); } catch {}
+        showOnlyMenu('mainMenu');
+        setHUDVisible(false);
       } else if (window.trainingRangeActive) {
         try { if (typeof stopTrainingRangeInternal === 'function') stopTrainingRangeInternal(); } catch {}
         showOnlyMenu('mainMenu');
@@ -159,11 +163,24 @@ function onGlobalKeyDown(e) {
       try { if (typeof stopPaintballInternal === 'function') stopPaintballInternal(); } catch {}
     } else if (window.multiplayerActive) {
       try { if (typeof stopMultiplayerInternal === 'function') stopMultiplayerInternal(); } catch {}
+    } else if (window.ffaActive) {
+      try { if (typeof stopFFAInternal === 'function') stopFFAInternal(); } catch {}
     } else if (window.trainingRangeActive) {
       try { if (typeof stopTrainingRangeInternal === 'function') stopTrainingRangeInternal(); } catch {}
     }
     showOnlyMenu('mainMenu');
     setHUDVisible(false);
+    return;
+  }
+
+  // Tab key: show FFA scoreboard while held
+  if (e.code === 'Tab') {
+    e.preventDefault();
+    if (window.ffaActive) {
+      var sb = document.getElementById('scoreboardOverlay');
+      if (sb) sb.classList.remove('hidden');
+      if (typeof window.updateFFAScoreboard === 'function') window.updateFFAScoreboard();
+    }
     return;
   }
 
@@ -184,6 +201,14 @@ function onGlobalKeyUp(e) {
   if (window.editorActive) return;
   if (window._splitViewMode) return;
   if (window._splitScreenActive) return;
+
+  // Tab release: hide FFA scoreboard
+  if (e.code === 'Tab') {
+    var sb = document.getElementById('scoreboardOverlay');
+    if (sb) sb.classList.add('hidden');
+    return;
+  }
+
   switch (e.code) {
     case 'KeyW': _w = false; recomputeMoveAxes(); break;
     case 'KeyA': _a = false; recomputeMoveAxes(); break;
