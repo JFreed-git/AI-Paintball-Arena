@@ -300,10 +300,34 @@
         playerPos: fallbackPos,
         playerSegments: [],
         playerEntity: null,
-        onPlayerHit: function (aiId) {
-          return function (damage) {
-            // AI damage is handled via sharedFireWeapon/sharedMeleeAttack callbacks
-            // which already call takeDamage on the target entity
+        onPlayerHit: function (shooterId) {
+          return function (damage, hitEntity) {
+            // Find victim by matching the hit entity to a player entry
+            var victimId = null;
+            var victimEntry = null;
+            var pids = Object.keys(state.players);
+            for (var j = 0; j < pids.length; j++) {
+              if (state.players[pids[j]].entity === hitEntity) {
+                victimId = pids[j];
+                victimEntry = state.players[pids[j]];
+                break;
+              }
+            }
+            if (!victimEntry || !victimEntry.entity || !victimEntry.entity.alive) return;
+            if (window.devGodMode && victimId === state.localId) return;
+
+            victimEntry.entity.takeDamage(damage);
+            if (victimId === state.localId) {
+              if (typeof playGameSound === 'function') playGameSound('damage_taken');
+              updateHUDForLocalPlayer();
+            }
+
+            if (state.match.roundActive && !victimEntry.entity.alive) {
+              victimEntry.alive = false;
+              victimEntry.respawnAt = performance.now() + RESPAWN_DELAY_MS;
+              if (typeof playGameSound === 'function') playGameSound('elimination');
+              recordKill(shooterId, victimId, state.players[shooterId] && state.players[shooterId].aiInstance ? state.players[shooterId].aiInstance.weapon.modelType || 'gun' : 'gun');
+            }
           };
         }(id)
       };
@@ -1587,11 +1611,13 @@
         clearTimeout(state.heroSelectTimerRef.id);
         state.heroSelectTimerRef.id = 0;
       }
-      // Destroy all player instances
+      // Destroy all player instances (including AI opponents)
       var ids = Object.keys(state.players);
       for (var i = 0; i < ids.length; i++) {
         var entry = state.players[ids[i]];
-        if (entry && entry.entity) {
+        if (entry && entry.aiInstance) {
+          try { entry.aiInstance.destroy(); } catch (e) { console.warn('ffa: ai.destroy failed:', e); }
+        } else if (entry && entry.entity) {
           try { entry.entity.destroy(); } catch (e) { console.warn('ffa: player.destroy failed:', e); }
         }
       }

@@ -510,7 +510,7 @@ class AIOpponent {
       solids: this.arena.solids,
       targets: meleeTargets,
       onHit: function (target, point, dist, totalDamage) {
-        if (ctx.onPlayerHit) ctx.onPlayerHit(totalDamage);
+        if (ctx.onPlayerHit) ctx.onPlayerHit(totalDamage, ctx.playerEntity);
       }
     });
 
@@ -553,7 +553,7 @@ class AIOpponent {
         projectileTargetEntities: aiTargetEntities,
         tracerColor: 0xff6666,
         onHit: function (target, point, dist, pelletIdx, damageMultiplier) {
-          if (ctx.onPlayerHit) ctx.onPlayerHit(self.weapon.damage * (damageMultiplier || 1.0));
+          if (ctx.onPlayerHit) ctx.onPlayerHit(self.weapon.damage * (damageMultiplier || 1.0), ctx.playerEntity);
         }
       });
       if (result.magazineEmpty) {
