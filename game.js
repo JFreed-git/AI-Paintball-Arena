@@ -214,25 +214,73 @@ function init() {
     var autoJoin = urlParams.get('autoJoin');
     var mapName = urlParams.get('map') || '__default__';
     var rounds = parseInt(urlParams.get('rounds'), 10) || 2;
+    var heroId = urlParams.get('hero') || '';
 
     if (autoHost) {
       setTimeout(function () {
-        if (typeof hostLanGame === 'function') {
-          hostLanGame(autoHost, { roundsToWin: rounds }, mapName);
-        }
+        if (typeof io !== 'function' || typeof startFFAHost !== 'function') return;
+        var sock = io();
+        var settings = { killLimit: 10, maxPlayers: 8, mapName: mapName, rounds: rounds };
+        sock.emit('createRoom', autoHost, settings, function (res) {
+          if (!res || !res.ok) { console.warn('splitView: createRoom failed', res); return; }
+          startFFAHost(autoHost, settings, sock);
+          // Apply hero selection to host player
+          if (heroId && typeof applyHeroToPlayer === 'function' && typeof getFFAState === 'function') {
+            var st = getFFAState();
+            if (st && st.localId && st.players[st.localId]) {
+              applyHeroToPlayer(st.players[st.localId].entity, heroId);
+              st.players[st.localId].heroId = heroId;
+            }
+          }
+          // Auto-start round when first client joins
+          sock.once('clientJoined', function () {
+            setTimeout(function () {
+              if (typeof startFFARound === 'function') startFFARound();
+            }, 500);
+          });
+        });
       }, 500);
     } else if (autoJoin) {
-      var joinAttempts = 0;
-      var maxAttempts = 10;
-      setTimeout(function tryJoin() {
-        // Stop retrying once connected
-        if (window.multiplayerActive) return;
-        joinAttempts++;
-        if (typeof joinLanGame === 'function') {
-          joinLanGame(autoJoin);
-        }
-        if (joinAttempts < maxAttempts) {
-          setTimeout(tryJoin, 1000);
+      setTimeout(function () {
+        if (typeof io !== 'function' || typeof joinFFAGame !== 'function') return;
+        var sock = io();
+        sock.emit('joinRoom', autoJoin, function (res) {
+          if (!res || !res.ok) {
+            // Retry — host room may not exist yet
+            var retries = 0;
+            var retryTimer = setInterval(function () {
+              if (window.ffaActive) { clearInterval(retryTimer); return; }
+              retries++;
+              if (retries >= 10) { clearInterval(retryTimer); return; }
+              sock.emit('joinRoom', autoJoin, function (r) {
+                if (r && r.ok) {
+                  clearInterval(retryTimer);
+                  finishJoin(r);
+                }
+              });
+            }, 1000);
+            return;
+          }
+          finishJoin(res);
+        });
+        function finishJoin(res) {
+          var clientSettings = res.settings || {};
+          if (!clientSettings.mapName) clientSettings.mapName = mapName;
+          joinFFAGame(autoJoin, sock, clientSettings);
+          // Apply hero selection to client player
+          if (heroId) {
+            setTimeout(function () {
+              if (typeof applyHeroToPlayer === 'function' && typeof getFFAState === 'function') {
+                var st = getFFAState();
+                if (st && st.localId && st.players[st.localId]) {
+                  applyHeroToPlayer(st.players[st.localId].entity, heroId);
+                  st.players[st.localId].heroId = heroId;
+                }
+              }
+              // Tell host about hero choice (include clientId for server relay)
+              sock.emit('heroSelect', { heroId: heroId, clientId: sock.id });
+            }, 100);
+          }
         }
       }, 2000);
     }
