@@ -435,13 +435,12 @@ io.on('connection', (socket) => {
     io.to(roomId || currentRoom).emit('playerList', buildPlayerList(room));
   });
 
-  // Host starts the game — validates at least 2 players and all non-host players ready
+  // Host starts the game — solo start allowed (AI bots are client-side)
   socket.on('startGame', (roomId, ack) => {
     const rid = roomId || currentRoom;
     const room = rooms.get(rid);
     if (!room) return typeof ack === 'function' && ack({ ok: false, error: 'Room not found' });
     if (socket.id !== room.hostId) return typeof ack === 'function' && ack({ ok: false, error: 'Only host can start' });
-    if (room.players.size < 2) return typeof ack === 'function' && ack({ ok: false, error: 'Need at least 2 players' });
     var allReady = true;
     room.players.forEach(function (id) {
       if (id !== room.hostId && !room.readyState.get(id)) allReady = false;
