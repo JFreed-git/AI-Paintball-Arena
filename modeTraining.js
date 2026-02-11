@@ -73,12 +73,10 @@
         var cx = grp.position.x;
         var headY = grp.position.y + 1.0 + TARGET_RADIUS;
         var cz = grp.position.z;
-        var r = TARGET_RADIUS;
         return [{
-          box: new THREE.Box3(
-            new THREE.Vector3(cx - r, headY - r, cz - r),
-            new THREE.Vector3(cx + r, headY + r, cz + r)
-          ),
+          shape: 'sphere',
+          center: new THREE.Vector3(cx, headY, cz),
+          radius: TARGET_RADIUS,
           damageMultiplier: 1.0,
           name: 'head'
         }];
