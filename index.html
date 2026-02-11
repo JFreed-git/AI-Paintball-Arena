@@ -126,6 +126,61 @@
             </div>
         </div>
 
+        <div id="lobbyMenu" class="menu-screen hidden">
+            <div class="lobby-header">
+                <h2>FFA Lobby</h2>
+                <div class="lobby-room-id">Room: <span id="lobbyRoomId">---</span></div>
+            </div>
+            <div class="lobby-body">
+                <div class="lobby-players">
+                    <h3>Players</h3>
+                    <div id="lobbyPlayerList">
+                        <div class="player-row empty-slot"><span class="player-name">Open Slot</span></div>
+                        <div class="player-row empty-slot"><span class="player-name">Open Slot</span></div>
+                        <div class="player-row empty-slot"><span class="player-name">Open Slot</span></div>
+                        <div class="player-row empty-slot"><span class="player-name">Open Slot</span></div>
+                        <div class="player-row empty-slot"><span class="player-name">Open Slot</span></div>
+                        <div class="player-row empty-slot"><span class="player-name">Open Slot</span></div>
+                        <div class="player-row empty-slot"><span class="player-name">Open Slot</span></div>
+                        <div class="player-row empty-slot"><span class="player-name">Open Slot</span></div>
+                    </div>
+                </div>
+                <div class="lobby-settings host-only">
+                    <h3>Match Settings</h3>
+                    <div class="field">
+                        <label>Map
+                            <select id="lobbyMapSelect">
+                                <option value="__default__" selected>Default Arena</option>
+                            </select>
+                        </label>
+                    </div>
+                    <div class="field">
+                        <label>Kill Limit
+                            <input type="number" id="lobbyKillLimit" min="5" max="50" step="5" value="10" />
+                        </label>
+                    </div>
+                    <div class="field">
+                        <label>Max Players
+                            <select id="lobbyMaxPlayers">
+                                <option value="2">2</option>
+                                <option value="3">3</option>
+                                <option value="4">4</option>
+                                <option value="5">5</option>
+                                <option value="6">6</option>
+                                <option value="7">7</option>
+                                <option value="8" selected>8</option>
+                            </select>
+                        </label>
+                    </div>
+                </div>
+            </div>
+            <div class="lobby-actions">
+                <button id="lobbyReadyBtn" class="lobby-ready">Ready</button>
+                <button id="lobbyStartBtn" class="host-only lobby-start">Start Game</button>
+                <button id="lobbyBackBtn" class="secondary">Back</button>
+            </div>
+        </div>
+
         <div id="resultMenu" class="menu hidden">
             <h2>Session Complete</h2>
             <p style="text-align:center;margin:10px 0 20px;">Final Score: <strong><span id="finalScore">0</span></strong></p>
@@ -146,6 +201,57 @@
             <div id="heroSelectTimer" class="hidden">15</div>
             <div id="heroSelectWaiting" class="hidden">Waiting for opponent...</div>
             <div id="heroSelectHint">Press H to close</div>
+        </div>
+
+        <!-- Scoreboard Overlay (shown when Tab held during FFA gameplay) -->
+        <div id="scoreboardOverlay" class="hidden">
+            <div id="scoreboardTitle">SCOREBOARD</div>
+            <div id="scoreboardTable">
+                <div class="scoreboard-header">
+                    <span class="sb-rank">#</span>
+                    <span class="sb-player">Player</span>
+                    <span class="sb-hero">Hero</span>
+                    <span class="sb-kills">Kills</span>
+                    <span class="sb-deaths">Deaths</span>
+                    <span class="sb-score">Score</span>
+                </div>
+                <div id="scoreboardRows">
+                    <!-- JS populates rows here. Each row structure:
+                    <div class="scoreboard-row [sb-local]">
+                        <span class="sb-rank">1</span>
+                        <span class="sb-player">PlayerName</span>
+                        <span class="sb-hero">Marksman</span>
+                        <span class="sb-kills">5</span>
+                        <span class="sb-deaths">2</span>
+                        <span class="sb-score">500</span>
+                    </div>
+                    Use .sb-local class to highlight the local player's row.
+                    -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Post-Match Results (shown after FFA match ends) -->
+        <div id="postMatchResults" class="menu-screen hidden">
+            <h2 id="postMatchHeader">Match Over</h2>
+            <div id="postMatchWinner"></div>
+            <div id="postMatchScoreboard">
+                <div class="scoreboard-header">
+                    <span class="sb-rank">#</span>
+                    <span class="sb-player">Player</span>
+                    <span class="sb-hero">Hero</span>
+                    <span class="sb-kills">Kills</span>
+                    <span class="sb-deaths">Deaths</span>
+                    <span class="sb-score">Score</span>
+                </div>
+                <div id="postMatchRows">
+                    <!-- JS populates final scoreboard rows here (same structure as scoreboardRows) -->
+                </div>
+            </div>
+            <div class="actions">
+                <button id="postMatchToLobby">Back to Lobby</button>
+                <button id="postMatchToMenu" class="secondary">Back to Menu</button>
+            </div>
         </div>
 
         <div id="devConsole" class="hidden">

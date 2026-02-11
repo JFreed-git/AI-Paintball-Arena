@@ -1069,3 +1069,174 @@ body.split-view-mode .menu {
     white-space: nowrap;
     display: none;
 }
+
+/* ── Scoreboard Overlay (Tab-key during FFA) ── */
+#scoreboardOverlay {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    z-index: 550;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.7);
+    backdrop-filter: blur(4px);
+    pointer-events: none;
+}
+
+#scoreboardOverlay.hidden {
+    display: none;
+}
+
+#scoreboardTitle {
+    font-size: 20px;
+    font-weight: 800;
+    color: #fff;
+    letter-spacing: 3px;
+    margin-bottom: 16px;
+    text-shadow: 0 0 10px rgba(0, 255, 136, 0.4);
+}
+
+#scoreboardTable,
+#postMatchScoreboard {
+    width: 60%;
+    max-width: 700px;
+    min-width: 400px;
+}
+
+.scoreboard-header {
+    display: flex;
+    align-items: center;
+    padding: 8px 12px;
+    background: rgba(0, 255, 136, 0.1);
+    border: 1px solid rgba(0, 255, 136, 0.25);
+    border-radius: 6px 6px 0 0;
+    font-size: 11px;
+    font-weight: bold;
+    color: #00ff88;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.scoreboard-header .sb-rank { width: 40px; text-align: center; }
+.scoreboard-header .sb-player { flex: 1; }
+.scoreboard-header .sb-hero { width: 100px; }
+.scoreboard-header .sb-kills { width: 60px; text-align: center; }
+.scoreboard-header .sb-deaths { width: 60px; text-align: center; }
+.scoreboard-header .sb-score { width: 70px; text-align: center; }
+
+.scoreboard-row {
+    display: flex;
+    align-items: center;
+    padding: 8px 12px;
+    border-left: 1px solid rgba(255, 255, 255, 0.06);
+    border-right: 1px solid rgba(255, 255, 255, 0.06);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    font-size: 13px;
+    color: #ccc;
+}
+
+.scoreboard-row:nth-child(odd) {
+    background: rgba(20, 20, 20, 0.8);
+}
+
+.scoreboard-row:nth-child(even) {
+    background: rgba(10, 10, 10, 0.8);
+}
+
+.scoreboard-row:last-child {
+    border-radius: 0 0 6px 6px;
+}
+
+.scoreboard-row.sb-local {
+    background: rgba(0, 255, 136, 0.08);
+    border-left: 2px solid #00ff88;
+    color: #fff;
+}
+
+.scoreboard-row .sb-rank { width: 40px; text-align: center; font-weight: bold; color: #888; }
+.scoreboard-row .sb-player { flex: 1; font-weight: bold; }
+.scoreboard-row .sb-hero { width: 100px; color: #aaa; font-size: 12px; }
+.scoreboard-row .sb-kills { width: 60px; text-align: center; }
+.scoreboard-row .sb-deaths { width: 60px; text-align: center; color: #888; }
+.scoreboard-row .sb-score { width: 70px; text-align: center; font-weight: bold; color: #00ff88; }
+
+.scoreboard-row.sb-local .sb-rank { color: #00ff88; }
+
+/* ── Post-Match Results Screen ── */
+#postMatchResults {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 550px;
+    max-width: 90vw;
+    background: rgba(10, 10, 10, 0.92);
+    padding: 28px 24px;
+    border-radius: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.7);
+    z-index: 500;
+}
+
+#postMatchResults.hidden {
+    display: none;
+}
+
+#postMatchHeader {
+    font-size: 26px;
+    margin-bottom: 8px;
+    text-align: center;
+    color: #fff;
+    letter-spacing: 2px;
+}
+
+#postMatchWinner {
+    text-align: center;
+    font-size: 16px;
+    color: #00ff88;
+    font-weight: bold;
+    margin-bottom: 20px;
+    text-shadow: 0 0 8px rgba(0, 255, 136, 0.4);
+}
+
+#postMatchScoreboard {
+    width: 100%;
+    margin-bottom: 20px;
+}
+
+#postMatchResults .actions {
+    display: flex;
+    gap: 12px;
+    justify-content: center;
+}
+
+#postMatchResults .actions button {
+    padding: 10px 16px;
+    background: #00ff88;
+    color: #000;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-weight: bold;
+    transition: background 0.2s ease, transform 0.05s ease;
+    min-width: 120px;
+}
+
+#postMatchResults .actions button:hover {
+    background: #00d977;
+}
+
+#postMatchResults .actions button:active {
+    transform: translateY(1px);
+}
+
+#postMatchResults .actions button.secondary {
+    background: transparent;
+    color: #fff;
+    border: 1px solid #555;
+}
+
+#postMatchResults .actions button.secondary:hover {
+    background: rgba(255, 255, 255, 0.06);
+}
