@@ -55,7 +55,8 @@
                 <span id="fovValue">75</span>
             </div>
             <div class="actions">
-                <button id="gotoPaintball">Play Paintball</button>
+                <button id="gotoFFA">FFA Match</button>
+                <button id="gotoPaintball">Quick 1v1</button>
                 <button id="gotoLAN">Play LAN</button>
                 <button id="gotoTraining">Training Range</button>
             </div>
@@ -123,6 +124,20 @@
                 <button id="hostLanBtn">Host LAN Game</button>
                 <button id="joinLanBtn" class="secondary">Join LAN Game</button>
                 <button id="backFromLAN" class="secondary">Back</button>
+            </div>
+        </div>
+
+        <div id="ffaMenu" class="menu hidden">
+            <h2>FFA Match</h2>
+            <div class="field">
+                <label>Room ID
+                    <input type="text" id="ffaRoomId" placeholder="Leave blank to create" />
+                </label>
+            </div>
+            <div class="actions">
+                <button id="ffaCreateBtn">Create Match</button>
+                <button id="ffaJoinBtn" class="secondary">Join Match</button>
+                <button id="backFromFFA" class="secondary">Back</button>
             </div>
         </div>
 

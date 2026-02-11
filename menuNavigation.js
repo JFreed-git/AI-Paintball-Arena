@@ -226,25 +226,29 @@ function bindLobbyUI() {
   var lobbyStartBtn = document.getElementById('lobbyStartBtn');
   var lobbyBackBtn = document.getElementById('lobbyBackBtn');
 
-  // Add FFA button to main menu (if not already present)
-  var mainActions = document.querySelector('#mainMenu .actions');
-  if (mainActions && !document.getElementById('gotoFFA')) {
-    var ffaBtn = document.createElement('button');
-    ffaBtn.id = 'gotoFFA';
-    ffaBtn.textContent = 'Play FFA';
-    // Insert after the LAN button
-    var lanBtn = document.getElementById('gotoLAN');
-    if (lanBtn && lanBtn.nextSibling) {
-      mainActions.insertBefore(ffaBtn, lanBtn.nextSibling);
-    } else {
-      mainActions.appendChild(ffaBtn);
-    }
-    ffaBtn.addEventListener('click', function () {
-      showOnlyMenu('lobbyMenu');
-      populateMapDropdown('lobbyMapSelect');
-      lobbyShowAsHost();
-    });
-  }
+  // FFA sub-menu navigation
+  var gotoFFA = document.getElementById('gotoFFA');
+  var backFromFFA = document.getElementById('backFromFFA');
+  var ffaCreateBtn = document.getElementById('ffaCreateBtn');
+  var ffaJoinBtn = document.getElementById('ffaJoinBtn');
+
+  if (gotoFFA) gotoFFA.addEventListener('click', function () {
+    showOnlyMenu('ffaMenu');
+  });
+  if (backFromFFA) backFromFFA.addEventListener('click', function () {
+    showOnlyMenu('mainMenu');
+  });
+  if (ffaCreateBtn) ffaCreateBtn.addEventListener('click', function () {
+    showOnlyMenu('lobbyMenu');
+    populateMapDropdown('lobbyMapSelect');
+    lobbyShowAsHost();
+  });
+  if (ffaJoinBtn) ffaJoinBtn.addEventListener('click', function () {
+    var roomIdEl = document.getElementById('ffaRoomId');
+    var roomId = roomIdEl ? String(roomIdEl.value || '').trim() : '';
+    if (!roomId) { alert('Please enter a Room ID to join'); return; }
+    window.lobbyJoinRoom(roomId);
+  });
 
   // Ready button
   if (lobbyReadyBtn) {
@@ -494,6 +498,7 @@ function generateRoomId() {
     id += chars.charAt(Math.floor(Math.random() * chars.length));
   }
   return id;
+}
 
 function setHUDVisible(visible) {
   const ui = document.getElementById('ui');

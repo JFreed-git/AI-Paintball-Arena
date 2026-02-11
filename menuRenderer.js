@@ -55,24 +55,31 @@
           style: {}
         },
         {
-          uid: 'mm_4', type: 'button', text: 'Play Paintball',
+          uid: 'mm_4', type: 'button', text: 'FFA Match',
+          elementId: 'gotoFFA', variant: 'primary',
+          action: 'showMenu:ffaMenu',
+          x: 12, y: 172, width: 92, height: 40,
+          style: {}
+        },
+        {
+          uid: 'mm_5', type: 'button', text: 'Quick 1v1',
           elementId: 'gotoPaintball', variant: 'primary',
           action: 'showMenu:paintballMenu',
-          x: 12, y: 172, width: 130, height: 40,
+          x: 114, y: 172, width: 92, height: 40,
           style: {}
         },
         {
-          uid: 'mm_5', type: 'button', text: 'Play LAN',
+          uid: 'mm_6', type: 'button', text: 'Play LAN',
           elementId: 'gotoLAN', variant: 'primary',
           action: 'showMenu:lanMenu',
-          x: 152, y: 172, width: 116, height: 40,
+          x: 216, y: 172, width: 92, height: 40,
           style: {}
         },
         {
-          uid: 'mm_6', type: 'button', text: 'Training Range',
+          uid: 'mm_7', type: 'button', text: 'Training',
           elementId: 'gotoTraining', variant: 'primary',
           action: 'showMenu:trainingMenu',
-          x: 278, y: 172, width: 130, height: 40,
+          x: 318, y: 172, width: 92, height: 40,
           style: {}
         }
       ]
