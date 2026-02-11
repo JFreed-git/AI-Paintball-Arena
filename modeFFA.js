@@ -680,11 +680,8 @@
 
     var dir = getPlayerDirection(id);
     var origin = getPlayerOrigin(id);
-    if (id !== state.localId) {
-      origin.add(dir.clone().multiplyScalar(0.2)).add(new THREE.Vector3(0, -0.05, 0));
-    } else {
-      origin.add(dir.clone().multiplyScalar(0.2)).add(new THREE.Vector3(0, -0.05, 0));
-    }
+    // Offset origin slightly forward and down (gun barrel position)
+    origin.add(dir.clone().multiplyScalar(0.2)).add(new THREE.Vector3(0, -0.05, 0));
 
     var hitInfo = buildHitTargets(id);
     var tracerColor = (id === state.localId) ? 0x66ffcc : 0x66aaff;
@@ -966,7 +963,7 @@
       if (_predictedPos) {
         p.position.copy(_predictedPos);
         p.feetY = _predictedFeetY;
-        p.vVel = _predictedVVel;
+        p.verticalVelocity = _predictedVVel;
         p.grounded = _predictedGrounded;
       }
 
@@ -979,7 +976,7 @@
 
       _predictedPos = p.position.clone();
       _predictedFeetY = p.feetY;
-      _predictedVVel = p.vVel;
+      _predictedVVel = p.verticalVelocity;
       _predictedGrounded = p.grounded;
 
       p._hitboxYaw = camera.rotation.y;
@@ -1323,9 +1320,12 @@
       showRoundBanner(winnerName + ' wins!', ROUND_BANNER_MS);
       setTimeout(function () {
         if (!state) return;
+        // Populate post-match scoreboard BEFORE destroying state
+        if (typeof window.showPostMatchResults === 'function') {
+          window.showPostMatchResults(data && data.winnerId);
+        }
         window.stopFFAInternal();
-        showOnlyMenu('postMatchResults');
-        setHUDVisible(false);
+        // showPostMatchResults already calls showOnlyMenu + setHUDVisible
       }, ROUND_BANNER_MS + 500);
     });
   }
