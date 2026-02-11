@@ -1,0 +1,749 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Agent Hub</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+    background: rgba(10, 10, 10, 0.95);
+    color: #ccc;
+    height: 100vh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* === TOP BAR === */
+  .topbar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 16px;
+    background: #111;
+    border-bottom: 1px solid #333;
+    flex-shrink: 0;
+  }
+  .topbar h1 {
+    font-size: 14px;
+    color: #00ff88;
+    font-weight: 600;
+    margin-right: auto;
+  }
+  .topbar button {
+    padding: 4px 14px;
+    font-size: 12px;
+    font-family: inherit;
+    border: 1px solid #444;
+    border-radius: 4px;
+    background: #1a1a1a;
+    color: #ccc;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .topbar button:hover { background: #2a2a2a; border-color: #00ff88; color: #00ff88; }
+  .status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #555;
+    margin-left: 8px;
+  }
+  .status-dot.running { background: #00ff88; box-shadow: 0 0 6px #00ff8866; }
+
+  /* === MAIN LAYOUT === */
+  .main-layout {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+  }
+
+  /* === LEFT PANEL - AGENTS === */
+  .left-panel {
+    width: 200px;
+    border-right: 1px solid #333;
+    overflow-y: auto;
+    flex-shrink: 0;
+    padding: 8px;
+  }
+  .left-panel h2 {
+    font-size: 11px;
+    color: #666;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 8px;
+  }
+  .agent-card {
+    padding: 8px 10px;
+    border: 1px solid #2a2a2a;
+    border-radius: 6px;
+    margin-bottom: 6px;
+  }
+  .agent-card .name {
+    font-size: 12px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .agent-card .name .dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .agent-card .dot.not_connected { background: #555; }
+  .agent-card .dot.connected { background: #00ff88; box-shadow: 0 0 4px #00ff8866; }
+  .agent-card .dot.idle { background: #ffaa00; }
+  .agent-card .info {
+    font-size: 10px;
+    color: #666;
+    margin-top: 3px;
+    margin-left: 12px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  /* === CENTER PANEL - TABBED === */
+  .center-panel {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .tab-bar {
+    display: flex;
+    gap: 0;
+    border-bottom: 1px solid #333;
+    flex-shrink: 0;
+  }
+  .tab {
+    padding: 6px 16px;
+    font-size: 12px;
+    font-family: inherit;
+    background: transparent;
+    color: #666;
+    border: none;
+    border-bottom: 2px solid transparent;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all 0.15s;
+  }
+  .tab:hover { color: #aaa; }
+  .tab.active { color: #00ff88; border-bottom-color: #00ff88; }
+
+  .tab-content {
+    flex: 1;
+    overflow-y: auto;
+    padding: 12px 16px;
+  }
+  .tab-content::-webkit-scrollbar { width: 6px; }
+  .tab-content::-webkit-scrollbar-thumb { background: #333; border-radius: 3px; }
+
+  /* Connect tab */
+  .role-prompt-card {
+    border: 1px solid #2a2a2a;
+    border-radius: 8px;
+    padding: 12px 14px;
+    margin-bottom: 12px;
+  }
+  .role-prompt-card h3 {
+    font-size: 13px;
+    font-weight: 600;
+    margin-bottom: 8px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+  .role-prompt-card h3.speaker { color: #ff88ff; }
+  .role-prompt-card h3.leader { color: #ffaa00; }
+  .role-prompt-card h3.worker { color: #00ff88; }
+  .role-prompt-card .prompt-text {
+    font-size: 11px;
+    color: #999;
+    background: #111;
+    padding: 8px 10px;
+    border-radius: 4px;
+    margin-bottom: 8px;
+    white-space: pre-wrap;
+    word-break: break-all;
+    user-select: all;
+  }
+  .role-prompt-card .copy-btn {
+    padding: 4px 12px;
+    font-size: 11px;
+    font-family: inherit;
+    background: #1a1a1a;
+    border: 1px solid #444;
+    border-radius: 4px;
+    color: #ccc;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .role-prompt-card .copy-btn:hover { border-color: #00ff88; color: #00ff88; }
+  .role-prompt-card .copy-btn.copied { border-color: #00ff88; color: #00ff88; }
+  .role-prompt-card .instructions {
+    font-size: 10px;
+    color: #555;
+    margin-top: 8px;
+    line-height: 1.5;
+  }
+
+  /* Activity tab */
+  .activity-entry {
+    margin-bottom: 8px;
+    line-height: 1.5;
+    display: flex;
+    gap: 8px;
+    align-items: baseline;
+  }
+  .activity-entry .role-tag {
+    font-size: 10px;
+    font-weight: 600;
+    padding: 1px 6px;
+    border-radius: 3px;
+    flex-shrink: 0;
+    text-transform: uppercase;
+  }
+  .activity-entry .role-tag.speaker { background: #ff88ff22; color: #ff88ff; }
+  .activity-entry .role-tag.leader { background: #ffaa0022; color: #ffaa00; }
+  .activity-entry .role-tag[class*="worker"] { background: #00ff8822; color: #00ff88; }
+  .activity-entry .activity-content {
+    font-size: 12px;
+    color: #bbb;
+  }
+  .activity-entry .activity-type {
+    font-size: 10px;
+    color: #555;
+    margin-left: 4px;
+  }
+  .activity-entry .activity-time {
+    font-size: 10px;
+    color: #444;
+    flex-shrink: 0;
+  }
+  .activity-empty {
+    font-size: 12px;
+    color: #555;
+    text-align: center;
+    padding: 40px 0;
+  }
+
+  /* === RIGHT PANEL === */
+  .right-panel {
+    width: 300px;
+    border-left: 1px solid #333;
+    overflow-y: auto;
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+  }
+  .right-panel::-webkit-scrollbar { width: 6px; }
+  .right-panel::-webkit-scrollbar-thumb { background: #333; border-radius: 3px; }
+
+  .right-section {
+    padding: 10px 12px;
+    border-bottom: 1px solid #2a2a2a;
+  }
+  .right-section h3 {
+    font-size: 11px;
+    color: #666;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 8px;
+  }
+  .right-section .content-area {
+    font-size: 11px;
+    line-height: 1.5;
+    color: #999;
+    max-height: 250px;
+    overflow-y: auto;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+
+  /* Tasks */
+  .task-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+    padding: 4px 0;
+    font-size: 11px;
+  }
+  .task-item .task-icon { flex-shrink: 0; margin-top: 1px; }
+  .task-item .task-icon.pending { color: #555; }
+  .task-item .task-icon.working, .task-item .task-icon.assigned { color: #ffaa00; }
+  .task-item .task-icon.completed { color: #00ff88; }
+  .task-item .task-icon.failed { color: #ff4444; }
+  .task-item .task-title { color: #bbb; }
+
+  /* Pinned editor */
+  .pinned-textarea {
+    width: 100%;
+    min-height: 80px;
+    max-height: 150px;
+    font-size: 11px;
+    font-family: inherit;
+    background: #1a1a1a;
+    border: 1px solid #333;
+    border-radius: 4px;
+    color: #999;
+    padding: 6px 8px;
+    resize: vertical;
+    outline: none;
+    line-height: 1.5;
+  }
+  .pinned-textarea:focus { border-color: #00ff88; }
+  .pinned-save {
+    margin-top: 4px;
+    padding: 3px 10px;
+    font-size: 10px;
+    font-family: inherit;
+    background: #1a1a1a;
+    border: 1px solid #444;
+    border-radius: 3px;
+    color: #888;
+    cursor: pointer;
+  }
+  .pinned-save:hover { color: #00ff88; border-color: #00ff88; }
+
+  /* Message button on agent cards */
+  .msg-btn {
+    float: right;
+    background: none;
+    border: 1px solid #444;
+    border-radius: 4px;
+    color: #888;
+    font-size: 12px;
+    cursor: pointer;
+    padding: 1px 5px;
+    line-height: 1.2;
+    transition: all 0.15s;
+  }
+  .msg-btn:hover { border-color: #00ff88; color: #00ff88; }
+
+  /* Inbox modal overlay */
+  .inbox-overlay {
+    display: none;
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0,0,0,0.7);
+    z-index: 1000;
+    align-items: center;
+    justify-content: center;
+  }
+  .inbox-overlay.open { display: flex; }
+  .inbox-modal {
+    background: #1a1a1a;
+    border: 1px solid #444;
+    border-radius: 8px;
+    padding: 16px;
+    width: 400px;
+    max-width: 90vw;
+  }
+  .inbox-modal h3 {
+    font-size: 13px;
+    color: #00ff88;
+    margin-bottom: 10px;
+  }
+  .inbox-modal textarea {
+    width: 100%;
+    min-height: 120px;
+    font-size: 12px;
+    font-family: inherit;
+    background: #111;
+    border: 1px solid #333;
+    border-radius: 4px;
+    color: #ccc;
+    padding: 8px;
+    resize: vertical;
+    outline: none;
+  }
+  .inbox-modal textarea:focus { border-color: #00ff88; }
+  .inbox-modal .btn-row {
+    display: flex;
+    gap: 8px;
+    margin-top: 10px;
+    justify-content: flex-end;
+  }
+  .inbox-modal .btn-row button {
+    padding: 5px 14px;
+    font-size: 12px;
+    font-family: inherit;
+    border: 1px solid #444;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .inbox-modal .btn-send { background: #1a3a2a; color: #00ff88; border-color: #00ff88; }
+  .inbox-modal .btn-send:hover { background: #2a4a3a; }
+  .inbox-modal .btn-cancel { background: #1a1a1a; color: #888; }
+  .inbox-modal .btn-cancel:hover { color: #ccc; border-color: #888; }
+
+  /* Task assignment tag */
+  .task-assigned {
+    font-size: 9px;
+    color: #00ff88;
+    background: #00ff8818;
+    padding: 1px 5px;
+    border-radius: 3px;
+    margin-left: 4px;
+  }
+</style>
+</head>
+<body>
+
+<!-- TOP BAR -->
+<div class="topbar">
+  <h1>Agent Hub</h1>
+  <div class="status-dot" id="status-dot"></div>
+</div>
+
+<!-- MAIN LAYOUT -->
+<div class="main-layout">
+
+  <!-- LEFT: AGENT CARDS -->
+  <div class="left-panel">
+    <h2>Agents</h2>
+    <div id="agents-list"></div>
+  </div>
+
+  <!-- CENTER: TABBED -->
+  <div class="center-panel">
+    <div class="tab-bar">
+      <button class="tab active" data-tab="connect" onclick="switchTab('connect')">Connect</button>
+      <button class="tab" data-tab="activity" onclick="switchTab('activity')">Activity</button>
+    </div>
+    <div class="tab-content" id="tab-content"></div>
+  </div>
+
+  <!-- RIGHT: PLAN / TASKS / PINNED -->
+  <div class="right-panel">
+    <div class="right-section">
+      <h3>Plan</h3>
+      <div class="content-area" id="plan-content">(No plan yet)</div>
+    </div>
+    <div class="right-section">
+      <h3>Tasks</h3>
+      <div id="tasks-list">(No tasks yet)</div>
+    </div>
+    <div class="right-section">
+      <h3>Pinned Context</h3>
+      <textarea class="pinned-textarea" id="pinned-textarea"></textarea>
+      <button class="pinned-save" onclick="savePinned()">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- INBOX MODAL -->
+<div class="inbox-overlay" id="inbox-overlay" onclick="if(event.target===this)closeInboxModal()">
+  <div class="inbox-modal">
+    <h3 id="inbox-title">Message Worker</h3>
+    <textarea id="inbox-textarea" placeholder="Type a message for this worker..."></textarea>
+    <div class="btn-row">
+      <button class="btn-cancel" onclick="closeInboxModal()">Cancel</button>
+      <button class="btn-send" onclick="sendInboxMessage()">Send</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ============================================================
+// STATE
+// ============================================================
+let currentTab = 'connect';
+let agents = [];
+let activityMessages = [];
+let tasks = [];
+
+// ============================================================
+// INITIALIZATION
+// ============================================================
+window.addEventListener('DOMContentLoaded', () => {
+  // Start watching files
+  window.hubAPI.startWatching();
+  document.getElementById('status-dot').classList.add('running');
+
+  // Load initial state
+  refreshAgents();
+  refreshTasks();
+  refreshPlan();
+  refreshPinned();
+  refreshActivity();
+  renderTab();
+
+  // Register event listeners
+  window.hubAPI.onEvent('agents_update', () => refreshAgents());
+  window.hubAPI.onEvent('channel_update', () => {
+    refreshAgents();
+    refreshActivity();
+    if (currentTab === 'activity') renderTab();
+  });
+  window.hubAPI.onEvent('tasks_update', (data) => { tasks = data; renderTasks(); });
+  window.hubAPI.onEvent('plan_update', () => refreshPlan());
+  window.hubAPI.onEvent('pinned_update', () => refreshPinned());
+  window.hubAPI.onEvent('vision_update', () => refreshPlan());
+});
+
+// ============================================================
+// TABS
+// ============================================================
+function switchTab(tab) {
+  currentTab = tab;
+  document.querySelectorAll('.tab').forEach(t => {
+    t.classList.toggle('active', t.dataset.tab === tab);
+  });
+  renderTab();
+}
+
+function renderTab() {
+  const container = document.getElementById('tab-content');
+  if (currentTab === 'connect') {
+    renderConnectTab(container);
+  } else {
+    renderActivityTab(container);
+  }
+}
+
+function renderConnectTab(container) {
+  // Build cards from agents list — it already has numbered workers
+  let html = '';
+
+  // Speaker
+  const speakerPrompt = window.hubAPI.getRolePrompt('speaker') || '(Role file not generated)';
+  html += `<div class="role-prompt-card">
+    <h3 class="speaker">Speaker</h3>
+    <div class="prompt-text">${esc(speakerPrompt)}</div>
+    <button class="copy-btn" id="copy-speaker" onclick="copyPrompt('speaker')">Copy</button>
+    <div class="instructions">Interviews you about project vision, writes vision.md</div>
+  </div>`;
+
+  // Leader
+  const leaderPrompt = window.hubAPI.getRolePrompt('leader') || '(Role file not generated)';
+  html += `<div class="role-prompt-card">
+    <h3 class="leader">Leader</h3>
+    <div class="prompt-text">${esc(leaderPrompt)}</div>
+    <button class="copy-btn" id="copy-leader" onclick="copyPrompt('leader')">Copy</button>
+    <div class="instructions">Reads vision, creates plan.md and task files</div>
+  </div>`;
+
+  // Workers — get from agents list (all entries with role=worker)
+  const workers = agents.filter(a => a.role === 'worker');
+  for (const w of workers) {
+    const prompt = window.hubAPI.getRolePrompt(w.slot) || '(Role file not generated)';
+    html += `<div class="role-prompt-card">
+      <h3 class="worker">${esc(w.name)}</h3>
+      <div class="prompt-text">${esc(prompt)}</div>
+      <button class="copy-btn" id="copy-${w.slot}" onclick="copyPrompt('${w.slot}')">Copy</button>
+      <div class="instructions">Picks up tasks, does the work, writes result files. Claims tasks atomically to avoid collisions with other workers.</div>
+    </div>`;
+  }
+
+  // Add worker button
+  html += `<button onclick="addWorker()" style="
+    width:100%;padding:8px;font-size:12px;font-family:inherit;
+    background:#1a1a1a;border:1px dashed #444;border-radius:8px;
+    color:#888;cursor:pointer;margin-bottom:12px;
+  ">+ Add Worker Slot</button>`;
+
+  html += `<div style="font-size:11px;color:#555;margin-top:8px;line-height:1.6;">
+    <strong>How to connect an agent:</strong><br>
+    1. Open a new terminal window<br>
+    2. Run <code style="color:#ccc;background:#222;padding:1px 4px;border-radius:3px;">claude</code><br>
+    3. Paste the copied prompt and press Enter<br>
+    4. The agent will read its role file and start working<br>
+    5. Interact with it directly in the terminal
+  </div>`;
+
+  container.innerHTML = html;
+}
+
+function renderActivityTab(container) {
+  if (activityMessages.length === 0) {
+    container.innerHTML = '<div class="activity-empty">No activity yet. Connect an agent to get started.</div>';
+    return;
+  }
+
+  container.innerHTML = activityMessages.map(msg => {
+    const time = new Date(msg.ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    return `<div class="activity-entry">
+      <span class="activity-time">${esc(time)}</span>
+      <span class="role-tag ${msg.role}">${esc(msg.role)}</span>
+      <span class="activity-content">${esc(msg.content)}</span>
+      <span class="activity-type">${esc(msg.type)}</span>
+    </div>`;
+  }).join('');
+
+  // Auto-scroll to bottom
+  container.scrollTop = container.scrollHeight;
+}
+
+// ============================================================
+// ACTIONS
+// ============================================================
+function copyPrompt(role) {
+  const prompt = window.hubAPI.getRolePrompt(role);
+  if (prompt) {
+    window.hubAPI.copyToClipboard(prompt);
+    const btn = document.getElementById(`copy-${role}`);
+    btn.textContent = 'Copied!';
+    btn.classList.add('copied');
+    setTimeout(() => {
+      btn.textContent = 'Copy';
+      btn.classList.remove('copied');
+    }, 2000);
+  }
+}
+
+function addWorker() {
+  window.hubAPI.addWorkerSlot();
+  refreshAgents();
+  renderTab();
+}
+
+function resetHub() {
+  if (confirm('Reset all channel data and regenerate role files?')) {
+    window.hubAPI.reset();
+    refreshAgents();
+    refreshActivity();
+    renderTab();
+  }
+}
+
+function savePinned() {
+  const text = document.getElementById('pinned-textarea').value;
+  window.hubAPI.setPinned(text);
+}
+
+// ============================================================
+// AGENTS
+// ============================================================
+function refreshAgents() {
+  agents = window.hubAPI.getAgents();
+  renderAgents();
+}
+
+function renderAgents() {
+  const container = document.getElementById('agents-list');
+  container.innerHTML = agents.map(a => {
+    let info = a.status;
+    if (a.status === 'connected' && a.lastMessage) {
+      info = a.lastMessage.length > 30 ? a.lastMessage.slice(0, 30) + '...' : a.lastMessage;
+    } else if (a.status === 'idle') {
+      info = 'last seen ' + formatAgo(a.lastSeen);
+    }
+    const msgBtn = a.role === 'worker'
+      ? `<button class="msg-btn" onclick="event.stopPropagation();openInboxModal('${a.slot}')" title="Send message">\u2709</button>`
+      : '';
+    return `<div class="agent-card">
+      <div class="name"><span class="dot ${a.status}"></span>${esc(a.name)}${msgBtn}</div>
+      <div class="info">${esc(info)}</div>
+    </div>`;
+  }).join('');
+}
+
+function formatAgo(ts) {
+  if (!ts) return 'never';
+  const sec = Math.floor((Date.now() - ts) / 1000);
+  if (sec < 60) return sec + 's ago';
+  if (sec < 3600) return Math.floor(sec / 60) + 'm ago';
+  return Math.floor(sec / 3600) + 'h ago';
+}
+
+// ============================================================
+// ACTIVITY
+// ============================================================
+function refreshActivity() {
+  activityMessages = window.hubAPI.getMessages();
+}
+
+// ============================================================
+// TASKS
+// ============================================================
+function refreshTasks() {
+  tasks = window.hubAPI.getTasks();
+  renderTasks();
+}
+
+function renderTasks() {
+  const container = document.getElementById('tasks-list');
+  if (!tasks || tasks.length === 0) {
+    container.innerHTML = '<div style="font-size:11px;color:#555;">(No tasks yet)</div>';
+    return;
+  }
+  container.innerHTML = tasks.map(t => {
+    const icon = getTaskIcon(t.status);
+    const assignTag = t.assignedTo ? `<span class="task-assigned">${esc(t.assignedTo)}</span>` : '';
+    const claimTag = (t.status === 'working' && t.assignee) ? `<span class="task-assigned">${esc(t.assignee)}</span>` : '';
+    return `<div class="task-item">
+      <span class="task-icon ${t.status}">${icon}</span>
+      <span class="task-title">${esc(t.id)}: ${esc(t.title)}${assignTag}${claimTag}</span>
+    </div>`;
+  }).join('');
+}
+
+function getTaskIcon(status) {
+  switch (status) {
+    case 'completed': return '\u2611';
+    case 'working': case 'assigned': return '\u25B6';
+    case 'failed': return '\u2717';
+    default: return '\u2610';
+  }
+}
+
+// ============================================================
+// PLAN
+// ============================================================
+function refreshPlan() {
+  const text = window.hubAPI.getPlan();
+  document.getElementById('plan-content').textContent = text || '(No plan yet)';
+}
+
+// ============================================================
+// PINNED
+// ============================================================
+function refreshPinned() {
+  const text = window.hubAPI.getPinned();
+  document.getElementById('pinned-textarea').value = text || '';
+}
+
+// ============================================================
+// INBOX MODAL
+// ============================================================
+let inboxTargetSlot = null;
+
+function openInboxModal(slot) {
+  inboxTargetSlot = slot;
+  const name = slot.split('-').map(s => s.charAt(0).toUpperCase() + s.slice(1)).join('-');
+  document.getElementById('inbox-title').textContent = `Message ${name}`;
+  document.getElementById('inbox-textarea').value = window.hubAPI.readInbox(slot) || '';
+  document.getElementById('inbox-overlay').classList.add('open');
+  document.getElementById('inbox-textarea').focus();
+}
+
+function closeInboxModal() {
+  document.getElementById('inbox-overlay').classList.remove('open');
+  inboxTargetSlot = null;
+}
+
+function sendInboxMessage() {
+  if (!inboxTargetSlot) return;
+  const text = document.getElementById('inbox-textarea').value;
+  window.hubAPI.writeInbox(inboxTargetSlot, text);
+  closeInboxModal();
+}
+
+// ============================================================
+// UTILITIES
+// ============================================================
+function esc(str) {
+  if (!str) return '';
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+</script>
+</body>
+</html>

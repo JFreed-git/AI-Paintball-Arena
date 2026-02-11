@@ -41,6 +41,11 @@
     "projectileSpeed": 200,
     "projectileGravity": 0,
     "splashRadius": 0,
+    "meleeDamage": 30,
+    "meleeRange": 2.5,
+    "meleeCooldownMs": 600,
+    "meleeSwingMs": 350,
+    "meleeUseHitMultiplier": true,
     "scope": {
       "type": "scope",
       "zoomFOV": 20,
@@ -93,5 +98,10 @@
       "radius": 0.165,
       "height": 1
     }
-  ]
+  ],
+  "cameraOffset": {
+    "x": 0,
+    "y": 0.1,
+    "z": 0
+  }
 }
