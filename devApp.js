@@ -400,8 +400,26 @@ function getPanelElementId(panelId) {
   }
 
   switchPanel = function (panelId) {
+    // Clean up map editor when switching away
     if (_activePanel === 'mapEditor' && _mapEditorWasOpen) {
       _mapEditorWasOpen = false;
+      if (typeof window.stopMapEditor === 'function') {
+        window.stopMapEditor();
+      }
+      // Restore sidebar (same as editorExit handler)
+      var sidebar = document.getElementById('devSidebar');
+      if (sidebar) {
+        sidebar.classList.remove('hidden');
+        var expandTab = document.getElementById('devSidebarExpand');
+        if (expandTab) expandTab.classList.toggle('hidden', !sidebar.classList.contains('collapsed'));
+      }
+    }
+
+    // Clean up audio manager when switching away
+    if (_activePanel === 'audioManager') {
+      if (typeof window._closeAudioManager === 'function') {
+        window._closeAudioManager();
+      }
     }
 
     // Collapse previous expanded layout

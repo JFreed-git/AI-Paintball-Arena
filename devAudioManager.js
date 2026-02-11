@@ -797,6 +797,14 @@
     }, 100);
   };
 
+  window._closeAudioManager = function () {
+    if (_waveformAnimFrame) {
+      cancelAnimationFrame(_waveformAnimFrame);
+      _waveformAnimFrame = 0;
+    }
+    _isPlaying = false;
+  };
+
   // Init on load
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', init);

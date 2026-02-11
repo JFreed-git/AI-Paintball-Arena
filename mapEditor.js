@@ -240,6 +240,8 @@
 
   // ── Start / Stop ──
 
+  window.stopMapEditor = stopEditor;
+
   window.startMapEditor = function () {
     if (editorActive) return;
 
