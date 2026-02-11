@@ -927,6 +927,14 @@ window.registerCustomWeaponModel = registerCustomWeaponModel;
     var threeCanvas = gc && gc.querySelector('canvas');
     if (threeCanvas) threeCanvas.style.display = '';
 
+    // Clear inline display overrides that launchGame() set on all dev panels.
+    // The CSS .active class controls panel visibility — inline style.display
+    // overrides it, so we must remove the inline style for panels to show again.
+    var panels = document.querySelectorAll('.dev-panel');
+    panels.forEach(function (p) {
+      if (p !== lgPanel) p.style.display = '';
+    });
+
     // Restore sidebar (preserve collapsed state)
     var sidebar = document.getElementById('devSidebar');
     if (sidebar) {
