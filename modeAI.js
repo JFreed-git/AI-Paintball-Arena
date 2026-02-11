@@ -4,19 +4,20 @@
  * PURPOSE: Runs the single-player vs AI game loop, round flow, shooting, and
  *          hero selection phase. Manages the local player entity and delegates
  *          AI behavior to aiOpponent.js.
- * EXPORTS (window): paintballActive, devSpectatorMode, getPaintballState,
+ * EXPORTS (window): aiModeActive, devSpectatorMode, getPaintballState,
  *                   endPaintballRound, startPaintballGame, stopPaintballInternal
+ *                   (mode flag renamed from paintballActive → aiModeActive)
  * DEPENDENCIES: THREE (r128), scene/camera/renderer globals (game.js),
  *               hud.js, roundFlow.js, crosshair.js, physics.js, projectiles.js,
  *               weapon.js, heroes.js, heroSelectUI.js, aiOpponent.js,
  *               input.js, arenaCompetitive.js, player.js (Player),
  *               mapFormat.js (buildArenaFromMap, getDefaultMapData),
  *               menuNavigation.js (showOnlyMenu, setHUDVisible)
- * NOTE: Mode flag is still window.paintballActive (for backward compat, rename later)
+ * NOTE: Mode flag renamed from window.paintballActive → window.aiModeActive
  */
 
 (function () {
-  window.paintballActive = false;
+  window.aiModeActive = false;
   window.devSpectatorMode = false;
 
   window.getPaintballState = function () { return state; };
@@ -309,7 +310,7 @@
 
   // Main loop
   function tick(ts) {
-    if (!window.paintballActive || !state) return;
+    if (!window.aiModeActive || !state) return;
 
     var dt = state.lastTs ? Math.min(0.05, (ts - state.lastTs) / 1000) : 0;
     state.lastTs = ts;
@@ -391,7 +392,7 @@
 
   // Public start/stop
   window.startPaintballGame = function (opts) {
-    if (window.paintballActive) {
+    if (window.aiModeActive) {
       try { if (typeof stopPaintballInternal === 'function') stopPaintballInternal(); } catch (e) { console.warn('stopPaintballInternal failed:', e); }
     }
     window.devSpectatorMode = false;
@@ -437,7 +438,7 @@
     } else {
       startHeroSelectPhase();
     }
-    window.paintballActive = true;
+    window.aiModeActive = true;
     state.inputArmed = false;
     state.lastTs = 0;
     state.loopHandle = requestAnimationFrame(tick);
@@ -472,7 +473,7 @@
 
     _meleeSwinging = false;
     _meleeSwingEnd = 0;
-    window.paintballActive = false;
+    window.aiModeActive = false;
     if (showMenu) {
       try { document.exitPointerLock(); } catch (e) { console.warn('exitPointerLock failed:', e); }
       showOnlyMenu('mainMenu');

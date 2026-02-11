@@ -1211,8 +1211,8 @@
 
   window.startFFAHost = function (roomId, settings, existingSocket) {
     if (!roomId || typeof roomId !== 'string') { alert('Please enter a Room ID'); return; }
-    if (window.paintballActive) { try { stopPaintballInternal(); } catch (e) {} }
-    if (window.multiplayerActive) { try { stopMultiplayerInternal(); } catch (e) {} }
+    if (window.aiModeActive) { try { stopPaintballInternal(); } catch (e) {} }
+    if (window.lanModeActive) { try { stopMultiplayerInternal(); } catch (e) {} }
     if (window.ffaActive) { try { stopFFAInternal(); } catch (e) {} }
 
     var mapName = settings && settings.mapName;
@@ -1565,8 +1565,8 @@
 
   window.joinFFAGame = function (roomId, existingSocket, lobbySettings) {
     if (!roomId || typeof roomId !== 'string') { alert('Please enter a Room ID'); return; }
-    if (window.paintballActive) { try { stopPaintballInternal(); } catch (e) {} }
-    if (window.multiplayerActive) { try { stopMultiplayerInternal(); } catch (e) {} }
+    if (window.aiModeActive) { try { stopPaintballInternal(); } catch (e) {} }
+    if (window.lanModeActive) { try { stopMultiplayerInternal(); } catch (e) {} }
     if (window.ffaActive) { try { stopFFAInternal(); } catch (e) {} }
 
     if (existingSocket) {

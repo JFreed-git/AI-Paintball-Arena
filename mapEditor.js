@@ -243,8 +243,8 @@
   window.startMapEditor = function () {
     if (editorActive) return;
 
-    if (window.paintballActive && typeof stopPaintballInternal === 'function') stopPaintballInternal();
-    if (window.multiplayerActive && typeof stopMultiplayerInternal === 'function') stopMultiplayerInternal();
+    if (window.aiModeActive && typeof stopPaintballInternal === 'function') stopPaintballInternal();
+    if (window.lanModeActive && typeof stopMultiplayerInternal === 'function') stopMultiplayerInternal();
 
     getUI();
     editorActive = true;

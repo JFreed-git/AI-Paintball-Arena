@@ -6,19 +6,20 @@
  *          raw input each frame, runs client-side prediction, and reconciles
  *          with authoritative snapshots via lerp. Includes hero selection phase
  *          coordination between host and client.
- * EXPORTS (window): multiplayerActive, getMultiplayerState, hostLanGame,
+ * EXPORTS (window): lanModeActive, getMultiplayerState, hostLanGame,
  *                   joinLanGame, stopMultiplayerInternal
+ *                   (mode flag renamed from multiplayerActive → lanModeActive)
  * DEPENDENCIES: THREE (r128), Socket.IO, scene/camera/renderer globals (game.js),
  *               hud.js, roundFlow.js, crosshair.js, physics.js, projectiles.js,
  *               weapon.js, heroes.js, heroSelectUI.js, input.js,
  *               arenaCompetitive.js, player.js (Player),
  *               mapFormat.js (buildArenaFromMap, getDefaultMapData),
  *               menuNavigation.js (showOnlyMenu, setHUDVisible)
- * NOTE: Mode flag is still window.multiplayerActive (for backward compat, rename later)
+ * NOTE: Mode flag renamed from window.multiplayerActive → window.lanModeActive
  */
 
 (function () {
-  window.multiplayerActive = false;
+  window.lanModeActive = false;
   window.getMultiplayerState = function () { return state; };
 
   var PLAYER_RADIUS = 0.5;
@@ -776,7 +777,7 @@
   }
 
   function tick(ts) {
-    if (!window.multiplayerActive || !state) return;
+    if (!window.lanModeActive || !state) return;
 
     var dt = state.lastTs ? Math.min(MAX_DT, (ts - state.lastTs) / 1000) : 0;
     state.lastTs = ts;
@@ -897,8 +898,8 @@
   // Public starts
   window.hostLanGame = function (roomId, settings, mapName) {
     if (!roomId || typeof roomId !== 'string') { alert('Please enter a Room ID'); return; }
-    if (window.paintballActive) { try { stopPaintballInternal(); } catch (e) { console.warn('multiplayer: stopPaintballInternal failed:', e); } }
-    if (window.multiplayerActive) { try { stopMultiplayerInternal(); } catch (e) { console.warn('multiplayer: stopMultiplayerInternal failed:', e); } }
+    if (window.aiModeActive) { try { stopPaintballInternal(); } catch (e) { console.warn('multiplayer: stopPaintballInternal failed:', e); } }
+    if (window.lanModeActive) { try { stopMultiplayerInternal(); } catch (e) { console.warn('multiplayer: stopMultiplayerInternal failed:', e); } }
 
     // Include mapName in settings so client receives it
     if (mapName && mapName !== '__default__') {
@@ -924,8 +925,8 @@
 
   window.joinLanGame = function (roomId) {
     if (!roomId || typeof roomId !== 'string') { alert('Please enter a Room ID'); return; }
-    if (window.paintballActive) { try { stopPaintballInternal(); } catch (e) { console.warn('multiplayer: stopPaintballInternal failed:', e); } }
-    if (window.multiplayerActive) { try { stopMultiplayerInternal(); } catch (e) { console.warn('multiplayer: stopMultiplayerInternal failed:', e); } }
+    if (window.aiModeActive) { try { stopPaintballInternal(); } catch (e) { console.warn('multiplayer: stopPaintballInternal failed:', e); } }
+    if (window.lanModeActive) { try { stopMultiplayerInternal(); } catch (e) { console.warn('multiplayer: stopMultiplayerInternal failed:', e); } }
 
     ensureSocket();
     socket.emit('joinRoom', roomId, function (res) {
@@ -1154,7 +1155,7 @@
       showRoundBanner('Waiting for Player 2...', 999999);
     }
 
-    window.multiplayerActive = true;
+    window.lanModeActive = true;
     state.lastTs = 0;
     state.loopHandle = requestAnimationFrame(tick);
   }
@@ -1199,7 +1200,7 @@
     _remoteTo = null;
     _meleeSwingState.host.swinging = false;
     _meleeSwingState.client.swinging = false;
-    window.multiplayerActive = false;
+    window.lanModeActive = false;
     state = null;
   };
 })();

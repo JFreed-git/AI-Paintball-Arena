@@ -36,8 +36,8 @@
 
   // Helper: get the active game state (works for both AI and LAN modes)
   function getActiveState() {
-    if (window.paintballActive && window.getPaintballState) return window.getPaintballState();
-    if (window.multiplayerActive && window.getMultiplayerState) return window.getMultiplayerState();
+    if (window.aiModeActive && window.getPaintballState) return window.getPaintballState();
+    if (window.lanModeActive && window.getMultiplayerState) return window.getMultiplayerState();
     if (window.trainingRangeActive && window.getTrainingRangeState) return window.getTrainingRangeState();
     if (window._splitScreenActive && window.getSplitScreenState) return window.getSplitScreenState();
     return null;
@@ -113,7 +113,7 @@
     window.devConsoleOpen = false;
     consoleEl.classList.add('hidden');
     // Re-engage pointer lock if in game
-    if ((window.paintballActive || window.multiplayerActive || window.trainingRangeActive || window._splitScreenActive) && renderer && renderer.domElement) {
+    if ((window.aiModeActive || window.lanModeActive || window.trainingRangeActive || window._splitScreenActive) && renderer && renderer.domElement) {
       try { renderer.domElement.requestPointerLock(); } catch (e) { console.warn('devConsole: requestPointerLock failed', e); }
     }
   }
@@ -434,7 +434,7 @@
 
   function updateAIStateDisplay() {
     if (!cheats.showAIState) return;
-    if (!window.paintballActive) {
+    if (!window.aiModeActive) {
       hideAIStateLabel();
       return;
     }

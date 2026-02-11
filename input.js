@@ -65,7 +65,7 @@ function bindPlayerControls(renderer) {
     // Click canvas to acquire pointer lock when a game mode is active
     renderer.domElement.addEventListener('click', function () {
       if (window._splitViewMode) return; // parent overlay handles lock
-      var anyActive = window.paintballActive || window.multiplayerActive || window.trainingRangeActive || window.ffaActive || window._splitScreenActive;
+      var anyActive = window.aiModeActive || window.lanModeActive || window.trainingRangeActive || window.ffaActive || window._splitScreenActive;
       if (!anyActive) return;
       if (window._heroSelectOpen || window.devConsoleOpen) return;
       if (document.pointerLockElement === renderer.domElement) return; // already locked
@@ -81,7 +81,7 @@ function bindPlayerControls(renderer) {
 
 function onMouseMove(event) {
   if (window._splitScreenActive) return; // iframes handle their own mouse via postMessage
-  if (!window.paintballActive && !window.multiplayerActive && !window.trainingRangeActive && !window.ffaActive) return;
+  if (!window.aiModeActive && !window.lanModeActive && !window.trainingRangeActive && !window.ffaActive) return;
   if (window._heroSelectOpen) return;
 
   // Raycasting mouse coords (kept for completeness)
@@ -131,11 +131,11 @@ function onPointerLockChange() {
     if (focused && visible && !window.devConsoleOpen) {
       if (window._splitScreenActive) {
         try { if (typeof stopSplitScreen === 'function') stopSplitScreen(); } catch {}
-      } else if (window.paintballActive) {
+      } else if (window.aiModeActive) {
         try { if (typeof stopPaintballInternal === 'function') stopPaintballInternal(); } catch {}
         showOnlyMenu('mainMenu');
         setHUDVisible(false);
-      } else if (window.multiplayerActive) {
+      } else if (window.lanModeActive) {
         try { if (typeof stopMultiplayerInternal === 'function') stopMultiplayerInternal(); } catch {}
         showOnlyMenu('mainMenu');
         setHUDVisible(false);
@@ -159,9 +159,9 @@ function onGlobalKeyDown(e) {
   if (e.key === 'Escape') {
     if (window._splitScreenActive) {
       try { if (typeof stopSplitScreen === 'function') stopSplitScreen(); } catch {}
-    } else if (window.paintballActive) {
+    } else if (window.aiModeActive) {
       try { if (typeof stopPaintballInternal === 'function') stopPaintballInternal(); } catch {}
-    } else if (window.multiplayerActive) {
+    } else if (window.lanModeActive) {
       try { if (typeof stopMultiplayerInternal === 'function') stopMultiplayerInternal(); } catch {}
     } else if (window.ffaActive) {
       try { if (typeof stopFFAInternal === 'function') stopFFAInternal(); } catch {}
