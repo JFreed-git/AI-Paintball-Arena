@@ -532,9 +532,12 @@
 
     setTimeout(function () {
       if (!state) return;
+      // Populate post-match scoreboard BEFORE destroying state
+      if (typeof window.showPostMatchResults === 'function') {
+        window.showPostMatchResults(winnerId);
+      }
       window.stopFFAInternal();
-      showOnlyMenu('postMatchResults');
-      setHUDVisible(false);
+      // showPostMatchResults already calls showOnlyMenu + setHUDVisible
     }, ROUND_BANNER_MS + 500);
   }
 
