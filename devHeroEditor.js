@@ -1823,6 +1823,30 @@
       fpViewBtn.addEventListener('click', function () { toggleFPView(); });
     }
 
+    // Camera preset buttons (orbit around different target points)
+    // GROUND_Y = -1, EYE_HEIGHT = 2.0, so feet=-1, head≈1.0, eye≈1.0
+    var camPresets = {
+      heCamDefault: { targetY: 1.5, pitch: 0.3, dist: 6 },
+      heCamHead:    { targetY: 1.0, pitch: 0.1, dist: 2.5 },
+      heCamFull:    { targetY: 0.0, pitch: 0.15, dist: 8 }
+    };
+    var camBtns = document.querySelectorAll('.he-cam-btn');
+    camBtns.forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        if (_fpViewActive) toggleFPView(); // exit FP view first
+        var preset = camPresets[btn.id];
+        if (preset && _heroOrbitCtrl) {
+          _heroOrbitCtrl.setState({
+            target: { x: 0, y: preset.targetY, z: 0 },
+            pitch: preset.pitch,
+            dist: preset.dist
+          });
+        }
+        camBtns.forEach(function (b) { b.classList.remove('active'); });
+        btn.classList.add('active');
+      });
+    });
+
     // View mode buttons
     var modeButtons = document.querySelectorAll('.he-mode-btn');
     modeButtons.forEach(function (btn) {
