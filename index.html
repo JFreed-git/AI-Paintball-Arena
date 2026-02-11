@@ -55,10 +55,29 @@
                 <span id="fovValue">75</span>
             </div>
             <div class="actions">
-                <button id="gotoFFA">FFA Match</button>
-                <button id="gotoPaintball">Quick 1v1</button>
-                <button id="gotoLAN">Play LAN</button>
-                <button id="gotoTraining">Training Range</button>
+                <button id="gotoStartGame">Start Game</button>
+                <button id="gotoTraining" class="secondary">Training Range</button>
+            </div>
+        </div>
+
+        <div id="startGameMenu" class="menu-screen hidden">
+            <h2>Start Game</h2>
+            <div class="actions start-game-actions">
+                <button id="gotoHostGame">Host Game</button>
+                <button id="gotoJoinGame" class="secondary">Join Game</button>
+            </div>
+            <div id="joinRoomSection" class="hidden">
+                <div class="field">
+                    <label>Room Code
+                        <input type="text" id="joinRoomCode" placeholder="Enter room code" />
+                    </label>
+                </div>
+                <div class="actions">
+                    <button id="joinRoomSubmit">Join</button>
+                </div>
+            </div>
+            <div class="actions" style="margin-top: 12px;">
+                <button id="backFromStartGame" class="secondary">Back</button>
             </div>
         </div>
 
@@ -193,6 +212,42 @@
                 <button id="lobbyReadyBtn" class="lobby-ready">Ready</button>
                 <button id="lobbyStartBtn" class="host-only lobby-start">Start Game</button>
                 <button id="lobbyBackBtn" class="secondary">Back</button>
+            </div>
+        </div>
+
+        <div id="gameSetupMenu" class="menu-screen hidden">
+            <div class="setup-header">
+                <button id="setupBack" class="setup-back-btn">&larr; Back</button>
+                <h2>Game Setup</h2>
+            </div>
+            <div class="setup-body">
+                <div class="setup-maps">
+                    <h3>Select Map</h3>
+                    <div id="mapGrid" class="map-grid">
+                        <!-- Map cards populated dynamically by JS (Task 041) -->
+                    </div>
+                </div>
+                <div class="setup-settings">
+                    <h3>Match Settings</h3>
+                    <div class="field">
+                        <label>Mode</label>
+                        <select id="setupMode">
+                            <option value="ffa" selected>Free-For-All</option>
+                        </select>
+                    </div>
+                    <div class="field">
+                        <label>Rounds to Win</label>
+                        <input type="number" id="setupRounds" value="3" min="1" max="10" />
+                    </div>
+                    <div class="field">
+                        <label><span id="setupWinLabel">Kill Limit</span></label>
+                        <input type="number" id="setupKillLimit" value="10" min="1" max="50" />
+                    </div>
+                </div>
+            </div>
+            <div class="setup-actions">
+                <button id="setupCreateGame" class="setup-create-btn">Create Game</button>
+                <button id="setupBackBottom" class="secondary">Back</button>
             </div>
         </div>
 

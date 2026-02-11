@@ -1550,3 +1550,238 @@ body.split-view-mode .menu {
 #postMatchResults .actions button.secondary:hover {
     background: rgba(255, 255, 255, 0.06);
 }
+
+/* ── Game Setup Screen ── */
+#gameSetupMenu {
+    width: 720px;
+    max-width: 94vw;
+    max-height: 90vh;
+    overflow-y: auto;
+}
+
+.setup-header {
+    position: relative;
+    text-align: center;
+    margin-bottom: 18px;
+}
+
+.setup-header h2 {
+    font-size: 26px;
+    color: #fff;
+    letter-spacing: 2px;
+}
+
+.setup-back-btn {
+    position: absolute;
+    left: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    background: transparent;
+    color: #aaa;
+    border: 1px solid #555;
+    border-radius: 6px;
+    padding: 6px 12px;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: bold;
+    transition: background 0.2s ease, color 0.2s ease;
+}
+
+.setup-back-btn:hover {
+    background: rgba(255, 255, 255, 0.06);
+    color: #fff;
+}
+
+.setup-body {
+    display: flex;
+    gap: 20px;
+}
+
+.setup-maps {
+    flex: 1;
+    min-width: 0;
+}
+
+.setup-maps h3,
+.setup-settings h3 {
+    font-size: 13px;
+    color: #aaa;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 10px;
+}
+
+/* Map grid: 3-column layout, scrollable */
+.map-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+    max-height: 420px;
+    overflow-y: auto;
+    padding-right: 4px;
+}
+
+/* Scrollbar styling for map grid */
+.map-grid::-webkit-scrollbar {
+    width: 4px;
+}
+
+.map-grid::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.02);
+    border-radius: 2px;
+}
+
+.map-grid::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.12);
+    border-radius: 2px;
+}
+
+/* Map card */
+.map-card {
+    position: relative;
+    background: rgba(20, 20, 20, 0.8);
+    border: 2px solid rgba(255, 255, 255, 0.06);
+    border-radius: 8px;
+    cursor: pointer;
+    overflow: hidden;
+    transition: border-color 0.2s ease, transform 0.1s ease;
+}
+
+.map-card:hover {
+    border-color: rgba(0, 255, 136, 0.4);
+    transform: translateY(-2px);
+}
+
+.map-card.selected {
+    border-color: #00ff88;
+    box-shadow: 0 0 12px rgba(0, 255, 136, 0.2);
+}
+
+.map-card-thumb {
+    width: 100%;
+    height: 130px;
+    background: #1a1a1a;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #333;
+    font-size: 11px;
+    overflow: hidden;
+}
+
+.map-card-thumb img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.map-card-info {
+    padding: 8px 10px;
+}
+
+.map-card-name {
+    font-size: 13px;
+    font-weight: bold;
+    color: #fff;
+    margin-bottom: 4px;
+}
+
+.map-card-modes {
+    font-size: 10px;
+    color: #666;
+    line-height: 1.4;
+}
+
+.map-card-badge {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    background: rgba(0, 0, 0, 0.7);
+    color: #00ff88;
+    font-size: 10px;
+    font-weight: bold;
+    padding: 2px 6px;
+    border-radius: 10px;
+    letter-spacing: 0.5px;
+}
+
+/* Settings panel (right side) */
+.setup-settings {
+    width: 200px;
+    flex-shrink: 0;
+}
+
+.setup-settings .field {
+    margin: 10px 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.setup-settings label {
+    font-size: 13px;
+    color: #ddd;
+}
+
+.setup-settings select,
+.setup-settings input[type="number"] {
+    width: 100%;
+    padding: 6px 8px;
+    background: #222;
+    color: #fff;
+    border: 1px solid #444;
+    border-radius: 6px;
+    outline: none;
+    font-size: 13px;
+}
+
+.setup-settings select:focus,
+.setup-settings input[type="number"]:focus {
+    border-color: #00ff88;
+}
+
+/* Action buttons */
+.setup-actions {
+    display: flex;
+    gap: 12px;
+    margin-top: 18px;
+    justify-content: center;
+}
+
+.setup-create-btn {
+    padding: 10px 24px;
+    background: #00ff88;
+    color: #000;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-weight: bold;
+    font-size: 14px;
+    min-width: 140px;
+    transition: background 0.2s ease, transform 0.05s ease;
+}
+
+.setup-create-btn:hover {
+    background: #00d977;
+}
+
+.setup-create-btn:active {
+    transform: translateY(1px);
+}
+
+.setup-actions .secondary {
+    padding: 10px 20px;
+    background: transparent;
+    color: #fff;
+    border: 1px solid #555;
+    border-radius: 8px;
+    cursor: pointer;
+    font-weight: bold;
+    font-size: 14px;
+    min-width: 100px;
+    transition: background 0.2s ease;
+}
+
+.setup-actions .secondary:hover {
+    background: rgba(255, 255, 255, 0.06);
+}
