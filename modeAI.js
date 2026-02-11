@@ -451,6 +451,14 @@
     window._roundTransition = false;
     // Close hero select overlay if open
     try { if (typeof window.closePreRoundHeroSelect === 'function') window.closePreRoundHeroSelect(); } catch (e) {}
+    if (state && state.bannerTimerRef && state.bannerTimerRef.id) {
+      clearTimeout(state.bannerTimerRef.id);
+      state.bannerTimerRef.id = 0;
+    }
+    if (state && state.countdownTimerRef && state.countdownTimerRef.id) {
+      clearInterval(state.countdownTimerRef.id);
+      state.countdownTimerRef.id = 0;
+    }
     if (state && state.loopHandle) {
       try { cancelAnimationFrame(state.loopHandle); } catch (e) { console.warn('cancelAnimationFrame failed:', e); }
       state.loopHandle = 0;

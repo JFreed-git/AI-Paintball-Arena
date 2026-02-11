@@ -1453,8 +1453,16 @@
       if (data.s && data.d) {
         // Projectile
         var d = new THREE.Vector3(data.d[0], data.d[1], data.d[2]);
+        var vel = d.clone().multiplyScalar(data.s);
         if (typeof spawnVisualProjectile === 'function') {
-          spawnVisualProjectile(o, d, data.s, data.g || 0, data.c || 0x66aaff);
+          spawnVisualProjectile({
+            position: o,
+            velocity: vel,
+            gravity: data.g || 0,
+            tracerColor: data.c || 0x66aaff,
+            maxRange: 200,
+            solids: (state && state.arena) ? state.arena.solids : []
+          });
         }
       } else if (data.e) {
         // Hitscan tracer
