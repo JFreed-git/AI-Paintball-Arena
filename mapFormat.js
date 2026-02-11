@@ -180,6 +180,13 @@
     return arr;
   };
 
+  window.getMapMaxPlayers = function (mapData) {
+    if (!mapData) return 2;
+    if (mapData.maxPlayers) return mapData.maxPlayers;
+    var spawns = window.normalizeSpawns(mapData.spawns);
+    return Math.max(2, spawns.length);
+  };
+
   // ── Compute colliders for a mesh ──
   // Returns an ARRAY of Box3 colliders.
   // Ramps get staircase colliders (approximating the triangular cross-section)
