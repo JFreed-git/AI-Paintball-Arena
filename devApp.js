@@ -692,31 +692,152 @@ window.registerCustomWeaponModel = registerCustomWeaponModel;
   var qtAI = document.getElementById('qtAIMatch');
   var qtTraining = document.getElementById('qtTraining');
 
+  // --- Quick Test AI via iframe ---
+  var _quickTestState = null;
+
+  function ensureServerForQuickTest(cb) {
+    if (!window.devAPI) { cb(); return; }
+    var info = window.devAPI.serverStatus();
+    if (info.status === 'running') { cb(); return; }
+    window.devAPI.serverStart();
+    var attempts = 0;
+    var poll = setInterval(function () {
+      attempts++;
+      var s = window.devAPI.serverStatus();
+      if (s.status === 'running') { clearInterval(poll); cb(); }
+      else if (attempts > 20 || s.status === 'error') { clearInterval(poll); cb(); }
+    }, 500);
+  }
+
+  function stopQuickTest() {
+    if (!_quickTestState) return;
+    // Remove iframe
+    if (_quickTestState.iframe && _quickTestState.iframe.parentNode) {
+      _quickTestState.iframe.parentNode.removeChild(_quickTestState.iframe);
+    }
+    // Remove overlay
+    if (_quickTestState.overlay && _quickTestState.overlay.parentNode) {
+      _quickTestState.overlay.parentNode.removeChild(_quickTestState.overlay);
+    }
+    _quickTestState = null;
+
+    // Remove listeners
+    document.removeEventListener('keydown', onQtKeyDown);
+    document.removeEventListener('keyup', onQtKeyUp);
+
+    // Exit pointer lock
+    try { document.exitPointerLock(); } catch (e) {}
+
+    // Restore Three.js canvas
+    var gc = document.getElementById('gameContainer');
+    var threeCanvas = gc && gc.querySelector('canvas');
+    if (threeCanvas) threeCanvas.style.display = '';
+
+    // Restore sidebar (preserve collapsed state)
+    var devSidebar = document.getElementById('devSidebar');
+    if (devSidebar) {
+      devSidebar.classList.remove('hidden');
+      var sidebarExpandTab = document.getElementById('devSidebarExpand');
+      if (sidebarExpandTab) sidebarExpandTab.classList.toggle('hidden', !devSidebar.classList.contains('collapsed'));
+    }
+    // Restore right panel and toolbar if hero editor or menu builder was active
+    if (_activePanel === 'heroEditor' || _activePanel === 'weaponModelBuilder' || _activePanel === 'menuBuilder') {
+      var rightPanel = document.getElementById('devRightPanel');
+      var rightExpandTab = document.getElementById('devRightPanelExpand');
+      if (rightPanel) {
+        rightPanel.classList.remove('hidden');
+        if (rightExpandTab) rightExpandTab.classList.toggle('hidden', !rightPanel.classList.contains('collapsed'));
+      }
+      if (_activePanel === 'heroEditor') {
+        var heToolbar = document.getElementById('heViewportToolbar');
+        if (heToolbar) heToolbar.classList.remove('hidden');
+      }
+      if (_activePanel === 'menuBuilder') {
+        var mbToolbar = document.getElementById('mbViewportToolbar');
+        var mbPreview = document.getElementById('mbPreviewContainer');
+        if (mbToolbar) mbToolbar.classList.remove('hidden');
+        if (mbPreview) mbPreview.classList.remove('hidden');
+      }
+    }
+    if (typeof resizeRenderer === 'function') setTimeout(resizeRenderer, 50);
+  }
+
+  function forwardToQuickTest(msg) {
+    if (!_quickTestState) return;
+    var iframe = _quickTestState.iframe;
+    if (iframe && iframe.contentWindow) {
+      iframe.contentWindow.postMessage(msg, '*');
+    }
+  }
+
+  function onQtKeyDown(e) {
+    if (!_quickTestState) return;
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      stopQuickTest();
+      return;
+    }
+    forwardToQuickTest({ type: 'svKeyDown', code: e.code, key: e.key });
+  }
+
+  function onQtKeyUp(e) {
+    if (!_quickTestState) return;
+    forwardToQuickTest({ type: 'svKeyUp', code: e.code, key: e.key });
+  }
+
   if (qtAI) {
     qtAI.addEventListener('click', function () {
       var heroId = document.getElementById('qtHero').value;
       var difficulty = document.getElementById('qtDifficulty').value;
       var mapName = document.getElementById('qtMapSelect').value;
 
-      // Hide all UI for full-screen gameplay
-      hideGameModeUI();
-      resizeRenderer();
+      ensureServerForQuickTest(function () {
+        // Hide all UI
+        hideGameModeUI();
 
-      // Set the paintball menu selectors to match our choices
-      var diffSel = document.getElementById('paintballDifficulty');
-      if (diffSel) diffSel.value = difficulty;
+        // Hide Three.js canvas
+        var gc = document.getElementById('gameContainer');
+        var threeCanvas = gc && gc.querySelector('canvas');
+        if (threeCanvas) threeCanvas.style.display = 'none';
 
-      var launchGame = function (mapData) {
-        if (typeof startPaintballGame === 'function') {
-          startPaintballGame({ difficulty: difficulty, _mapData: mapData || null, _heroId: heroId });
-        }
-      };
+        // Create iframe
+        var url = 'http://localhost:3000/?autoAI=1' +
+          '&hero=' + encodeURIComponent(heroId) +
+          '&difficulty=' + encodeURIComponent(difficulty) +
+          '&map=' + encodeURIComponent(mapName);
+        var iframe = document.createElement('iframe');
+        iframe.className = 'ss-iframe';
+        iframe.style.width = '100%';
+        iframe.style.left = '0';
+        iframe.src = url;
+        iframe.setAttribute('allow', 'autoplay');
+        if (gc) gc.appendChild(iframe);
 
-      if (mapName && mapName !== '__default__' && typeof fetchMapData === 'function') {
-        fetchMapData(mapName).then(launchGame).catch(function () { launchGame(null); });
-      } else {
-        launchGame(null);
-      }
+        _quickTestState = { iframe: iframe, overlay: null };
+
+        // Create input overlay
+        var overlay = document.createElement('div');
+        overlay.id = 'ssInputOverlay';
+        if (gc) gc.appendChild(overlay);
+        _quickTestState.overlay = overlay;
+
+        overlay.addEventListener('click', function () {
+          overlay.requestPointerLock();
+        });
+        overlay.addEventListener('mousemove', function (e) {
+          forwardToQuickTest({ type: 'svMouseMove', movementX: e.movementX || 0, movementY: e.movementY || 0 });
+        });
+        overlay.addEventListener('mousedown', function (e) {
+          if (e.button === 0) forwardToQuickTest({ type: 'svMouseDown' });
+        });
+        overlay.addEventListener('mouseup', function (e) {
+          if (e.button === 0) forwardToQuickTest({ type: 'svMouseUp' });
+        });
+
+        // Document-level keyboard handlers
+        document.addEventListener('keydown', onQtKeyDown);
+        document.addEventListener('keyup', onQtKeyUp);
+      });
     });
   }
 

@@ -237,6 +237,31 @@ function init() {
       }, 2000);
     }
   }
+
+  // ── AutoAI auto-start (iframe from dev workbench Quick Test) ──
+  if (urlParams.get('autoAI') === '1') {
+    window._splitViewMode = true;
+    document.body.classList.add('split-view-mode');
+    window.alert = function () {};
+
+    setTimeout(function () {
+      var heroId = urlParams.get('hero') || '';
+      var difficulty = urlParams.get('difficulty') || 'medium';
+      var mapName = urlParams.get('map') || '__default__';
+
+      var launchGame = function (mapData) {
+        if (typeof startPaintballGame === 'function') {
+          startPaintballGame({ difficulty: difficulty, _mapData: mapData || null, _heroId: heroId });
+        }
+      };
+
+      if (mapName && mapName !== '__default__' && typeof fetchMapData === 'function') {
+        fetchMapData(mapName).then(launchGame).catch(function () { launchGame(null); });
+      } else {
+        launchGame(null);
+      }
+    }, 500);
+  }
 }
 
 // ------- Main loop -------

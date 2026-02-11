@@ -56,6 +56,7 @@
       sprintIndicator: document.getElementById('sprintIndicator'),
       bannerEl: document.getElementById('roundBanner'),
       countdownEl: document.getElementById('roundCountdown'),
+      meleeCooldown: document.getElementById('meleeCooldown'),
     };
   }
 
@@ -64,6 +65,7 @@
     if (!state) return;
     sharedUpdateHealthBar(state.hud.healthFill, p.health, DEFAULT_HEALTH);
     sharedUpdateAmmoDisplay(state.hud.ammoDisplay, p.weapon.ammo, p.weapon.magSize);
+    sharedUpdateMeleeCooldown(state.hud.meleeCooldown, p.weapon, performance.now());
   }
 
   function showMultiplayerHUD(show) {
@@ -846,6 +848,12 @@
       if (window.devShowHitboxes && window.updateHitboxVisuals) window.updateHitboxVisuals();
     }
 
+    // Update melee cooldown timer every frame (needs continuous animation)
+    var localP = isHost ? state.players.host : state.players.client;
+    if (localP && localP.weapon && state.hud.meleeCooldown) {
+      sharedUpdateMeleeCooldown(state.hud.meleeCooldown, localP.weapon, performance.now());
+    }
+
     state.loopHandle = requestAnimationFrame(tick);
   }
 
@@ -1010,9 +1018,14 @@
       // Play TP swing animation on the attacker's player mesh
       var attacker = (payload.playerId === 'host') ? state.players.host : state.players.client;
       if (attacker && attacker.triggerMeleeSwing) attacker.triggerMeleeSwing(swingMs);
-      // If the attacker is local player, also play FP animation
-      if (isLocalPlayer(attacker) && typeof window.triggerFPMeleeSwing === 'function') {
-        window.triggerFPMeleeSwing(swingMs);
+      // If the attacker is local player, also play FP animation and sync cooldown
+      if (isLocalPlayer(attacker)) {
+        if (typeof window.triggerFPMeleeSwing === 'function') {
+          window.triggerFPMeleeSwing(swingMs);
+        }
+        if (attacker.weapon) {
+          attacker.weapon.lastMeleeTime = performance.now();
+        }
       }
     });
 
