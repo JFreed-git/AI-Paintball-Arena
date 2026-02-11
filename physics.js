@@ -110,28 +110,47 @@ function getGroundHeight(pos, solids, feetY, grounded) {
 
 // Resolve ceiling collisions: when jumping upward, prevent head from entering blocks above.
 // Must run BEFORE resolveCollisions2D so the body band no longer overlaps ceiling blocks.
+// Only resolves as ceiling when the player is centered under the block (true ceiling hit).
+// Side collisions while jumping are left for resolveCollisions2D to handle horizontally.
 function resolveCeilingCollisions(state, colliders) {
   if (!colliders || colliders.length === 0) return;
   if (state.verticalVelocity <= 0) return; // Only when moving upward
 
   var radius = state.radius || 0.3;
-  var bandTop = state.feetY + EYE_HEIGHT + 0.2; // Match band max from resolveCollisions2D
+  var headY = state.feetY + EYE_HEIGHT;
 
   for (var i = 0; i < colliders.length; i++) {
     var box = colliders[i];
 
-    // Only blocks whose bottom face is between our body bottom and head
-    if (box.min.y <= state.feetY + 0.2) continue; // Block bottom at or below body bottom
-    if (box.min.y >= bandTop) continue;            // Block bottom above our head
+    // Block bottom must be above player's feet (block is above us)
+    if (box.min.y <= state.feetY) continue;
+    // Head must have reached or passed the block's bottom face
+    if (headY < box.min.y) continue;
 
     // Check XZ overlap (same expansion as resolveCollisions2D)
-    if (state.position.x < box.min.x - radius || state.position.x > box.max.x + radius) continue;
-    if (state.position.z < box.min.z - radius || state.position.z > box.max.z + radius) continue;
+    var exMinX = box.min.x - radius;
+    var exMaxX = box.max.x + radius;
+    var exMinZ = box.min.z - radius;
+    var exMaxZ = box.max.z + radius;
+    if (state.position.x < exMinX || state.position.x > exMaxX) continue;
+    if (state.position.z < exMinZ || state.position.z > exMaxZ) continue;
 
-    // Ceiling hit: push player down so head clears block bottom (with epsilon)
-    state.feetY = box.min.y - EYE_HEIGHT - 0.2 - 1e-3;
+    // Compare penetration depths: vertical (head into block bottom) vs horizontal
+    var vertPen = headY - box.min.y;
+    var penLeft = state.position.x - exMinX;
+    var penRight = exMaxX - state.position.x;
+    var penFront = state.position.z - exMinZ;
+    var penBack = exMaxZ - state.position.z;
+    var minHorizPen = Math.min(penLeft, penRight, penFront, penBack);
+
+    // Only resolve as ceiling if player is centered under block.
+    // If horizontal penetration is smaller, it's a side collision — skip.
+    if (vertPen > minHorizPen) continue;
+
+    // Ceiling hit: push player down so head clears block bottom
+    state.feetY = box.min.y - EYE_HEIGHT - 1e-3;
     state.verticalVelocity = 0;
-    bandTop = state.feetY + EYE_HEIGHT + 0.2; // Update for remaining colliders
+    headY = state.feetY + EYE_HEIGHT; // Update for remaining colliders
   }
 }
 

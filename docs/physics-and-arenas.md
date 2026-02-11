@@ -4,11 +4,12 @@ Consult this doc when working on: movement, gravity, jumping, collision, ground 
 
 ## Physics Engine
 
-Movement is full 3D — horizontal XZ walking plus vertical gravity, jumping, and ramp traversal. `updateFullPhysics` handles the complete cycle: horizontal movement → ground detection via `getGroundHeight` (downward raycast against `arena.solids`) → jump/gravity → ground snapping → 2D collision resolution → recheck.
+Movement is full 3D — horizontal XZ walking plus vertical gravity, jumping, and ramp traversal. `updateFullPhysics` handles the complete cycle: horizontal movement → ground detection via `getGroundHeight` (downward raycast against `arena.solids`) → jump/gravity → ground snapping → ceiling collision resolution → 2D collision resolution → recheck.
 
 - Gravity constant is in `physics.js` (`GRAVITY = 20`), NOT in config.js.
 - Per-hero jump velocity is supported via `state._jumpVelocity` (defaults to `JUMP_VELOCITY` from physics.js).
 - Collision uses Y-aware AABB push-out against `arena.colliders` (Box3 array); colliders are skipped when the player stands on top of them (`feetY + 0.1 >= box.max.y`).
+- Ceiling collisions (`resolveCeilingCollisions`) run before XZ push-out when the player has upward velocity. Uses vertical vs horizontal penetration comparison to distinguish true ceiling hits (head entering block bottom → push down) from side collisions while jumping (player clipping block edge → leave for XZ resolver).
 - Ramp and wedge colliders use a staircase approximation (5 progressively shorter AABBs + back wall) so the Y-skip logic lets players ascend slopes while still blocking side entry.
 - L-shape colliders decompose into 2 AABBs (horizontal leg + vertical leg) to avoid blocking the empty inner corner.
 - Arch colliders decompose into 3 AABBs (2 full-height pillars + top lintel above the opening).
