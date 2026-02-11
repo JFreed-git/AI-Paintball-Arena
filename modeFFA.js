@@ -1458,6 +1458,14 @@
     state.match.scores[state.localId] = { kills: 0, deaths: 0 };
     state._meleeSwingState[state.localId] = { swinging: false, swingEnd: 0 };
 
+    // Load AI configs from lobby settings into _aiSlots
+    clearAISlots();
+    if (settings && settings.aiConfigs && Array.isArray(settings.aiConfigs)) {
+      for (var ai = 0; ai < settings.aiConfigs.length; ai++) {
+        addAISlot(settings.aiConfigs[ai].hero || 'marksman', settings.aiConfigs[ai].difficulty || 'Medium');
+      }
+    }
+
     // Spawn AI bots from lobby slots
     spawnAIPlayers();
 
@@ -1476,8 +1484,6 @@
     // Sync camera to host spawn
     hostPlayer.syncCameraFromPlayer();
     camera.rotation.set(0, 0, 0, 'YXZ');
-
-    showRoundBanner('Waiting for players...', 999999);
 
     window.ffaActive = true;
     if (typeof window.startFFAScoreboardPolling === 'function') window.startFFAScoreboardPolling();
@@ -1543,8 +1549,6 @@
 
       localPlayer.syncCameraFromPlayer();
       camera.rotation.set(0, 0, 0, 'YXZ');
-
-      showRoundBanner('Joined! Waiting for host...', 999999);
 
       window.ffaActive = true;
       if (typeof window.startFFAScoreboardPolling === 'function') window.startFFAScoreboardPolling();
