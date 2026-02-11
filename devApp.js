@@ -895,7 +895,14 @@ window.registerCustomWeaponModel = registerCustomWeaponModel;
   }
 
   // --- Launch Game (full game in iframe) ---
+  var _lgLoadingDoc = '<html><body style="background:#111;color:#aaa;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;font-family:sans-serif;font-size:18px">Starting server\u2026</body></html>';
+
   function launchGame() {
+    var lgIframe = document.getElementById('lgIframe');
+
+    // Set iframe to loading state BEFORE showing the panel (prevents black flash)
+    if (lgIframe) lgIframe.srcdoc = _lgLoadingDoc;
+
     // Hide sidebar and all panels
     var sidebar = document.getElementById('devSidebar');
     var expandTab = document.getElementById('devSidebarExpand');
@@ -923,34 +930,39 @@ window.registerCustomWeaponModel = registerCustomWeaponModel;
     // Add viewport mode class for full-screen styling
     document.body.classList.add('viewport-mode');
 
-    var lgIframe = document.getElementById('lgIframe');
+    // Check if server is reachable by fetching it directly (works for externally started servers too)
+    function checkServerReady(cb) {
+      fetch('http://localhost:3000', { method: 'HEAD', mode: 'no-cors' })
+        .then(function () { cb(true); })
+        .catch(function () { cb(false); });
+    }
 
-    // Ensure server is running before loading iframe
     function loadIframe() {
       if (lgIframe) lgIframe.src = 'http://localhost:3000';
     }
 
-    if (!window.devAPI) { loadIframe(); return; }
+    // Try server first — if already running, load immediately
+    checkServerReady(function (ready) {
+      if (ready) { loadIframe(); return; }
 
-    var info = window.devAPI.serverStatus();
-    if (info.status === 'running') { loadIframe(); return; }
+      // Server not reachable — start it via devAPI if available
+      if (window.devAPI) window.devAPI.serverStart();
 
-    // Show loading indicator in iframe area
-    if (lgIframe) lgIframe.srcdoc = '<html><body style="background:#111;color:#aaa;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;font-family:sans-serif;font-size:18px">Starting server\u2026</body></html>';
-
-    window.devAPI.serverStart();
-    var attempts = 0;
-    var poll = setInterval(function () {
-      attempts++;
-      var s = window.devAPI.serverStatus();
-      if (s.status === 'running') {
-        clearInterval(poll);
-        loadIframe();
-      } else if (attempts > 20 || s.status === 'error') {
-        clearInterval(poll);
-        if (lgIframe) lgIframe.srcdoc = '<html><body style="background:#111;color:#f66;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;font-family:sans-serif;font-size:18px">Server failed to start' + (s.error ? ': ' + s.error : '') + '</body></html>';
-      }
-    }, 500);
+      // Poll until server responds
+      var attempts = 0;
+      var poll = setInterval(function () {
+        attempts++;
+        checkServerReady(function (ok) {
+          if (ok) {
+            clearInterval(poll);
+            loadIframe();
+          } else if (attempts > 20) {
+            clearInterval(poll);
+            if (lgIframe) lgIframe.srcdoc = '<html><body style="background:#111;color:#f66;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;font-family:sans-serif;font-size:18px">Server failed to start. Start it manually: node server.js</body></html>';
+          }
+        });
+      }, 500);
+    });
   }
 
   function closeLaunchGame() {
