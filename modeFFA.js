@@ -430,6 +430,9 @@
       match: {
         scores: {},       // { [socketId]: { kills: 0, deaths: 0 } }
         killLimit: (settings && settings.killLimit) || 10,
+        roundsToWin: (settings && settings.rounds) || 3,
+        currentRound: 1,
+        roundWins: {},    // { [socketId]: numberOfRoundsWon }
         roundActive: false
       },
       isHost: false,
@@ -534,42 +537,66 @@
       window.updateFFAScoreboard();
     }
 
-    // Check win condition
+    // Check win condition — end the round, not the match
     if (state.match.scores[killerId].kills >= state.match.killLimit) {
-      endMatch(killerId);
+      endRound(killerId);
     }
   }
 
-  function endMatch(winnerId) {
+  function endRound(winnerId) {
     if (!state) return;
     state.match.roundActive = false;
     if (typeof clearAllProjectiles === 'function') clearAllProjectiles();
     if (typeof playGameSound === 'function') playGameSound('elimination');
 
-    var winnerName = 'Player';
-    if (winnerId === state.localId) {
-      winnerName = 'You';
-    } else {
-      // Could look up player name from server data
-      winnerName = 'Player ' + winnerId.substring(0, 4);
-    }
+    // Track round win
+    if (!state.match.roundWins[winnerId]) state.match.roundWins[winnerId] = 0;
+    state.match.roundWins[winnerId]++;
 
-    showRoundBanner(winnerName + ' wins!', ROUND_BANNER_MS);
+    var winnerName = getPlayerName(winnerId);
+    var roundNum = state.match.currentRound;
+    var roundsWon = state.match.roundWins[winnerId];
+    var isMatchOver = roundsWon >= state.match.roundsToWin;
 
-    // Emit match over to all players
+    var bannerText = isMatchOver
+      ? winnerName + ' wins the match!'
+      : winnerName + ' wins round ' + roundNum + '!';
+    showRoundBanner(bannerText, ROUND_BANNER_MS);
+
+    // Emit round result to all clients
     if (socket) {
-      socket.emit('matchOver', { winnerId: winnerId, scores: state.match.scores });
+      socket.emit('roundResult', {
+        winnerId: winnerId,
+        roundNum: roundNum,
+        roundWins: state.match.roundWins,
+        scores: state.match.scores,
+        isMatchOver: isMatchOver
+      });
     }
 
-    setTimeout(function () {
-      if (!state) return;
-      // Populate post-match scoreboard BEFORE destroying state
-      if (typeof window.showPostMatchResults === 'function') {
-        window.showPostMatchResults(winnerId);
+    if (isMatchOver) {
+      // Match is over — show post-match results
+      if (socket) {
+        socket.emit('matchOver', { winnerId: winnerId, scores: state.match.scores });
       }
-      window.stopFFAInternal();
-      // showPostMatchResults already calls showOnlyMenu + setHUDVisible
-    }, ROUND_BANNER_MS + 500);
+      setTimeout(function () {
+        if (!state) return;
+        if (typeof window.showPostMatchResults === 'function') {
+          window.showPostMatchResults(winnerId);
+        }
+        window.stopFFAInternal();
+      }, ROUND_BANNER_MS + 500);
+    } else {
+      // More rounds to play — reset and start next round after banner
+      setTimeout(function () {
+        if (!state) return;
+        state.match.currentRound++;
+        resetAllPlayersForRound();
+        updateHUDForLocalPlayer();
+        startRoundCountdown(COUNTDOWN_SECONDS);
+        if (socket) socket.emit('startRound', { seconds: COUNTDOWN_SECONDS });
+      }, ROUND_BANNER_MS + 1000);
+    }
   }
 
   // Build all other players' hit targets (excluding the shooter)
@@ -1350,6 +1377,26 @@
       startRoundCountdown(secs);
     });
 
+    socket.on('roundResult', function (data) {
+      if (!state || state.isHost) return;
+      state.match.roundActive = false;
+      if (typeof clearAllProjectiles === 'function') clearAllProjectiles();
+      if (typeof playGameSound === 'function') playGameSound('elimination');
+      if (data && data.roundWins) state.match.roundWins = data.roundWins;
+      if (data && data.scores) state.match.scores = data.scores;
+      var winnerName = (data && data.winnerId)
+        ? ((data.winnerId === state.localId) ? 'You' : getPlayerName(data.winnerId))
+        : 'Player';
+      var bannerText = data.isMatchOver
+        ? winnerName + ' wins the match!'
+        : winnerName + ' wins round ' + (data.roundNum || state.match.currentRound) + '!';
+      showRoundBanner(bannerText, ROUND_BANNER_MS);
+      // If not match over, the host will send startRound for the next round
+      if (!data.isMatchOver && data.roundNum) {
+        state.match.currentRound = data.roundNum + 1;
+      }
+    });
+
     socket.on('matchOver', function (data) {
       if (!state || state.isHost) return;
       state.match.roundActive = false;
@@ -1357,7 +1404,7 @@
       if (typeof playGameSound === 'function') playGameSound('elimination');
       var winnerName = 'Player';
       if (data && data.winnerId) {
-        winnerName = (data.winnerId === state.localId) ? 'You' : ('Player ' + data.winnerId.substring(0, 4));
+        winnerName = (data.winnerId === state.localId) ? 'You' : getPlayerName(data.winnerId);
       }
       if (data && data.scores) state.match.scores = data.scores;
       showRoundBanner(winnerName + ' wins!', ROUND_BANNER_MS);
