@@ -1490,6 +1490,28 @@
     state.lastTs = 0;
     lastSnapshotMs = 0;
     state.loopHandle = requestAnimationFrame(tick);
+
+    // Show hero select overlay, then start countdown
+    if (typeof window.showPreRoundHeroSelect === 'function') {
+      window.showPreRoundHeroSelect({
+        seconds: 15,
+        onConfirmed: function (heroId) {
+          var localEntry = state && state.players[state.localId];
+          if (localEntry) applyHeroWeapon(localEntry.entity, heroId);
+          if (typeof window.closePreRoundHeroSelect === 'function') window.closePreRoundHeroSelect();
+          startRoundCountdown(3);
+        },
+        onTimeout: function (heroId) {
+          var localEntry = state && state.players[state.localId];
+          if (localEntry) applyHeroWeapon(localEntry.entity, heroId);
+          if (typeof window.closePreRoundHeroSelect === 'function') window.closePreRoundHeroSelect();
+          startRoundCountdown(3);
+        }
+      });
+    } else {
+      // Fallback: no hero select available, start immediately
+      startRoundCountdown(3);
+    }
   }
 
   function initClientSession(clientSettings) {
@@ -1554,6 +1576,27 @@
       if (typeof window.startFFAScoreboardPolling === 'function') window.startFFAScoreboardPolling();
       state.lastTs = 0;
       state.loopHandle = requestAnimationFrame(tick);
+
+      // Show hero select overlay, then start countdown
+      if (typeof window.showPreRoundHeroSelect === 'function') {
+        window.showPreRoundHeroSelect({
+          seconds: 15,
+          onConfirmed: function (heroId) {
+            var localEntry = state && state.players[state.localId];
+            if (localEntry) applyHeroWeapon(localEntry.entity, heroId);
+            if (typeof window.closePreRoundHeroSelect === 'function') window.closePreRoundHeroSelect();
+            startRoundCountdown(3);
+          },
+          onTimeout: function (heroId) {
+            var localEntry = state && state.players[state.localId];
+            if (localEntry) applyHeroWeapon(localEntry.entity, heroId);
+            if (typeof window.closePreRoundHeroSelect === 'function') window.closePreRoundHeroSelect();
+            startRoundCountdown(3);
+          }
+        });
+      } else {
+        startRoundCountdown(3);
+      }
     }
 
     if (mapName && mapName !== '__default__' && typeof fetchMapData === 'function') {
