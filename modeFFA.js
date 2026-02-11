@@ -1030,6 +1030,11 @@
       var id = ids[i];
       var entry = state.players[id];
       if (!entry || !entry.entity || !entry.alive || entry.isAI) continue;
+      // Melee-only weapons: left-click triggers melee swing, not fire
+      if (entry.entity.weapon && entry.entity.weapon.meleeOnly && entry.entity.input.fireDown) {
+        entry.entity.input.meleeDown = true;
+        entry.entity.input.fireDown = false;
+      }
       var ms = state._meleeSwingState[id];
       var canShoot = handleMelee(id, now);
       if (canShoot && (!ms || !ms.swinging)) handleShooting(id, now);

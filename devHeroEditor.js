@@ -1372,6 +1372,7 @@
       projectileSpeed: parseFloat(document.getElementById('heProjectileSpeed').value) || 0,
       projectileGravity: parseFloat(document.getElementById('heProjectileGravity').value) || 0,
       splashRadius: 0,
+      meleeOnly: document.getElementById('heMeleeOnly').checked,
       meleeDamage: parseInt(document.getElementById('heMeleeDamage').value) || 30,
       meleeRange: parseFloat(document.getElementById('heMeleeRange').value) || 2.5,
       meleeCooldownMs: parseInt(document.getElementById('heMeleeCooldownMs').value) || 600,
@@ -1564,6 +1565,7 @@
     document.getElementById('heProjectileSpeed').value = (typeof w.projectileSpeed === 'number') ? w.projectileSpeed : 120;
     document.getElementById('heProjectileGravity').value = (typeof w.projectileGravity === 'number') ? w.projectileGravity : 0;
 
+    document.getElementById('heMeleeOnly').checked = !!w.meleeOnly;
     document.getElementById('heMeleeDamage').value = (typeof w.meleeDamage === 'number') ? w.meleeDamage : 30;
     document.getElementById('heMeleeRange').value = (typeof w.meleeRange === 'number') ? w.meleeRange : 2.5;
     document.getElementById('heMeleeCooldownMs').value = (typeof w.meleeCooldownMs === 'number') ? w.meleeCooldownMs : 600;

@@ -67,6 +67,8 @@
     this.meleeCooldownMs     = (typeof opts.meleeCooldownMs === 'number')     ? opts.meleeCooldownMs     : 600;
     this.meleeSwingMs        = (typeof opts.meleeSwingMs === 'number')        ? opts.meleeSwingMs        : 350;
     this.meleeUseHitMultiplier = (opts.meleeUseHitMultiplier !== undefined)   ? !!opts.meleeUseHitMultiplier : true;
+    // If true, left-click triggers melee swing instead of firing (for melee-only weapons like swords)
+    this.meleeOnly           = !!opts.meleeOnly;
 
     // --- Scope / ADS (Aim Down Sights) ---
     // null = no ADS, or { type: 'scope'|'ironsights', zoomFOV: 30, overlay: null, spreadMultiplier: 0.2 }

@@ -372,6 +372,11 @@
 
     var now = performance.now();
     if (state.inputEnabled) {
+      // Melee-only weapons: left-click triggers melee swing, not fire
+      if (state.player.weapon && state.player.weapon.meleeOnly && input.fireDown) {
+        input.meleePressed = true;
+        input.fireDown = false;
+      }
       handleMelee(input, now);
       if (!_meleeSwinging) handlePlayerShooting(input, now);
     }

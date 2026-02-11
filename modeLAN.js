@@ -627,6 +627,15 @@
     remotePlayer._syncMeshPosition();
 
     var now = performance.now();
+    // Melee-only weapons: left-click triggers melee swing, not fire
+    if (state.players.host.weapon && state.players.host.weapon.meleeOnly && state.players.host.input.fireDown) {
+      state.players.host.input.meleeDown = true;
+      state.players.host.input.fireDown = false;
+    }
+    if (state.players.client.weapon && state.players.client.weapon.meleeOnly && state.players.client.input.fireDown) {
+      state.players.client.input.meleeDown = true;
+      state.players.client.input.fireDown = false;
+    }
     var hostCanShoot = handleMelee(state.players.host, now);
     var clientCanShoot = handleMelee(state.players.client, now);
     if (hostCanShoot && !_meleeSwingState.host.swinging) handleShooting(state.players.host, now);

@@ -110,6 +110,51 @@
   }
   WEAPON_MODEL_REGISTRY['shotgun'] = buildShotgun;
 
+  // --- Sword: Blade + crossguard + handle ---
+  function buildSword() {
+    var group = new THREE.Group();
+    group.name = 'weapon_sword';
+
+    var bladeMetal = new THREE.MeshLambertMaterial({ color: 0xccccdd });
+    var bladeEdge  = new THREE.MeshLambertMaterial({ color: 0xeeeeff });
+    var guardMetal = new THREE.MeshLambertMaterial({ color: 0x8B7355 });
+    var handleWrap = new THREE.MeshLambertMaterial({ color: 0x3a2a1a });
+    var pommelMat  = new THREE.MeshLambertMaterial({ color: 0x8B7355 });
+
+    // Blade (long flat piece extending forward/down)
+    var blade = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.06, 0.55), bladeMetal);
+    blade.position.set(0, 0, -0.35);
+    group.add(blade);
+
+    // Blade edge highlight (thin strip along one side)
+    var edge = new THREE.Mesh(new THREE.BoxGeometry(0.005, 0.065, 0.50), bladeEdge);
+    edge.position.set(0.018, 0, -0.33);
+    group.add(edge);
+
+    // Blade tip (tapered)
+    var tip = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.04, 0.08), bladeMetal);
+    tip.position.set(0, 0, -0.64);
+    group.add(tip);
+
+    // Crossguard (perpendicular bar)
+    var guard = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.04, 0.03), guardMetal);
+    guard.position.set(0, 0, -0.06);
+    group.add(guard);
+
+    // Handle (grip)
+    var handle = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.04, 0.14), handleWrap);
+    handle.position.set(0, 0, 0.04);
+    group.add(handle);
+
+    // Pommel (end cap)
+    var pommel = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.06, 0.03), pommelMat);
+    pommel.position.set(0, 0, 0.13);
+    group.add(pommel);
+
+    return group;
+  }
+  WEAPON_MODEL_REGISTRY['sword'] = buildSword;
+
   // --- Fallback: Simple rectangle (legacy, for unregistered types) ---
   function buildDefault() {
     var group = new THREE.Group();
