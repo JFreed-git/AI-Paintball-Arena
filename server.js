@@ -2,7 +2,7 @@
  * Simple LAN relay server for Paintball Arena multiplayer (2 players per room).
  * - Serves static files from this directory
  * - Socket.IO for signaling: create/join rooms, relay client inputs to host, host snapshots to clients
- * - Stores per-room settings (fire rate, mag size, reload time, player health, player damage)
+ * - Stores per-room settings (rounds to win)
  *
  * Run:
  *   npm init -y
@@ -24,6 +24,14 @@ const io = new Server(server, { cors: { origin: '*' } });
 
 // JSON body parsing for map API
 app.use(express.json({ limit: '1mb' }));
+
+// Block dev workbench files from being served to LAN players
+var DEV_BLOCKED = ['/dev.html', '/devApp.js', '/devApp.css', '/devHeroEditor.js', '/devSplitScreen.js',
+  '/electron-main.js', '/electron-preload.js', '/electron-fetch-shim.js', '/mapEditor.js', '/menuBuilder.js'];
+app.use(function (req, res, next) {
+  if (DEV_BLOCKED.indexOf(req.path) !== -1) return res.status(404).end();
+  next();
+});
 
 // Serve static files from this directory
 app.use(express.static(__dirname));
@@ -97,6 +105,211 @@ app.delete('/api/maps/:name', function (req, res) {
   }
 });
 
+// ── Menu REST API ──
+const MENUS_DIR = path.join(__dirname, 'menus');
+
+function ensureMenusDir() {
+  if (!fs.existsSync(MENUS_DIR)) fs.mkdirSync(MENUS_DIR, { recursive: true });
+}
+
+app.get('/api/menus', function (req, res) {
+  ensureMenusDir();
+  try {
+    var files = fs.readdirSync(MENUS_DIR).filter(function (f) { return f.endsWith('.json'); });
+    var names = files.map(function (f) { return f.replace(/\.json$/, ''); });
+    res.json(names);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to list menus' });
+  }
+});
+
+app.get('/api/menus/:name', function (req, res) {
+  var name = sanitizeMapName(req.params.name);
+  if (!name) return res.status(400).json({ error: 'Invalid menu name' });
+  var filePath = path.join(MENUS_DIR, name + '.json');
+  if (!fs.existsSync(filePath)) return res.status(404).json({ error: 'Menu not found' });
+  try {
+    var data = fs.readFileSync(filePath, 'utf8');
+    res.type('json').send(data);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to read menu' });
+  }
+});
+
+app.post('/api/menus/:name', function (req, res) {
+  var name = sanitizeMapName(req.params.name);
+  if (!name) return res.status(400).json({ error: 'Invalid menu name' });
+  ensureMenusDir();
+  try {
+    fs.writeFileSync(path.join(MENUS_DIR, name + '.json'), JSON.stringify(req.body, null, 2), 'utf8');
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to save menu' });
+  }
+});
+
+app.delete('/api/menus/:name', function (req, res) {
+  var name = sanitizeMapName(req.params.name);
+  if (!name) return res.status(400).json({ error: 'Invalid menu name' });
+  var filePath = path.join(MENUS_DIR, name + '.json');
+  if (!fs.existsSync(filePath)) return res.status(404).json({ error: 'Menu not found' });
+  try {
+    fs.unlinkSync(filePath);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to delete menu' });
+  }
+});
+
+// ── Sound REST API ──
+const SOUNDS_DIR = path.join(__dirname, 'sounds');
+
+function ensureSoundsDir() {
+  if (!fs.existsSync(SOUNDS_DIR)) fs.mkdirSync(SOUNDS_DIR, { recursive: true });
+}
+
+app.get('/api/sounds', function (req, res) {
+  ensureSoundsDir();
+  try {
+    var files = fs.readdirSync(SOUNDS_DIR).filter(function (f) { return f.endsWith('.json'); });
+    var names = files.map(function (f) { return f.replace(/\.json$/, ''); });
+    res.json(names);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to list sounds' });
+  }
+});
+
+app.get('/api/sounds/:name', function (req, res) {
+  var name = sanitizeMapName(req.params.name);
+  if (!name) return res.status(400).json({ error: 'Invalid sound name' });
+  var filePath = path.join(SOUNDS_DIR, name + '.json');
+  if (!fs.existsSync(filePath)) return res.status(404).json({ error: 'Sound not found' });
+  try {
+    var data = fs.readFileSync(filePath, 'utf8');
+    res.type('json').send(data);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to read sound' });
+  }
+});
+
+app.post('/api/sounds/:name', function (req, res) {
+  var name = sanitizeMapName(req.params.name);
+  if (!name) return res.status(400).json({ error: 'Invalid sound name' });
+  ensureSoundsDir();
+  try {
+    fs.writeFileSync(path.join(SOUNDS_DIR, name + '.json'), JSON.stringify(req.body, null, 2), 'utf8');
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to save sound' });
+  }
+});
+
+app.delete('/api/sounds/:name', function (req, res) {
+  var name = sanitizeMapName(req.params.name);
+  if (!name) return res.status(400).json({ error: 'Invalid sound name' });
+  var filePath = path.join(SOUNDS_DIR, name + '.json');
+  if (!fs.existsSync(filePath)) return res.status(404).json({ error: 'Sound not found' });
+  try {
+    fs.unlinkSync(filePath);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to delete sound' });
+  }
+});
+
+// ── Hero REST API (read-only — editing happens in the Electron dev workbench) ──
+const HEROES_DIR = path.join(__dirname, 'heroes');
+
+function ensureHeroesDir() {
+  if (!fs.existsSync(HEROES_DIR)) {
+    fs.mkdirSync(HEROES_DIR, { recursive: true });
+  }
+}
+
+// Seed built-in heroes as JSON files if they don't already exist.
+// The canonical hero data lives in heroes.js (browser-side), so we duplicate
+// just enough here to bootstrap the files. The dev workbench is the editor.
+(function seedBuiltinHeroes() {
+  ensureHeroesDir();
+  var builtins = [
+    {
+      id: 'marksman', name: 'Marksman', description: 'Precise single-shot marker. High accuracy, moderate fire rate.', color: 0x66ffcc,
+      maxHealth: 100, walkSpeed: 4.5, sprintSpeed: 8.5, jumpVelocity: 8.5,
+      hitbox: [
+        { name: "head", width: 0.5, height: 0.5, depth: 0.5, offsetY: 2.95, damageMultiplier: 2.0 },
+        { name: "torso", width: 0.6, height: 0.9, depth: 0.5, offsetY: 2.05, damageMultiplier: 1.0 },
+        { name: "legs", width: 0.5, height: 1.1, depth: 0.5, offsetY: 0.55, damageMultiplier: 0.75 }
+      ],
+      modelType: 'standard',
+      weapon: { cooldownMs: 166, magSize: 6, reloadTimeSec: 2.5, damage: 20, spreadRad: 0, sprintSpreadRad: 0.012, maxRange: 200, pellets: 1, projectileSpeed: 120, projectileGravity: 0, splashRadius: 0, scope: { type: 'scope', zoomFOV: 35, overlay: null, spreadMultiplier: 0.15 }, modelType: 'rifle', tracerColor: 0x66ffcc, crosshair: { style: 'cross', baseSpreadPx: 8, sprintSpreadPx: 20, color: '#00ffaa' }, meleeDamage: 25, meleeRange: 2.0, meleeCooldownMs: 600, meleeSwingMs: 350, meleeUseHitMultiplier: true, abilities: [] },
+      bodyParts: [
+        { name: "head", shape: "sphere", radius: 0.25, offsetX: 0, offsetY: 1.6, offsetZ: 0, rotationX: 0, rotationY: 0, rotationZ: 0 },
+        { name: "torso", shape: "cylinder", radius: 0.275, height: 0.9, offsetX: 0, offsetY: 1.1, offsetZ: 0, rotationX: 0, rotationY: 0, rotationZ: 0 }
+      ],
+      passives: [], abilities: []
+    },
+    {
+      id: 'brawler', name: 'Brawler', description: 'Devastating close-range shotgun. 8 pellets per blast.', color: 0xff8844,
+      maxHealth: 120, walkSpeed: 4.2, sprintSpeed: 8.0, jumpVelocity: 8.5,
+      hitbox: [
+        { name: "head", width: 0.55, height: 0.5, depth: 0.55, offsetY: 2.95, damageMultiplier: 2.0 },
+        { name: "torso", width: 0.7, height: 0.9, depth: 0.55, offsetY: 2.05, damageMultiplier: 1.0 },
+        { name: "legs", width: 0.55, height: 1.1, depth: 0.55, offsetY: 0.55, damageMultiplier: 0.75 }
+      ],
+      modelType: 'standard',
+      weapon: { cooldownMs: 600, magSize: 4, reloadTimeSec: 3.0, damage: 8, spreadRad: 0.06, sprintSpreadRad: 0.10, maxRange: 60, pellets: 8, projectileSpeed: 120, projectileGravity: 0, splashRadius: 0, scope: { type: 'ironsights', zoomFOV: 55, overlay: null, spreadMultiplier: 0.5 }, modelType: 'shotgun', tracerColor: 0xff8844, crosshair: { style: 'circle', baseSpreadPx: 24, sprintSpreadPx: 40, color: '#ff8844' }, meleeDamage: 40, meleeRange: 3.0, meleeCooldownMs: 600, meleeSwingMs: 350, meleeUseHitMultiplier: true, abilities: [] },
+      bodyParts: [
+        { name: "head", shape: "sphere", radius: 0.275, offsetX: 0, offsetY: 1.6, offsetZ: 0, rotationX: 0, rotationY: 0, rotationZ: 0 },
+        { name: "torso", shape: "cylinder", radius: 0.3, height: 0.9, offsetX: 0, offsetY: 1.1, offsetZ: 0, rotationX: 0, rotationY: 0, rotationZ: 0 }
+      ],
+      passives: [], abilities: []
+    }
+  ];
+  builtins.forEach(function (hero) {
+    var filePath = path.join(HEROES_DIR, hero.id + '.json');
+    if (!fs.existsSync(filePath)) {
+      fs.writeFileSync(filePath, JSON.stringify(hero, null, 2), 'utf8');
+    }
+  });
+})();
+
+app.get('/api/heroes', function (req, res) {
+  ensureHeroesDir();
+  try {
+    var files = fs.readdirSync(HEROES_DIR).filter(function (f) { return f.endsWith('.json'); });
+    var names = files.map(function (f) { return f.replace(/\.json$/, ''); });
+    res.json(names);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to list heroes' });
+  }
+});
+
+app.get('/api/heroes/:id', function (req, res) {
+  var name = sanitizeMapName(req.params.id);
+  if (!name) return res.status(400).json({ error: 'Invalid hero id' });
+  var filePath = path.join(HEROES_DIR, name + '.json');
+  if (!fs.existsSync(filePath)) return res.status(404).json({ error: 'Hero not found' });
+  try {
+    var data = fs.readFileSync(filePath, 'utf8');
+    res.type('json').send(data);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to read hero' });
+  }
+});
+
+// Save a hero
+app.post('/api/heroes/:id', function (req, res) {
+  var name = sanitizeMapName(req.params.id);
+  if (!name) return res.status(400).json({ error: 'Invalid hero id' });
+  ensureHeroesDir();
+  try {
+    fs.writeFileSync(path.join(HEROES_DIR, name + '.json'), JSON.stringify(req.body, null, 2), 'utf8');
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to save hero' });
+  }
+});
+
 // roomId -> { hostId: string, players: Set<string>, settings: object }
 const rooms = new Map();
 
@@ -159,24 +372,28 @@ io.on('connection', (socket) => {
   });
 
   // Host-triggered round control relays
-  socket.on('startRound', (payload) => {
-    const room = rooms.get(currentRoom);
-    if (!room || socket.id !== room.hostId) return;
-    // forward to non-hosts
-    socket.to(currentRoom).emit('startRound', payload);
+  function relayHostEvent(eventName) {
+    socket.on(eventName, function (payload) {
+      var room = rooms.get(currentRoom);
+      if (!room || socket.id !== room.hostId) return;
+      socket.to(currentRoom).emit(eventName, payload);
+    });
+  }
+  relayHostEvent('startRound');
+  relayHostEvent('roundResult');
+  relayHostEvent('matchOver');
+  relayHostEvent('startHeroSelect');
+  relayHostEvent('heroesConfirmed');
+
+  // heroSelect — bidirectional relay (either player to the other)
+  socket.on('heroSelect', function (payload) {
+    var room = rooms.get(currentRoom);
+    if (!room) return;
+    socket.to(currentRoom).emit('heroSelect', payload);
   });
 
-  socket.on('roundResult', (payload) => {
-    const room = rooms.get(currentRoom);
-    if (!room || socket.id !== room.hostId) return;
-    socket.to(currentRoom).emit('roundResult', payload);
-  });
-
-  socket.on('matchOver', (payload) => {
-    const room = rooms.get(currentRoom);
-    if (!room || socket.id !== room.hostId) return;
-    socket.to(currentRoom).emit('matchOver', payload);
-  });
+  // Relay melee visual events from host to clients
+  relayHostEvent('melee');
 
   // Relay shot visual events from host to clients (for tracers)
   socket.on('shot', (payload) => {
@@ -199,11 +416,11 @@ io.on('connection', (socket) => {
       io.to(currentRoom).emit('roomClosed');
       rooms.delete(currentRoom);
       // Host implicitly leaves via disconnect or socket.leave
-      try { socket.leave(currentRoom); } catch {}
+      try { socket.leave(currentRoom); } catch (e) { console.warn('socket.leave failed:', e); }
     } else {
       // Client leaving: remove from room and notify host
       room.players.delete(socket.id);
-      try { socket.leave(currentRoom); } catch {}
+      try { socket.leave(currentRoom); } catch (e) { console.warn('socket.leave failed:', e); }
       io.to(room.hostId).emit('clientLeft', { clientId: socket.id });
     }
     currentRoom = null;
@@ -212,7 +429,7 @@ io.on('connection', (socket) => {
   socket.on('disconnect', () => {
     if (!currentRoom) return;
     const room = rooms.get(currentRoom);
-    if (!room) return;
+    if (!room) { currentRoom = null; return; }
 
     room.players.delete(socket.id);
 
@@ -223,27 +440,14 @@ io.on('connection', (socket) => {
     } else {
       // Client left
       io.to(room.hostId).emit('clientLeft', { clientId: socket.id });
-      if (room.players.size === 1) {
-        // Only host remains; keep the room open
-      }
     }
+    currentRoom = null;
   });
 });
 
 function sanitizeSettings(s) {
   s = s || {};
   const out = {
-    // ms between shots (fire cooldown)
-    fireCooldownMs: clampInt(s.fireCooldownMs, 50, 2000, 166),
-    // bullets per magazine
-    magSize: clampInt(s.magSize, 1, 200, 6),
-    // seconds to reload
-    reloadTimeSec: clampNumber(s.reloadTimeSec, 0.2, 10, 2.5),
-    // starting/max health
-    playerHealth: clampInt(s.playerHealth, 1, 1000, 100),
-    // damage per hit
-    playerDamage: clampInt(s.playerDamage, 1, 500, 20),
-    // rounds needed to win the match
     roundsToWin: clampInt(s.roundsToWin, 1, 10, 2),
   };
   if (s.mapName && typeof s.mapName === 'string') out.mapName = s.mapName.substring(0, 100);

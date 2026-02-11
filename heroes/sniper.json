@@ -1,0 +1,97 @@
+{
+  "id": "sniper",
+  "name": "Sniper",
+  "description": "long-range high-damage shooter",
+  "color": 16776960,
+  "maxHealth": 80,
+  "walkSpeed": 5,
+  "sprintSpeed": 9.5,
+  "jumpVelocity": 8.5,
+  "hitbox": [
+    {
+      "name": "head",
+      "shape": "sphere",
+      "offsetX": 0,
+      "offsetY": 2.1,
+      "offsetZ": 0,
+      "damageMultiplier": 2,
+      "radius": 0.3
+    },
+    {
+      "name": "torso",
+      "shape": "capsule",
+      "offsetX": 0,
+      "offsetY": 1,
+      "offsetZ": 0,
+      "damageMultiplier": 1,
+      "radius": 0.33,
+      "height": 2
+    }
+  ],
+  "modelType": "standard",
+  "weapon": {
+    "cooldownMs": 750,
+    "magSize": 2,
+    "reloadTimeSec": 3,
+    "damage": 80,
+    "spreadRad": 0,
+    "sprintSpreadRad": 0.02,
+    "maxRange": 500,
+    "pellets": 1,
+    "projectileSpeed": 200,
+    "projectileGravity": 0,
+    "splashRadius": 0,
+    "scope": {
+      "type": "scope",
+      "zoomFOV": 20,
+      "overlay": null,
+      "spreadMultiplier": 0.15
+    },
+    "modelType": "rifle",
+    "tracerColor": 16776960,
+    "crosshair": {
+      "style": "cross",
+      "baseSpreadPx": 8,
+      "sprintSpreadPx": 20,
+      "color": "#ffff00"
+    },
+    "abilities": [],
+    "fpOffset": {
+      "x": 0.28,
+      "y": -0.22,
+      "z": -0.45
+    },
+    "fpRotation": {
+      "x": 0.05,
+      "y": -0.15,
+      "z": 0
+    }
+  },
+  "passives": [],
+  "abilities": [],
+  "bodyParts": [
+    {
+      "name": "head_visual",
+      "shape": "sphere",
+      "offsetX": 0,
+      "offsetY": 1.6500000000000001,
+      "offsetZ": 0,
+      "rotationX": 0,
+      "rotationY": 0,
+      "rotationZ": 0,
+      "radius": 0.15
+    },
+    {
+      "name": "body_visual",
+      "shape": "capsule",
+      "offsetX": 0,
+      "offsetY": 1.1,
+      "offsetZ": 0,
+      "rotationX": 0,
+      "rotationY": 0,
+      "rotationZ": 0,
+      "radius": 0.165,
+      "height": 1
+    }
+  ]
+}

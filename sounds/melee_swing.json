@@ -1,0 +1,18 @@
+{
+  "id": "melee_swing",
+  "name": "Melee Swing",
+  "synthesis": {
+    "type": "sweep",
+    "waveform": "sawtooth",
+    "startFreq": 400,
+    "endFreq": 150,
+    "duration": 0.15,
+    "volume": 0.2,
+    "attack": 0.005,
+    "decay": 0.145,
+    "noiseAmount": 0.5
+  },
+  "bindings": [
+    { "event": "melee_swing", "filter": {} }
+  ]
+}

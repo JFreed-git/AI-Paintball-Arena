@@ -1,0 +1,18 @@
+{
+  "id": "elimination",
+  "name": "Elimination",
+  "synthesis": {
+    "type": "multi_tone",
+    "waveform": "sine",
+    "volume": 0.3,
+    "noteDecay": 0.15,
+    "notes": [
+      { "freq": 523, "duration": 0.12, "delay": 0 },
+      { "freq": 659, "duration": 0.12, "delay": 0.08 },
+      { "freq": 784, "duration": 0.2, "delay": 0.16 }
+    ]
+  },
+  "bindings": [
+    { "event": "elimination", "filter": {} }
+  ]
+}

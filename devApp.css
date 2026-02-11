@@ -1,0 +1,1345 @@
+/* devApp.css — Dev Workbench layout and panel styles */
+
+/* Layout: sidebar + viewport */
+body {
+    display: flex;
+    overflow: hidden;
+}
+
+#devSidebar {
+    width: 300px;
+    min-width: 300px;
+    height: 100vh;
+    background: rgba(10, 10, 10, 0.95);
+    border-right: 1px solid #333;
+    display: flex;
+    flex-direction: column;
+    z-index: 1000;
+    overflow: hidden;
+}
+
+#devSidebar.hidden {
+    display: none;
+}
+
+#devViewport {
+    flex: 1;
+    position: relative;
+    height: 100vh;
+    overflow: hidden;
+}
+
+#devViewport #gameContainer {
+    width: 100%;
+    height: 100%;
+}
+
+/* Collapsed sidebar */
+#devSidebar.collapsed {
+    width: 0;
+    min-width: 0;
+    overflow: hidden;
+    border-right: none;
+}
+
+/* Sidebar header */
+#devSidebarHeader {
+    padding: 12px 16px;
+    border-bottom: 1px solid #333;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    position: relative;
+}
+
+#devSidebarHeader h2 {
+    font-size: 16px;
+    color: #00ff88;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    margin: 0;
+    flex-shrink: 0;
+}
+
+/* Server toggle button */
+.dev-btn-server {
+    margin-left: auto;
+    margin-right: 32px;
+    padding: 4px 10px;
+    background: #1a1a1a;
+    color: #aaa;
+    border: 1px solid #444;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 11px;
+    font-weight: bold;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    white-space: nowrap;
+    transition: background 0.15s, border-color 0.15s;
+}
+
+.dev-btn-server:hover {
+    background: #222;
+    border-color: #666;
+}
+
+/* Server status dot */
+.server-dot {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.server-dot.stopped {
+    background: #555;
+}
+
+.server-dot.starting {
+    background: #f0a030;
+    animation: server-pulse 1s ease-in-out infinite;
+}
+
+.server-dot.running {
+    background: #00ff88;
+    box-shadow: 0 0 6px rgba(0, 255, 136, 0.6);
+}
+
+.server-dot.error {
+    background: #ff4444;
+    box-shadow: 0 0 6px rgba(255, 68, 68, 0.5);
+}
+
+@keyframes server-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
+}
+
+/* Server log panel */
+#serverLogPanel {
+    border-top: 1px solid #333;
+    display: flex;
+    flex-direction: column;
+    max-height: 200px;
+    flex-shrink: 0;
+}
+
+#serverLogPanel.hidden {
+    display: none;
+}
+
+#serverLogHeader {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 6px 12px;
+    font-size: 11px;
+    color: #aaa;
+    font-weight: bold;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    border-bottom: 1px solid #222;
+}
+
+#serverLogHeader button {
+    background: transparent;
+    border: none;
+    color: #666;
+    font-size: 16px;
+    cursor: pointer;
+    padding: 0 4px;
+    line-height: 1;
+}
+
+#serverLogHeader button:hover {
+    color: #ff6666;
+}
+
+#serverLogOutput {
+    flex: 1;
+    overflow-y: auto;
+    padding: 6px 12px;
+    font-family: Consolas, 'Courier New', monospace;
+    font-size: 11px;
+    color: #888;
+    background: #0a0a0a;
+    line-height: 1.5;
+    white-space: pre-wrap;
+    word-break: break-all;
+}
+
+/* Sidebar collapse button (inside header) */
+.dev-sidebar-collapse-btn {
+    position: absolute;
+    right: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 24px;
+    height: 24px;
+    background: transparent;
+    border: 1px solid #444;
+    border-radius: 4px;
+    color: #aaa;
+    font-size: 14px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    line-height: 1;
+    transition: color 0.15s, border-color 0.15s;
+}
+
+.dev-sidebar-collapse-btn:hover {
+    color: #00ff88;
+    border-color: #00ff88;
+}
+
+/* Left sidebar expand tab (shown when sidebar is collapsed) */
+.dev-sidebar-expand-btn {
+    position: absolute;
+    left: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    z-index: 1001;
+    width: 20px;
+    height: 48px;
+    background: rgba(10, 10, 10, 0.95);
+    border: 1px solid #444;
+    border-left: none;
+    border-radius: 0 6px 6px 0;
+    color: #00ff88;
+    font-size: 14px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    transition: background 0.15s;
+}
+
+.dev-sidebar-expand-btn:hover {
+    background: #222;
+}
+
+.dev-sidebar-expand-btn.hidden {
+    display: none;
+}
+
+/* Navigation */
+#devNav {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 8px;
+    border-bottom: 1px solid #333;
+}
+
+.dev-nav-btn {
+    padding: 8px 12px;
+    background: transparent;
+    color: #aaa;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: bold;
+    text-align: left;
+    transition: background 0.15s, color 0.15s;
+}
+
+.dev-nav-btn:hover {
+    background: #222;
+    color: #ddd;
+}
+
+.dev-nav-btn.active {
+    background: rgba(0, 255, 136, 0.1);
+    color: #00ff88;
+    border-color: rgba(0, 255, 136, 0.3);
+}
+
+/* Panels container */
+#devPanels {
+    flex: 1;
+    overflow-y: auto;
+    padding: 12px;
+}
+
+.dev-panel {
+    display: none;
+}
+
+.dev-panel.active {
+    display: block;
+}
+
+.dev-panel h3 {
+    font-size: 15px;
+    color: #fff;
+    margin-bottom: 12px;
+}
+
+.dev-panel h4 {
+    font-size: 12px;
+    color: #00ff88;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin: 14px 0 6px;
+    padding-bottom: 4px;
+    border-bottom: 1px solid #333;
+}
+
+/* Fields */
+.dev-field {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin: 6px 0;
+}
+
+.dev-field label {
+    font-size: 12px;
+    color: #aaa;
+    min-width: 80px;
+    flex-shrink: 0;
+}
+
+.dev-field input[type="text"],
+.dev-field input[type="number"] {
+    flex: 1;
+    min-width: 0;
+    padding: 5px 8px;
+    background: #1a1a1a;
+    color: #fff;
+    border: 1px solid #444;
+    border-radius: 4px;
+    font-size: 12px;
+    outline: none;
+}
+
+.dev-field input[type="text"]:focus,
+.dev-field input[type="number"]:focus {
+    border-color: #00ff88;
+}
+
+.dev-field input[type="color"] {
+    width: 36px;
+    height: 24px;
+    border: 1px solid #444;
+    border-radius: 4px;
+    background: transparent;
+    cursor: pointer;
+    padding: 0;
+}
+
+.dev-field select {
+    flex: 1;
+    min-width: 0;
+    padding: 5px 8px;
+    background: #1a1a1a;
+    color: #fff;
+    border: 1px solid #444;
+    border-radius: 4px;
+    font-size: 12px;
+    outline: none;
+}
+
+.dev-field select:focus {
+    border-color: #00ff88;
+}
+
+/* Actions */
+.dev-actions {
+    display: flex;
+    gap: 8px;
+    margin: 10px 0;
+}
+
+.dev-btn-primary {
+    flex: 1;
+    padding: 8px 12px;
+    background: #00ff88;
+    color: #000;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: bold;
+    font-size: 13px;
+    transition: background 0.15s;
+}
+
+.dev-btn-primary:hover {
+    background: #00d977;
+}
+
+.dev-btn-primary:disabled {
+    background: #334;
+    color: #666;
+    cursor: default;
+}
+
+.dev-btn-secondary {
+    flex: 1;
+    padding: 8px 12px;
+    background: #222;
+    color: #ccc;
+    border: 1px solid #444;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: bold;
+    font-size: 13px;
+    transition: background 0.15s;
+}
+
+.dev-btn-secondary:hover {
+    background: #333;
+}
+
+.dev-btn-secondary:disabled {
+    color: #555;
+    cursor: default;
+}
+
+.dev-btn-danger {
+    flex: 1;
+    padding: 8px 12px;
+    background: #331111;
+    color: #ff6666;
+    border: 1px solid #cc3333;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: bold;
+    font-size: 13px;
+    transition: background 0.15s;
+}
+
+.dev-btn-danger:hover {
+    background: #441111;
+}
+
+/* Status */
+.dev-status {
+    margin-top: 8px;
+    padding: 6px 8px;
+    background: #111;
+    border-radius: 4px;
+    font-size: 11px;
+    color: #888;
+}
+
+.dev-hint {
+    font-size: 12px;
+    color: #888;
+    margin: 8px 0;
+    line-height: 1.5;
+}
+
+/* Scrollable form area */
+.dev-scrollable {
+    max-height: 400px;
+    overflow-y: auto;
+    padding-right: 4px;
+}
+
+/* Hero preview canvas */
+#heroPreviewContainer {
+    margin-top: 10px;
+    border: 1px solid #333;
+    border-radius: 6px;
+    overflow: hidden;
+    background: #111;
+}
+
+#heroPreviewCanvas {
+    display: block;
+    width: 100%;
+    height: auto;
+}
+
+/* Weapon model builder preview */
+#wmbPreviewContainer {
+    margin: 10px 0;
+    border: 1px solid #333;
+    border-radius: 6px;
+    overflow: hidden;
+    background: #111;
+}
+
+#wmbPreviewCanvas {
+    display: block;
+    width: 100%;
+    height: auto;
+}
+
+/* Weapon model part entry */
+.wmb-part {
+    background: #1a1a1a;
+    border: 1px solid #333;
+    border-radius: 6px;
+    padding: 8px;
+    margin: 6px 0;
+}
+
+.wmb-part-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 6px;
+}
+
+.wmb-part-header span {
+    font-size: 12px;
+    color: #00ff88;
+    font-weight: bold;
+}
+
+.wmb-part-remove {
+    background: transparent;
+    border: 1px solid #cc3333;
+    color: #ff6666;
+    border-radius: 4px;
+    padding: 2px 8px;
+    cursor: pointer;
+    font-size: 11px;
+}
+
+.wmb-part-remove:hover {
+    background: #331111;
+}
+
+.wmb-part .dev-field {
+    margin: 3px 0;
+}
+
+.wmb-part .dev-field label {
+    min-width: 50px;
+    font-size: 11px;
+}
+
+.wmb-part .dev-field input {
+    font-size: 11px;
+    padding: 3px 6px;
+}
+
+/* Split-Screen HUD */
+.ss-hud {
+    position: absolute;
+    bottom: 16px;
+    z-index: 160;
+    background: rgba(0, 0, 0, 0.6);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 8px;
+    padding: 8px 10px;
+    min-width: 160px;
+    backdrop-filter: blur(4px);
+}
+
+.ss-hud.hidden {
+    display: none;
+}
+
+#ssHudP1 {
+    left: 5%;
+}
+
+#ssHudP2 {
+    right: 5%;
+}
+
+.ss-hud-label {
+    font-size: 11px;
+    color: #00ff88;
+    font-weight: bold;
+    letter-spacing: 1px;
+    margin-bottom: 4px;
+}
+
+.ss-health-bar {
+    width: 100%;
+    height: 10px;
+    background: #1b1b1b;
+    border: 1px solid #333;
+    border-radius: 5px;
+    overflow: hidden;
+}
+
+.ss-health-fill {
+    height: 100%;
+    width: 100%;
+    background: linear-gradient(90deg, #24e66a, #0fb85a);
+    transition: width 0.15s ease;
+}
+
+.ss-ammo {
+    margin-top: 4px;
+    font-family: Consolas, 'Courier New', monospace;
+    font-size: 12px;
+    color: #fff;
+    display: flex;
+    justify-content: space-between;
+}
+
+.ss-ammo .hidden {
+    display: none;
+}
+
+/* Split-screen crosshairs */
+.ss-crosshair {
+    position: absolute;
+    pointer-events: none;
+    z-index: 160;
+    --spread: 10px;
+    --ch-color: #00ff88;
+}
+
+.ss-crosshair.hidden {
+    display: none;
+}
+
+#ssCrosshairP1 {
+    top: 50%;
+    left: 25%;
+    transform: translate(-50%, -50%);
+}
+
+#ssCrosshairP2 {
+    top: 50%;
+    left: 75%;
+    transform: translate(-50%, -50%);
+}
+
+.ss-crosshair .ch-bar {
+    position: absolute;
+    background: var(--ch-color, #00ff88);
+    filter: drop-shadow(0 0 6px var(--ch-color, #00ff88));
+    border-radius: 1px;
+}
+
+.ss-crosshair .ch-left,
+.ss-crosshair .ch-right {
+    top: 0;
+    height: 2px;
+    width: 14px;
+}
+
+.ss-crosshair .ch-left { left: calc(var(--spread) * -1 - 14px); }
+.ss-crosshair .ch-right { left: var(--spread); }
+
+.ss-crosshair .ch-top,
+.ss-crosshair .ch-bottom {
+    left: 0;
+    width: 2px;
+    height: 14px;
+}
+
+.ss-crosshair .ch-top { top: calc(var(--spread) * -1 - 14px); }
+.ss-crosshair .ch-bottom { top: var(--spread); }
+
+.ss-crosshair.dimmed .ch-bar {
+    opacity: 0.4;
+}
+
+.ss-crosshair .ch-ring {
+    position: absolute;
+    top: calc(var(--spread) * -1);
+    left: calc(var(--spread) * -1);
+    width: calc(var(--spread) * 2);
+    height: calc(var(--spread) * 2);
+    border: 2px solid var(--ch-color, #00ff88);
+    border-radius: 50%;
+    filter: drop-shadow(0 0 4px var(--ch-color, #00ff88));
+    min-width: 6px;
+    min-height: 6px;
+}
+
+.ss-crosshair .ch-dot {
+    position: absolute;
+    top: -2px;
+    left: -2px;
+    width: 4px;
+    height: 4px;
+    background: var(--ch-color, #00ff88);
+    border-radius: 50%;
+    filter: drop-shadow(0 0 3px var(--ch-color, #00ff88));
+}
+
+.ss-crosshair.dimmed .ch-ring,
+.ss-crosshair.dimmed .ch-dot {
+    opacity: 0.4;
+}
+
+/* Control indicator */
+#ssControlIndicator {
+    position: absolute;
+    top: 12px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 170;
+    background: rgba(0, 255, 136, 0.15);
+    border: 1px solid #00ff88;
+    border-radius: 6px;
+    padding: 6px 16px;
+    font-size: 13px;
+    font-weight: bold;
+    color: #00ff88;
+    letter-spacing: 1px;
+    pointer-events: none;
+}
+
+#ssControlIndicator.hidden {
+    display: none;
+}
+
+/* Split-screen viewport divider */
+#ssViewportDivider {
+    position: absolute;
+    top: 0;
+    left: 50%;
+    width: 2px;
+    height: 100%;
+    background: rgba(255, 255, 255, 0.2);
+    z-index: 155;
+    pointer-events: none;
+}
+
+/* Dimmed HUD for inactive player */
+.ss-hud.dimmed {
+    opacity: 0.4;
+}
+
+/* Collapsible sections */
+.dev-section-header {
+    cursor: pointer;
+    user-select: none;
+    padding-left: 16px;
+    position: relative;
+}
+
+.dev-section-header::before {
+    content: '\25BC ';
+    font-size: 10px;
+    position: absolute;
+    left: 0;
+    top: 50%;
+    transform: translateY(-50%);
+}
+
+.dev-section-header.collapsed::before {
+    content: '\25B6 ';
+}
+
+.dev-section-content.collapsed {
+    display: none;
+}
+
+/* Hitbox toolbar — always visible, not inside collapsible content */
+.dev-hitbox-toolbar {
+    display: flex;
+    gap: 6px;
+    margin: 6px 0 4px;
+}
+
+.dev-hitbox-toolbar .dev-btn-secondary {
+    flex: 1;
+    padding: 5px 8px;
+    font-size: 11px;
+}
+
+.dev-hitbox-toolbar .dev-btn-secondary.active {
+    background: rgba(0, 255, 136, 0.15);
+    border-color: #00ff88;
+    color: #00ff88;
+}
+
+/* Expanded sidebar for editor panels */
+#devSidebar.expanded {
+    width: 450px;
+    min-width: 450px;
+}
+
+/* Viewport-mode preview: fills the main viewport area */
+#heroPreviewContainer.viewport-mode,
+#wmbPreviewContainer.viewport-mode {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 5;
+    margin: 0;
+    border: none;
+    border-radius: 0;
+}
+
+#heroPreviewContainer.viewport-mode canvas,
+#wmbPreviewContainer.viewport-mode canvas {
+    width: 100% !important;
+    height: 100% !important;
+}
+
+/* ===== Right Panel (Hitbox Segments) ===== */
+
+#devRightPanel {
+    width: 300px;
+    min-width: 300px;
+    height: 100vh;
+    background: rgba(10, 10, 10, 0.95);
+    border-left: 1px solid #333;
+    display: flex;
+    flex-direction: column;
+    z-index: 1000;
+    overflow: hidden;
+}
+
+#devRightPanel.hidden {
+    display: none;
+}
+
+#devRightPanel.collapsed {
+    width: 0;
+    min-width: 0;
+    overflow: hidden;
+    border-left: none;
+}
+
+#devRightPanelHeader {
+    padding: 12px 16px;
+    border-bottom: 1px solid #333;
+    position: relative;
+}
+
+#devRightPanelHeader h3 {
+    font-size: 14px;
+    color: #fff;
+    margin: 0;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+#devRightPanelContent {
+    flex: 1;
+    overflow-y: auto;
+    padding: 12px;
+}
+
+/* Remove max-height cap on hitbox list when in right panel */
+#devRightPanel #heHitboxList {
+    max-height: none;
+}
+
+/* Right panel expand tab (shown when panel is collapsed) */
+.dev-right-expand-btn {
+    position: fixed;
+    right: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    z-index: 1001;
+    width: 20px;
+    height: 48px;
+    background: rgba(10, 10, 10, 0.95);
+    border: 1px solid #444;
+    border-right: none;
+    border-radius: 6px 0 0 6px;
+    color: #00ff88;
+    font-size: 14px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    transition: background 0.15s;
+}
+
+.dev-right-expand-btn:hover {
+    background: #222;
+}
+
+.dev-right-expand-btn.hidden {
+    display: none;
+}
+
+/* ===== Floating Viewport Toolbar ===== */
+
+#heViewportToolbar {
+    position: absolute;
+    top: 8px;
+    left: 8px;
+    right: 8px;
+    z-index: 10;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    background: rgba(10, 10, 10, 0.85);
+    backdrop-filter: blur(4px);
+    border: 1px solid #444;
+    border-radius: 8px;
+    padding: 5px 10px;
+}
+
+#heViewportToolbar.hidden {
+    display: none;
+}
+
+#heViewportToolbar .dev-btn-secondary {
+    flex: none;
+    padding: 4px 8px;
+    font-size: 11px;
+    white-space: nowrap;
+}
+
+#heViewportToolbar .dev-btn-secondary.active {
+    background: rgba(0, 255, 136, 0.15);
+    border-color: #00ff88;
+    color: #00ff88;
+}
+
+/* View mode button group */
+.he-mode-group {
+    display: inline-flex;
+    border-radius: 6px;
+    overflow: hidden;
+    border: 1px solid #444;
+}
+
+.he-mode-btn {
+    padding: 4px 10px;
+    background: #222;
+    color: #ccc;
+    border: none;
+    border-right: 1px solid #444;
+    cursor: pointer;
+    font-size: 11px;
+    font-weight: bold;
+    transition: background 0.15s, color 0.15s;
+    white-space: nowrap;
+}
+
+.he-mode-btn:last-child {
+    border-right: none;
+}
+
+.he-mode-btn:hover {
+    background: #333;
+}
+
+.he-mode-btn.active {
+    background: rgba(0, 255, 136, 0.2);
+    color: #00ff88;
+}
+
+/* Toolbar separator */
+.he-toolbar-sep {
+    display: block;
+    width: 1px;
+    height: 20px;
+    background: #444;
+    margin: 0 2px;
+    flex-shrink: 0;
+}
+
+/* ===== Menu Builder ===== */
+
+/* Menu builder preview container */
+#mbPreviewContainer {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #1a1a1a;
+    min-height: 200px;
+}
+
+#mbPreviewContainer.hidden {
+    display: none;
+}
+
+#mbPreviewContainer.viewport-mode {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 5;
+}
+
+#mbMenuPreview {
+    /* Menu dimensions set inline by menuBuilder.js */
+    font-family: Arial, sans-serif;
+    color: #fff;
+    user-select: none;
+}
+
+/* Element wrapper in preview */
+.mb-element-wrapper {
+    box-sizing: border-box;
+    border: 1px solid transparent;
+    transition: border-color 0.1s;
+}
+
+.mb-element-wrapper:hover {
+    border-color: rgba(0, 255, 136, 0.3);
+}
+
+.mb-element-wrapper.mb-selected {
+    border-color: #00ff88;
+    box-shadow: 0 0 8px rgba(0, 255, 136, 0.3);
+}
+
+/* Element list in sidebar */
+.mb-el-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 8px;
+    margin: 2px 0;
+    background: #1a1a1a;
+    border: 1px solid #333;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 11px;
+    transition: background 0.1s;
+}
+
+.mb-el-row:hover {
+    background: #222;
+}
+
+.mb-el-row.mb-el-selected {
+    background: rgba(0, 255, 136, 0.1);
+    border-color: rgba(0, 255, 136, 0.3);
+}
+
+.mb-el-type {
+    color: #00ff88;
+    font-weight: bold;
+    min-width: 50px;
+    font-size: 10px;
+}
+
+.mb-el-text {
+    flex: 1;
+    color: #ccc;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.mb-el-remove {
+    background: transparent;
+    border: 1px solid #cc3333;
+    color: #ff6666;
+    border-radius: 3px;
+    padding: 1px 6px;
+    cursor: pointer;
+    font-size: 12px;
+    line-height: 1;
+    flex-shrink: 0;
+}
+
+.mb-el-remove:hover {
+    background: #331111;
+}
+
+/* Add element buttons — smaller */
+.mb-add-btn {
+    font-size: 11px !important;
+    padding: 5px 8px !important;
+    flex: none !important;
+}
+
+/* Menu builder viewport toolbar */
+#mbViewportToolbar {
+    position: absolute;
+    top: 12px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 10;
+    display: flex;
+    gap: 8px;
+    background: rgba(10, 10, 10, 0.8);
+    backdrop-filter: blur(4px);
+    border: 1px solid #444;
+    border-radius: 8px;
+    padding: 6px 12px;
+}
+
+#mbViewportToolbar.hidden {
+    display: none;
+}
+
+#mbViewportToolbar .dev-btn-secondary {
+    flex: none;
+    padding: 5px 12px;
+    font-size: 12px;
+}
+
+#mbViewportToolbar .dev-btn-secondary.active {
+    background: rgba(0, 255, 136, 0.15);
+    border-color: #00ff88;
+    color: #00ff88;
+}
+
+/* Grid overlay */
+.mb-grid-overlay {
+    pointer-events: none;
+}
+
+/* Alignment guide lines */
+.mb-align-guide {
+    pointer-events: none;
+}
+
+/* ===== Split-Screen Iframes ===== */
+
+.ss-iframe {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 50%;
+    height: 100%;
+    border: none;
+}
+
+.ss-iframe-right {
+    left: 50%;
+}
+
+.ss-iframe-inactive {
+    opacity: 0.6;
+}
+
+#ssInputOverlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 200;
+    cursor: crosshair;
+}
+
+/* ===== Audio Manager Viewport ===== */
+
+#amViewportContainer {
+    display: none;
+    flex-direction: column;
+    background: #111;
+}
+
+#amViewportContainer.hidden {
+    display: none;
+}
+
+#amViewportContainer.viewport-mode {
+    display: flex;
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 5;
+}
+
+/* Sound Library Table */
+#amSoundTable {
+    flex: 0 0 auto;
+    max-height: 45%;
+    overflow-y: auto;
+    border-bottom: 1px solid #333;
+}
+
+.am-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+}
+
+.am-table thead {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+}
+
+.am-table th {
+    background: #1a1a1a;
+    color: #aaa;
+    font-size: 11px;
+    font-weight: bold;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    padding: 8px 10px;
+    text-align: left;
+    border-bottom: 1px solid #333;
+    white-space: nowrap;
+}
+
+.am-table td {
+    padding: 6px 10px;
+    color: #ccc;
+    border-bottom: 1px solid #1a1a1a;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 180px;
+}
+
+.am-table tr {
+    cursor: pointer;
+    transition: background 0.1s;
+}
+
+.am-table tbody tr:hover {
+    background: #1a1a1a;
+}
+
+.am-table tr.am-row-selected {
+    background: rgba(0, 255, 136, 0.08);
+}
+
+.am-table tr.am-row-selected td {
+    color: #fff;
+}
+
+/* Type badge */
+.am-type-badge {
+    display: inline-block;
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-size: 10px;
+    font-weight: bold;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.am-type-badge.noise_burst { background: #3a2010; color: #f0a040; }
+.am-type-badge.tone { background: #102030; color: #40a0f0; }
+.am-type-badge.sweep { background: #102a10; color: #40f080; }
+.am-type-badge.multi_tone { background: #2a1030; color: #c060f0; }
+
+/* Table action buttons */
+.am-table-btn {
+    background: transparent;
+    border: 1px solid #444;
+    color: #aaa;
+    border-radius: 3px;
+    padding: 2px 8px;
+    cursor: pointer;
+    font-size: 11px;
+    transition: background 0.1s, color 0.1s;
+}
+
+.am-table-btn:hover {
+    background: #333;
+    color: #fff;
+}
+
+.am-table-btn.am-play-btn:hover {
+    border-color: #00ff88;
+    color: #00ff88;
+}
+
+/* Filter pills in table */
+.am-filter-pill {
+    display: inline-block;
+    padding: 1px 5px;
+    background: #1a1a1a;
+    border: 1px solid #333;
+    border-radius: 3px;
+    font-size: 10px;
+    color: #888;
+    margin-right: 3px;
+}
+
+/* Visualizer Container */
+#amVisualizerContainer {
+    flex: 1;
+    display: flex;
+    gap: 0;
+    min-height: 0;
+    background: #0a0a0a;
+}
+
+#amEnvelopeCanvas,
+#amWaveformCanvas {
+    flex: 1;
+    min-width: 0;
+    min-height: 0;
+    border-right: 1px solid #222;
+}
+
+#amWaveformCanvas {
+    border-right: none;
+}
+
+/* Audio Manager editor scrollable */
+#amEditorForm {
+    max-height: none;
+    overflow-y: auto;
+    padding-right: 4px;
+}
+
+/* Audio Manager binding rows */
+.am-binding-row {
+    background: #1a1a1a;
+    border: 1px solid #333;
+    border-radius: 4px;
+    padding: 6px 8px;
+    margin: 4px 0;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+}
+
+.am-binding-event {
+    flex: 0 0 auto;
+    padding: 3px 6px;
+    background: #111;
+    color: #fff;
+    border: 1px solid #444;
+    border-radius: 3px;
+    font-size: 11px;
+}
+
+.am-binding-filters {
+    flex: 1;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    align-items: center;
+}
+
+.am-filter-label {
+    font-size: 10px;
+    color: #888;
+}
+
+.am-filter-input {
+    width: 60px;
+    padding: 2px 4px;
+    background: #111;
+    color: #fff;
+    border: 1px solid #444;
+    border-radius: 3px;
+    font-size: 10px;
+}
+
+.am-binding-remove {
+    background: transparent;
+    border: 1px solid #cc3333;
+    color: #ff6666;
+    border-radius: 3px;
+    padding: 1px 6px;
+    cursor: pointer;
+    font-size: 11px;
+    flex-shrink: 0;
+}
+
+.am-binding-remove:hover {
+    background: #331111;
+}

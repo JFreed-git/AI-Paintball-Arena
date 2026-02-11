@@ -1,0 +1,718 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Paintball Arena — Dev Workbench</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="devApp.css">
+</head>
+<body>
+    <div id="devSidebar">
+        <div id="devSidebarHeader">
+            <h2>Dev Workbench</h2>
+            <button id="devServerBtn" class="dev-btn-server" title="Start LAN server"><span class="server-dot stopped"></span>Server</button>
+            <button id="devSidebarCollapse" class="dev-sidebar-collapse-btn" title="Collapse sidebar">&laquo;</button>
+        </div>
+        <nav id="devNav">
+            <button class="dev-nav-btn active" data-panel="splitScreen">Split Screen</button>
+            <button class="dev-nav-btn" data-panel="heroEditor">Hero Editor</button>
+            <button class="dev-nav-btn" data-panel="weaponModelBuilder">Model Builder</button>
+            <button class="dev-nav-btn" data-panel="mapEditor">Map Editor</button>
+            <button class="dev-nav-btn" data-panel="menuBuilder">Menu Builder</button>
+            <button class="dev-nav-btn" data-panel="audioManager">Audio Manager</button>
+            <button class="dev-nav-btn" data-panel="quickTest">Quick Test</button>
+        </nav>
+        <div id="devPanels">
+            <!-- Split Screen Panel -->
+            <div id="panelSplitScreen" class="dev-panel active">
+                <h3>Split-Screen Test</h3>
+                <div class="dev-field">
+                    <label>P1 Hero</label>
+                    <select id="ssHeroP1"></select>
+                </div>
+                <div class="dev-field">
+                    <label>P2 Hero</label>
+                    <select id="ssHeroP2"></select>
+                </div>
+                <div class="dev-field">
+                    <label>Map</label>
+                    <select id="ssMapSelect">
+                        <option value="__default__">Default Arena</option>
+                    </select>
+                </div>
+                <div class="dev-actions">
+                    <button id="ssStart" class="dev-btn-primary">Start</button>
+                    <button id="ssStop" class="dev-btn-secondary" disabled>Stop</button>
+                </div>
+                <div id="ssStatus" class="dev-status">Ready. Press Start to begin.</div>
+            </div>
+
+            <!-- Hero Editor Panel -->
+            <div id="panelHeroEditor" class="dev-panel">
+                <h3>Hero Editor</h3>
+                <div id="heroEditorList">
+                    <div class="dev-field">
+                        <label>Hero</label>
+                        <select id="heHeroSelect"></select>
+                    </div>
+                    <div class="dev-actions">
+                        <button id="heNew" class="dev-btn-secondary">New</button>
+                        <button id="heDelete" class="dev-btn-danger">Delete</button>
+                    </div>
+                </div>
+                <div id="heroEditorForm" class="dev-scrollable">
+                    <h4 class="dev-section-header">Character</h4>
+                    <div class="dev-section-content">
+                        <div class="dev-field"><label>ID</label><input type="text" id="heId" /></div>
+                        <div class="dev-field"><label>Name</label><input type="text" id="heName" /></div>
+                        <div class="dev-field"><label>Description</label><input type="text" id="heDesc" /></div>
+                        <div class="dev-field"><label>Color</label><input type="color" id="heColor" value="#66ffcc" /></div>
+                    </div>
+
+                    <h4 class="dev-section-header">Stats</h4>
+                    <div class="dev-section-content">
+                        <div class="dev-field"><label>Max Health</label><input type="number" id="heMaxHealth" value="100" min="1" /></div>
+                        <div class="dev-field"><label>Walk Speed</label><input type="number" id="heWalkSpeed" value="4.5" step="0.1" /></div>
+                        <div class="dev-field"><label>Sprint Speed</label><input type="number" id="heSprintSpeed" value="8.5" step="0.1" /></div>
+                        <div class="dev-field"><label>Jump Velocity</label><input type="number" id="heJumpVelocity" value="8.5" step="0.5" /></div>
+                    </div>
+
+                    <h4 class="dev-section-header">Weapon</h4>
+                    <div class="dev-section-content">
+                        <div class="dev-field"><label>Cooldown (ms)</label><input type="number" id="heCooldownMs" value="166" min="1" /></div>
+                        <div class="dev-field"><label>Mag Size</label><input type="number" id="heMagSize" value="6" min="1" /></div>
+                        <div class="dev-field"><label>Reload (sec)</label><input type="number" id="heReloadTime" value="2.5" step="0.1" /></div>
+                        <div class="dev-field"><label>Damage</label><input type="number" id="heDamage" value="20" min="1" /></div>
+                        <div class="dev-field"><label>Spread (rad)</label><input type="number" id="heSpreadRad" value="0" step="0.005" min="0" /></div>
+                        <div class="dev-field"><label>Sprint Spread</label><input type="number" id="heSprintSpreadRad" value="0.012" step="0.005" min="0" /></div>
+                        <div class="dev-field"><label>Max Range</label><input type="number" id="heMaxRange" value="200" min="1" /></div>
+                        <div class="dev-field"><label>Pellets</label><input type="number" id="hePellets" value="1" min="1" /></div>
+                        <div class="dev-field"><label>Projectile Speed</label><input type="number" id="heProjectileSpeed" value="120" step="10" min="0" /></div>
+                        <div class="dev-field"><label>Proj. Gravity</label><input type="number" id="heProjectileGravity" value="0" step="1" min="0" /></div>
+                    </div>
+
+                    <h4 class="dev-section-header">Melee</h4>
+                    <div class="dev-section-content">
+                        <div class="dev-field"><label>Damage</label><input type="number" id="heMeleeDamage" value="30" min="0" /></div>
+                        <div class="dev-field"><label>Range (m)</label><input type="number" id="heMeleeRange" value="2.5" step="0.1" min="0" /></div>
+                        <div class="dev-field"><label>Cooldown (ms)</label><input type="number" id="heMeleeCooldownMs" value="600" min="0" /></div>
+                        <div class="dev-field"><label>Swing Time (ms)</label><input type="number" id="heMeleeSwingMs" value="350" min="50" /></div>
+                        <div class="dev-field"><label>Use Hit Multiplier</label><input type="checkbox" id="heMeleeUseHitMult" checked /></div>
+                    </div>
+
+                    <h4 class="dev-section-header">Scope</h4>
+                    <div class="dev-section-content">
+                        <div class="dev-field">
+                            <label>Type</label>
+                            <select id="heScopeType">
+                                <option value="none">None</option>
+                                <option value="scope">Scope</option>
+                                <option value="ironsights">Iron Sights</option>
+                            </select>
+                        </div>
+                        <div class="dev-field"><label>Zoom FOV</label><input type="number" id="heScopeFOV" value="35" min="10" max="90" /></div>
+                        <div class="dev-field"><label>Spread Mult</label><input type="number" id="heScopeSpreadMult" value="0.15" step="0.05" min="0" /></div>
+                    </div>
+
+                    <h4 class="dev-section-header">Crosshair</h4>
+                    <div class="dev-section-content">
+                        <div class="dev-field">
+                            <label>Style</label>
+                            <select id="heCrosshairStyle">
+                                <option value="cross">Cross</option>
+                                <option value="circle">Circle</option>
+                            </select>
+                        </div>
+                        <div class="dev-field"><label>Color</label><input type="color" id="heCrosshairColor" value="#00ffaa" /></div>
+                    </div>
+
+                    <h4 class="dev-section-header">Visual</h4>
+                    <div class="dev-section-content">
+                        <div class="dev-field">
+                            <label>Model Type</label>
+                            <select id="heModelType"></select>
+                        </div>
+                        <div class="dev-field"><label>Tracer Color</label><input type="color" id="heTracerColor" value="#66ffcc" /></div>
+                    </div>
+
+                    <h4 class="dev-section-header">FP Weapon</h4>
+                    <div class="dev-section-content">
+                        <div class="dev-field"><label>Offset X</label><input type="number" id="heFPOffsetX" value="0.28" step="0.01" /></div>
+                        <div class="dev-field"><label>Offset Y</label><input type="number" id="heFPOffsetY" value="-0.22" step="0.01" /></div>
+                        <div class="dev-field"><label>Offset Z</label><input type="number" id="heFPOffsetZ" value="-0.45" step="0.01" /></div>
+                        <div class="dev-field"><label>Rot X</label><input type="number" id="heFPRotX" value="0.05" step="0.01" /></div>
+                        <div class="dev-field"><label>Rot Y</label><input type="number" id="heFPRotY" value="-0.15" step="0.01" /></div>
+                        <div class="dev-field"><label>Rot Z</label><input type="number" id="heFPRotZ" value="0" step="0.01" /></div>
+                    </div>
+
+                    <div class="dev-actions">
+                        <button id="heSave" class="dev-btn-primary">Save</button>
+                        <button id="heApplySS" class="dev-btn-secondary">Apply to P1</button>
+                    </div>
+                </div>
+                <div id="heroPreviewContainer">
+                    <canvas id="heroPreviewCanvas" width="280" height="260"></canvas>
+                </div>
+            </div>
+
+            <!-- Weapon Model Builder Panel -->
+            <div id="panelWeaponModelBuilder" class="dev-panel">
+                <h3>Weapon Model Builder</h3>
+                <div class="dev-field">
+                    <label>Model Name</label>
+                    <input type="text" id="wmbName" placeholder="custom_sniper" />
+                </div>
+                <div class="dev-field">
+                    <label>Load</label>
+                    <select id="wmbLoadSelect">
+                        <option value="">-- New --</option>
+                    </select>
+                </div>
+                <div class="dev-hitbox-toolbar">
+                    <button id="wmbUndo" class="dev-btn-secondary" disabled>Undo</button>
+                    <button id="wmbRedo" class="dev-btn-secondary" disabled>Redo</button>
+                </div>
+                <div id="wmbPartsList" class="dev-scrollable"></div>
+                <div class="dev-actions">
+                    <button id="wmbAddBox" class="dev-btn-secondary">+ Box</button>
+                    <button id="wmbAddCyl" class="dev-btn-secondary">+ Cylinder</button>
+                </div>
+                <div id="wmbPreviewContainer">
+                    <canvas id="wmbPreviewCanvas" width="280" height="200"></canvas>
+                </div>
+                <div class="dev-actions">
+                    <button id="wmbRegister" class="dev-btn-primary">Register</button>
+                    <button id="wmbSave" class="dev-btn-secondary">Save</button>
+                    <button id="wmbDelete" class="dev-btn-danger">Delete</button>
+                </div>
+            </div>
+
+            <!-- Map Editor Panel (auto-opens via switchPanel, button hidden) -->
+            <div id="panelMapEditor" class="dev-panel">
+                <button id="meOpen" class="dev-btn-primary" style="display:none">Open Map Editor</button>
+            </div>
+
+            <!-- Quick Test Panel -->
+            <div id="panelQuickTest" class="dev-panel">
+                <h3>Quick Test</h3>
+                <div class="dev-field">
+                    <label>Hero</label>
+                    <select id="qtHero"></select>
+                </div>
+                <div class="dev-field">
+                    <label>Difficulty</label>
+                    <select id="qtDifficulty">
+                        <option value="Easy">Easy</option>
+                        <option value="Medium">Medium</option>
+                        <option value="Hard">Hard</option>
+                    </select>
+                </div>
+                <div class="dev-field">
+                    <label>Map</label>
+                    <select id="qtMapSelect">
+                        <option value="__default__">Default Arena</option>
+                    </select>
+                </div>
+                <div class="dev-actions">
+                    <button id="qtAIMatch" class="dev-btn-primary">AI Match</button>
+                    <button id="qtTraining" class="dev-btn-secondary">Training Range</button>
+                </div>
+            </div>
+            <!-- Menu Builder Panel -->
+            <div id="panelMenuBuilder" class="dev-panel">
+                <h3>Menu Builder</h3>
+                <div class="dev-field">
+                    <label>Menu</label>
+                    <select id="mbMenuSelect"></select>
+                </div>
+                <div class="dev-actions">
+                    <button id="mbNewMenu" class="dev-btn-secondary">New</button>
+                    <button id="mbDeleteMenu" class="dev-btn-danger">Delete</button>
+                </div>
+
+                <h4 class="dev-section-header">Container</h4>
+                <div class="dev-section-content">
+                    <div class="dev-field"><label>Full Screen</label><input type="checkbox" id="mbContainerFS" /></div>
+                    <div class="dev-field" id="mbContainerWRow"><label>Width</label><input type="number" id="mbContainerW" value="420" min="100" step="10" /></div>
+                    <div class="dev-field" id="mbContainerHRow"><label>Height</label><input type="number" id="mbContainerH" value="240" min="100" step="10" /></div>
+                    <div class="dev-field"><label>Background</label><div style="display:flex;gap:4px;flex:1;"><input type="text" id="mbContainerBg" value="" placeholder="transparent" style="flex:1;" /><button id="mbContainerBgClear" class="dev-btn-secondary" style="padding:2px 8px;font-size:11px;">Clear</button></div></div>
+                    <div class="dev-field"><label>Border Rad</label><input type="number" id="mbContainerBR" value="12" min="0" step="1" /></div>
+                </div>
+
+                <h4>Elements</h4>
+                <div id="mbElementList" class="dev-scrollable" style="max-height:300px;"></div>
+
+                <div class="dev-actions" style="flex-wrap:wrap;">
+                    <button class="dev-btn-secondary mb-add-btn" data-type="heading">+ Heading</button>
+                    <button class="dev-btn-secondary mb-add-btn" data-type="button">+ Button</button>
+                    <button class="dev-btn-secondary mb-add-btn" data-type="text">+ Text</button>
+                </div>
+                <div class="dev-actions" style="flex-wrap:wrap;">
+                    <button class="dev-btn-secondary mb-add-btn" data-type="slider">+ Slider</button>
+                    <button class="dev-btn-secondary mb-add-btn" data-type="select">+ Select</button>
+                    <button class="dev-btn-secondary mb-add-btn" data-type="numberInput">+ Number</button>
+                </div>
+                <div class="dev-actions" style="flex-wrap:wrap;">
+                    <button class="dev-btn-secondary mb-add-btn" data-type="textInput">+ Text In</button>
+                    <button class="dev-btn-secondary mb-add-btn" data-type="divider">+ Divider</button>
+                </div>
+
+                <div class="dev-actions" style="margin-top:12px;">
+                    <button id="mbSave" class="dev-btn-primary">Save</button>
+                    <button id="mbResetDefault" class="dev-btn-secondary">Reset Default</button>
+                </div>
+                <div class="dev-actions">
+                    <button id="mbUndo" class="dev-btn-secondary" disabled>Undo</button>
+                    <button id="mbRedo" class="dev-btn-secondary" disabled>Redo</button>
+                </div>
+            </div>
+            <!-- Audio Manager Panel -->
+            <div id="panelAudioManager" class="dev-panel">
+                <h3>Audio Manager</h3>
+                <div class="dev-actions">
+                    <button id="amNew" class="dev-btn-secondary">New</button>
+                    <button id="amDuplicate" class="dev-btn-secondary">Duplicate</button>
+                    <button id="amDelete" class="dev-btn-danger">Delete</button>
+                </div>
+
+                <div id="amEditorForm" class="dev-scrollable">
+                    <div class="dev-field"><label>Name</label><input type="text" id="amName" /></div>
+                    <div class="dev-field"><label>ID</label><input type="text" id="amId" /></div>
+
+                    <h4 class="dev-section-header">Synthesis</h4>
+                    <div class="dev-section-content">
+                        <div class="dev-field">
+                            <label>Type</label>
+                            <select id="amType">
+                                <option value="noise_burst">noise_burst</option>
+                                <option value="tone">tone</option>
+                                <option value="sweep">sweep</option>
+                                <option value="multi_tone">multi_tone</option>
+                            </select>
+                        </div>
+
+                        <div class="dev-field"><label>Duration</label><input type="number" id="amDuration" value="0.06" step="0.01" min="0.001" /></div>
+                        <div class="dev-field"><label>Volume</label><input type="number" id="amVolume" value="0.5" step="0.05" min="0" max="1" /></div>
+                        <div class="dev-field"><label>Attack</label><input type="number" id="amAttack" value="0.002" step="0.001" min="0" /></div>
+                        <div class="dev-field"><label>Decay</label><input type="number" id="amDecay" value="0.058" step="0.01" min="0" /></div>
+
+                        <!-- Shared waveform (tone, sweep, multi_tone) -->
+                        <div id="amSecWaveform" class="hidden">
+                            <div class="dev-field">
+                                <label>Waveform</label>
+                                <select id="amWaveform">
+                                    <option value="sine">sine</option>
+                                    <option value="square">square</option>
+                                    <option value="triangle">triangle</option>
+                                    <option value="sawtooth">sawtooth</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <!-- noise_burst params -->
+                        <div id="amSecNoiseBurst">
+                            <div class="dev-field"><label>Frequency</label><input type="number" id="amFrequency" value="3000" step="100" min="20" /></div>
+                            <div class="dev-field">
+                                <label>Filter</label>
+                                <select id="amFilterType">
+                                    <option value="lowpass">lowpass</option>
+                                    <option value="highpass">highpass</option>
+                                    <option value="bandpass">bandpass</option>
+                                </select>
+                            </div>
+                            <div class="dev-field"><label>Filter Q</label><input type="number" id="amFilterQ" value="1" step="0.1" min="0" /></div>
+                        </div>
+
+                        <!-- sweep params -->
+                        <div id="amSecSweep" class="hidden">
+                            <div class="dev-field"><label>Start Freq</label><input type="number" id="amStartFreq" value="800" step="50" min="20" /></div>
+                            <div class="dev-field"><label>End Freq</label><input type="number" id="amEndFreq" value="200" step="50" min="20" /></div>
+                            <div class="dev-field"><label>Noise Mix</label><input type="number" id="amNoiseAmount" value="0" step="0.1" min="0" max="1" /></div>
+                        </div>
+
+                        <!-- multi_tone params -->
+                        <div id="amSecMultiTone" class="hidden">
+                            <div class="dev-field" style="flex-direction:column;align-items:stretch;">
+                                <label>Notes (JSON)</label>
+                                <textarea id="amNotes" rows="4" style="width:100%;background:#1a1a1a;color:#fff;border:1px solid #444;border-radius:4px;font-family:monospace;font-size:11px;padding:4px;">[]</textarea>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="dev-actions">
+                        <button id="amPlay" class="dev-btn-secondary">Play</button>
+                        <button id="amRandomize" class="dev-btn-secondary" title="Randomize params ±15%">Randomize</button>
+                    </div>
+
+                    <h4 class="dev-section-header">Bindings</h4>
+                    <div class="dev-section-content">
+                        <div id="amBindingsList"></div>
+                        <div class="dev-actions">
+                            <button id="amAddBinding" class="dev-btn-secondary">+ Add Binding</button>
+                        </div>
+                    </div>
+
+                    <div class="dev-actions" style="margin-top:12px;">
+                        <button id="amSave" class="dev-btn-primary">Save</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div id="serverLogPanel" class="hidden">
+            <div id="serverLogHeader">
+                <span>Server Log</span>
+                <button id="serverLogClose" title="Close log">&times;</button>
+            </div>
+            <div id="serverLogOutput"></div>
+        </div>
+    </div>
+
+    <div id="devViewport">
+        <button id="devSidebarExpand" class="dev-sidebar-expand-btn hidden" title="Expand sidebar">&raquo;</button>
+        <div id="mbPreviewContainer" class="hidden">
+            <div id="mbMenuPreview"></div>
+        </div>
+        <div id="mbViewportToolbar" class="hidden">
+            <button id="mbSnapToggle" class="dev-btn-secondary">Snap: 10px</button>
+            <button id="mbAlignToggle" class="dev-btn-secondary active">Align Snap</button>
+            <button id="mbGridToggle" class="dev-btn-secondary">Show Grid</button>
+        </div>
+        <div id="amViewportContainer" class="hidden">
+            <div id="amSoundTable"></div>
+            <div id="amVisualizerContainer">
+                <canvas id="amEnvelopeCanvas"></canvas>
+                <canvas id="amWaveformCanvas"></canvas>
+            </div>
+        </div>
+        <div id="heViewportToolbar" class="hidden">
+            <div class="he-mode-group">
+                <button class="he-mode-btn active" data-mode="hitbox">Hitbox</button>
+                <button class="he-mode-btn" data-mode="visual">Visual</button>
+                <button class="he-mode-btn" data-mode="combined">Combined</button>
+            </div>
+            <span class="he-toolbar-sep"></span>
+            <button id="heToggleModel" class="dev-btn-secondary">Hide Model</button>
+            <button id="heHideWeapon" class="dev-btn-secondary hidden">Hide Weapon</button>
+            <button id="heSnapCenter" class="dev-btn-secondary">Snap Center: Off</button>
+            <button id="heFPView" class="dev-btn-secondary">FP View</button>
+        </div>
+        <div id="gameContainer">
+            <!-- Round UI -->
+            <div id="roundBanner" class="hidden"></div>
+            <div id="roundCountdown" class="hidden"></div>
+            <div id="ui" class="hidden">
+                <div id="enemyHealthContainer" class="hidden">
+                    <div class="label">Enemy</div>
+                    <div id="enemyHealthBar">
+                        <div id="enemyHealthFill" style="width: 100%"></div>
+                    </div>
+                </div>
+                <div id="healthContainer" class="hidden">
+                    <div id="weaponNameDisplay" class="hidden"></div>
+                    <div id="sprintIndicator" class="hidden">SPRINTING</div>
+                    <div id="healthBar">
+                        <div id="healthFill" style="width: 100%"></div>
+                    </div>
+                    <div id="ammoRow">
+                        <span id="ammoDisplay">0/0</span>
+                        <span id="reloadIndicator" class="hidden">Reloading...</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Split-Screen HUD overlays -->
+            <div id="ssHudP1" class="ss-hud hidden">
+                <div class="ss-hud-label">P1</div>
+                <div class="ss-health-bar"><div class="ss-health-fill" id="ssHealthFillP1"></div></div>
+                <div class="ss-ammo"><span id="ssAmmoP1">6/6</span><span id="ssReloadP1" class="hidden">Reloading...</span></div>
+            </div>
+            <div id="ssHudP2" class="ss-hud hidden">
+                <div class="ss-hud-label">P2</div>
+                <div class="ss-health-bar"><div class="ss-health-fill" id="ssHealthFillP2"></div></div>
+                <div class="ss-ammo"><span id="ssAmmoP2">6/6</span><span id="ssReloadP2" class="hidden">Reloading...</span></div>
+            </div>
+            <div id="ssControlIndicator" class="hidden">CONTROLLING P1</div>
+
+            <!-- Crosshairs for split-screen -->
+            <div id="ssCrosshairP1" class="ss-crosshair hidden"><div class="ch-bar ch-left"></div><div class="ch-bar ch-right"></div><div class="ch-bar ch-top"></div><div class="ch-bar ch-bottom"></div></div>
+            <div id="ssCrosshairP2" class="ss-crosshair hidden"><div class="ch-bar ch-left"></div><div class="ch-bar ch-right"></div><div class="ch-bar ch-top"></div><div class="ch-bar ch-bottom"></div></div>
+
+            <!-- Menus (hidden, stubs for game mode compat) -->
+            <div id="mainMenu" class="menu hidden"></div>
+            <div id="paintballMenu" class="menu hidden">
+                <input type="number" id="roundsToWinPaintball" value="2" class="hidden" />
+                <select id="paintballDifficulty" class="hidden"><option value="Easy">Easy</option></select>
+                <select id="paintballMapSelect" class="hidden"></select>
+            </div>
+            <div id="trainingMenu" class="menu hidden"></div>
+            <div id="lanMenu" class="menu hidden">
+                <input type="text" id="roomId" class="hidden" />
+                <input type="number" id="roundsToWin" value="2" class="hidden" />
+                <select id="lanMapSelect" class="hidden"></select>
+            </div>
+            <div id="resultMenu" class="menu hidden">
+                <span id="finalScore">0</span>
+                <button id="backToMenu"></button>
+            </div>
+
+            <div id="trainingStats" class="hidden">
+                Shots: <span id="tsShotCount">0</span><br>
+                Hits: <span id="tsHitCount">0</span><br>
+                Kills: <span id="tsKillCount">0</span><br>
+                Accuracy: <span id="tsAccuracy">-</span>
+            </div>
+
+            <div id="heroSelectOverlay" class="hidden">
+                <div id="heroSelectTitle">SELECT HERO</div>
+                <div id="heroSelectTimer" class="hidden">15</div>
+                <div id="heroSelectWaiting" class="hidden">Waiting for opponent...</div>
+                <div id="heroSelectHint">Press H to close</div>
+            </div>
+
+            <!-- Dev Console -->
+            <div id="devConsole" class="hidden">
+                <div id="devPassword">
+                    <h3>Dev Console</h3>
+                    <input type="password" id="devPasswordInput" placeholder="Enter password" autocomplete="off" />
+                    <button id="devPasswordSubmit">Submit</button>
+                    <div id="devPasswordError" class="hidden">Wrong password</div>
+                </div>
+                <div id="devCommands" class="hidden">
+                    <h3>Dev Console</h3>
+                    <button class="dev-cmd" data-cmd="godMode">God Mode: OFF</button>
+                    <button class="dev-cmd" data-cmd="unlimitedAmmo">Unlimited Ammo: OFF</button>
+                    <button class="dev-cmd" data-cmd="spectator">Spectator Camera: OFF</button>
+                    <button class="dev-cmd" data-cmd="killEnemy">Kill Enemy</button>
+                    <button class="dev-cmd" data-cmd="heal">Heal Player</button>
+                    <button class="dev-cmd" data-cmd="showHitboxes">Show Hitboxes: OFF</button>
+                    <button class="dev-cmd" data-cmd="showAIState">AI State: OFF</button>
+                </div>
+            </div>
+
+            <!-- Map Editor UI (reused from index.html) -->
+            <div id="editorUI" class="hidden">
+                <div id="editorToolbar">
+                    <button class="editor-tool active" data-tool="select">Select</button>
+                    <div class="editor-dropdown" id="editorPlaceDropdown">
+                        <button class="editor-btn" id="editorPlaceBtn">Place: Box &#9662;</button>
+                        <div class="editor-dropdown-menu" id="editorPlaceMenu">
+                            <button class="editor-shape-opt" data-tool="box">Box</button>
+                            <button class="editor-shape-opt" data-tool="cylinder">Cylinder</button>
+                            <button class="editor-shape-opt" data-tool="halfCylinder">Half-Cylinder</button>
+                            <button class="editor-shape-opt" data-tool="ramp">Ramp</button>
+                            <div class="editor-dropdown-sep"></div>
+                            <button class="editor-shape-opt" data-tool="wedge">Wedge</button>
+                            <button class="editor-shape-opt" data-tool="lshape">L-Shape</button>
+                            <button class="editor-shape-opt" data-tool="arch">Arch</button>
+                        </div>
+                    </div>
+                    <button class="editor-tool" data-tool="spawn">Spawn</button>
+                    <span class="editor-sep"></span>
+                    <button class="editor-btn" id="editorMirrorToggle">Mirror: Off</button>
+                    <button class="editor-btn" id="editorSnapToggle">Snap: Grid+Edge</button>
+                    <span class="editor-sep"></span>
+                    <button class="editor-btn" id="editorUndo">Undo</button>
+                    <button class="editor-btn" id="editorRedo">Redo</button>
+                    <span class="editor-sep"></span>
+                    <button class="editor-btn" id="editorSave">Save</button>
+                    <button class="editor-btn" id="editorLoad">Load</button>
+                    <button class="editor-btn" id="editorNew">New</button>
+                    <span class="editor-sep"></span>
+                    <button class="editor-btn" id="editorPlayerMode">Player</button>
+                    <button class="editor-btn" id="editorSettings">Settings</button>
+                    <button class="editor-btn editor-exit" id="editorExit">Exit</button>
+                </div>
+                <div id="editorPropsPanel" class="hidden">
+                    <button class="panel-close" id="epropClose">&times;</button>
+                    <h4>Properties</h4>
+                    <div class="eprop" id="epropTypeRow"><label>Type</label><span id="epropType">-</span></div>
+                    <div class="eprop" id="epropMultiRow" style="display:none"><span id="epropMultiLabel" style="color:#00ff88;font-size:12px">-</span></div>
+                    <div class="eprop" id="epropXRow"><label>X</label><input type="number" id="epropX" step="0.5" /></div>
+                    <div class="eprop" id="epropZRow"><label>Z</label><input type="number" id="epropZ" step="0.5" /></div>
+                    <div class="eprop" id="epropYRow"><label>Y</label><input type="number" id="epropY" step="0.5" /></div>
+                    <div class="eprop" id="epropSizeRow"><label>Size X</label><input type="number" id="epropSX" step="0.5" min="0.5" /></div>
+                    <div class="eprop" id="epropSYRow"><label>Height</label><input type="number" id="epropSY" step="0.5" min="0.5" /></div>
+                    <div class="eprop" id="epropSZRow"><label>Size Z</label><input type="number" id="epropSZ" step="0.5" min="0.5" /></div>
+                    <div class="eprop" id="epropRadiusRow"><label>Radius</label><input type="number" id="epropRadius" step="0.25" min="0.25" /></div>
+                    <div class="eprop" id="epropThicknessRow"><label>Thick</label><input type="number" id="epropThickness" step="0.25" min="0.25" /></div>
+                    <div class="eprop" id="epropRotRow"><label>Rotation</label><input type="number" id="epropRot" step="90" /></div>
+                    <div class="eprop"><label>Color</label><input type="color" id="epropColor" value="#6B5B4F" /></div>
+                    <div class="eprop" id="epropSpawnTeamRow" style="display:none"><label>Team</label><select id="epropSpawnTeam"><option value="">None</option><option value="A">A</option><option value="B">B</option><option value="C">C</option><option value="D">D</option></select></div>
+                    <button class="editor-btn" id="epropMirror">Mirror Copy</button>
+                    <button class="editor-btn editor-danger" id="epropDelete">Delete</button>
+                </div>
+                <div id="editorSettingsPanel" class="hidden">
+                    <button class="panel-close" id="esCloseX">&times;</button>
+                    <h4>Map Settings</h4>
+                    <div class="eprop"><label>Map Name</label><input type="text" id="esMapName" value="my-map" /></div>
+                    <div class="eprop"><label>Arena Width</label><input type="number" id="esArenaW" step="1" min="20" value="60" /></div>
+                    <div class="eprop"><label>Arena Length</label><input type="number" id="esArenaL" step="1" min="20" value="90" /></div>
+                    <div class="eprop"><label>Wall Height</label><input type="number" id="esWallH" step="0.5" min="1" value="3.5" /></div>
+                    <button class="editor-btn" id="esMakeSquare">Make Square</button>
+                    <button class="editor-btn" id="esApply">Apply</button>
+                    <button class="editor-btn" id="esClose">Close</button>
+                </div>
+                <div id="editorLoadPanel" class="hidden">
+                    <button class="panel-close" id="editorLoadCloseX">&times;</button>
+                    <h4>Load Map</h4>
+                    <select id="editorLoadSelect"></select>
+                    <button class="editor-btn" id="editorLoadConfirm">Load</button>
+                    <button class="editor-btn editor-danger" id="editorDeleteMap">Delete</button>
+                    <button class="editor-btn" id="editorLoadCancel">Cancel</button>
+                </div>
+                <div id="editorPlayerHint" class="hidden">Player Mode — Press P to return to editor</div>
+                <div id="editorStatusBar">
+                    <span id="editorToolLabel">Tool: Select</span>
+                    <span id="editorControlsHint">RMB+WASD: Fly | LMB: Select/Place</span>
+                    <span id="editorObjCount">Objects: 0</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="devRightPanel" class="hidden">
+        <div id="devRightPanelHeader">
+            <h3>Hitbox Segments</h3>
+            <button id="devRightPanelCollapse" class="dev-sidebar-collapse-btn" title="Collapse panel">&raquo;</button>
+        </div>
+        <div id="devRightPanelContent">
+            <div class="dev-hitbox-toolbar">
+                <button id="heUndo" class="dev-btn-secondary" disabled title="Ctrl+Z">Undo</button>
+                <button id="heRedo" class="dev-btn-secondary" disabled title="Ctrl+Shift+Z">Redo</button>
+            </div>
+            <div id="heHitboxList"></div>
+            <div class="dev-actions">
+                <button id="heHitboxAdd" class="dev-btn-secondary">+ Segment</button>
+            </div>
+        </div>
+
+        <!-- Body Parts (Visual mode) -->
+        <div id="heBodyPartsContent" class="hidden" style="flex:1;overflow-y:auto;padding:12px;">
+            <div class="dev-hitbox-toolbar">
+                <button id="heBPUndo" class="dev-btn-secondary" disabled>Undo</button>
+                <button id="heBPRedo" class="dev-btn-secondary" disabled>Redo</button>
+            </div>
+            <div id="heBodyPartList"></div>
+            <div class="dev-actions">
+                <button id="heBodyPartAdd" class="dev-btn-secondary">+ Part</button>
+            </div>
+        </div>
+
+        <!-- WMB Part Properties -->
+        <div id="wmbRightPanelContent" class="hidden" style="flex:1;overflow-y:auto;padding:12px;">
+            <p style="color:#666;font-size:12px;padding:8px;">Select a part to edit properties.</p>
+        </div>
+
+        <!-- Menu Builder Element Properties -->
+        <div id="mbRightPanelContent" class="hidden" style="flex:1;overflow-y:auto;padding:12px;">
+            <div class="dev-field"><label>Type</label><select id="mbElType">
+                <option value="heading">Heading</option>
+                <option value="text">Text</option>
+                <option value="button">Button</option>
+                <option value="numberInput">Number Input</option>
+                <option value="textInput">Text Input</option>
+                <option value="slider">Slider</option>
+                <option value="select">Select</option>
+                <option value="divider">Divider</option>
+                <option value="image">Image</option>
+            </select></div>
+            <div class="dev-field"><label>Text</label><input type="text" id="mbElText" /></div>
+            <div class="dev-field" id="mbElTagRow"><label>Tag</label><select id="mbElTag">
+                <option value="h1">H1</option><option value="h2">H2</option><option value="h3">H3</option>
+            </select></div>
+            <div class="dev-field" id="mbElIdRow"><label>Element ID</label><input type="text" id="mbElId" /></div>
+            <div class="dev-field" id="mbElVariantRow"><label>Variant</label><select id="mbElVariant">
+                <option value="primary">Primary</option><option value="secondary">Secondary</option>
+            </select></div>
+            <div class="dev-field" id="mbElActionRow"><label>Action</label><input type="text" id="mbElAction" placeholder="showMenu:menuId" /></div>
+            <div class="dev-field" id="mbElLabelRow"><label>Label</label><input type="text" id="mbElLabel" /></div>
+            <div class="dev-field" id="mbElPlaceholderRow"><label>Placeholder</label><input type="text" id="mbElPlaceholder" /></div>
+            <div class="dev-field" id="mbElMinRow"><label>Min</label><input type="number" id="mbElMin" step="any" /></div>
+            <div class="dev-field" id="mbElMaxRow"><label>Max</label><input type="number" id="mbElMax" step="any" /></div>
+            <div class="dev-field" id="mbElStepRow"><label>Step</label><input type="number" id="mbElStep" step="any" /></div>
+            <div class="dev-field" id="mbElDefaultRow"><label>Default</label><input type="number" id="mbElDefault" step="any" /></div>
+            <div class="dev-field" id="mbElInputIdRow"><label>Input ID</label><input type="text" id="mbElInputId" /></div>
+            <div class="dev-field" id="mbElValueIdRow"><label>Value ID</label><input type="text" id="mbElValueId" /></div>
+            <div class="dev-field" id="mbElOptionsRow"><label>Options</label><textarea id="mbElOptions" rows="3" style="flex:1;min-width:0;padding:4px;background:#1a1a1a;color:#fff;border:1px solid #444;border-radius:4px;font-size:11px;resize:vertical;" placeholder="Easy:Easy&#10;Medium:Medium"></textarea></div>
+
+            <h4>Position</h4>
+            <div class="dev-field"><label>X</label><input type="number" id="mbElX" step="1" /></div>
+            <div class="dev-field"><label>Y</label><input type="number" id="mbElY" step="1" /></div>
+            <div class="dev-field"><label>Width</label><input type="number" id="mbElW" step="1" min="10" /></div>
+            <div class="dev-field"><label>Height</label><input type="number" id="mbElH" step="1" min="10" /></div>
+
+            <h4>Style</h4>
+            <div class="dev-field"><label>Font Size</label><input type="text" id="mbElFontSize" placeholder="14px" /></div>
+            <div class="dev-field"><label>Color</label><input type="text" id="mbElColor" placeholder="#fff" /></div>
+            <div class="dev-field"><label>Background</label><input type="text" id="mbElBgColor" placeholder="default" /></div>
+            <div class="dev-field"><label>Border Rad</label><input type="text" id="mbElBorderRadius" placeholder="8px" /></div>
+            <div class="dev-field"><label>Font Weight</label><input type="text" id="mbElFontWeight" placeholder="normal" /></div>
+            <div class="dev-field"><label>Text Align</label><select id="mbElTextAlign">
+                <option value="">Default</option><option value="left">Left</option>
+                <option value="center">Center</option><option value="right">Right</option>
+            </select></div>
+            <div class="dev-field"><label>Padding</label><input type="text" id="mbElPadding" placeholder="0" /></div>
+
+            <div class="dev-actions" style="margin-top:12px;">
+                <button id="mbElDuplicate" class="dev-btn-secondary">Duplicate</button>
+                <button id="mbElDelete" class="dev-btn-danger">Delete</button>
+            </div>
+        </div>
+    </div>
+
+    <button id="devRightPanelExpand" class="dev-right-expand-btn hidden" title="Expand hitbox panel">&laquo;</button>
+
+    <!-- External libraries -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="electron-fetch-shim.js"></script>
+    <script src="interactionEngine.js"></script>
+
+    <!-- Core systems (no game-mode dependencies) -->
+    <script src="config.js"></script>
+    <script src="audio.js"></script>
+    <script src="weapon.js"></script>
+    <script src="weaponModels.js"></script>
+    <script src="physics.js"></script>
+    <script src="crosshair.js"></script>
+    <script src="hud.js"></script>
+    <script src="roundFlow.js"></script>
+    <script src="heroes.js"></script>
+    <script src="abilities.js"></script>
+    <script src="heroSelectUI.js"></script>
+
+    <!-- Menu system -->
+    <script src="menuRenderer.js"></script>
+
+    <!-- Input, UI, environment -->
+    <script src="menuNavigation.js"></script>
+    <script src="input.js"></script>
+    <script src="environment.js"></script>
+
+    <!-- Player and arenas -->
+    <script src="player.js"></script>
+    <script src="arenaBuilder.js"></script>
+    <script src="arenaCompetitive.js"></script>
+    <script src="arenaTraining.js"></script>
+    <script src="mapFormat.js"></script>
+    <script src="mapEditor.js"></script>
+
+    <!-- Combat and AI -->
+    <script src="projectiles.js"></script>
+    <script src="aiOpponent.js"></script>
+    <script src="trainingBot.js"></script>
+
+    <!-- Game modes (needed for Quick Test) -->
+    <script src="modeAI.js"></script>
+    <script src="modeLAN.js"></script>
+    <script src="modeTraining.js"></script>
+
+    <!-- Dev workbench -->
+    <script src="menuBuilder.js"></script>
+    <script src="devAudioManager.js"></script>
+    <script src="devSplitScreen.js"></script>
+    <script src="devHeroEditor.js"></script>
+    <script src="devConsole.js"></script>
+    <script src="devApp.js"></script>
+</body>
+</html>

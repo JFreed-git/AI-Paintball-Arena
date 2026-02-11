@@ -1,24 +1,39 @@
-// Build a symmetric paintball arena with mirrored cover and two opposite spawns.
-// Returns an object: { group, colliders, solids, waypoints, spawns: { A, B } }
+/**
+ * arenaCompetitive.js — Competitive paintball arena
+ *
+ * Builds the symmetric competitive arena used by AI single-player and LAN
+ * multiplayer modes. Contains the cover layout (zones A-D), AI waypoint graph,
+ * player/AI spawn positions with gold rings, and perimeter scenery trees.
+ *
+ * The arena is Z-symmetric: cover blocks are mirrored across Z=0 so neither
+ * spawn side has a layout advantage. Spawns are at opposite ends of the Z axis.
+ *
+ * EXPORTS (bare global):
+ *   buildPaintballArenaSymmetric() → { group, colliders, solids, waypoints, spawns: { A, B } }
+ *
+ * DEPENDENCIES: Three.js, game.js (scene global), physics.js (GROUND_Y),
+ *   arenaBuilder.js (arenaAddSolidBox, arenaAddFloor, arenaAddPerimeterWalls, arenaAddTrees)
+ */
+
 function buildPaintballArenaSymmetric() {
-  const group = new THREE.Group();
+  var group = new THREE.Group();
   group.name = 'PaintballArena';
 
-  const solids = [];   // meshes that block LOS and bullets
-  const colliders = []; // Box3 for movement collisions
-  const waypoints = [];
+  var solids = [];   // meshes that block LOS and bullets
+  var colliders = []; // Box3 for movement collisions
+  var waypoints = [];
 
   // Arena size (tighter: ~90m end-to-end along Z, 60m wide)
-  const arenaHalfW = 30; // X extent 60
-  const arenaHalfL = 45; // Z extent 90
-  const wallHeight = 3.5;
+  var arenaHalfW = 30; // X extent 60
+  var arenaHalfL = 45; // Z extent 90
+  var wallHeight = 3.5;
 
   // Materials
-  const wallMat = new THREE.MeshLambertMaterial({ color: 0x8B7355 });  // wood-brown walls
-  const ringMat = new THREE.MeshBasicMaterial({ color: 0xffd700, side: THREE.DoubleSide });
+  var wallMat = new THREE.MeshLambertMaterial({ color: 0x8B7355 });  // wood-brown walls
+  var ringMat = new THREE.MeshBasicMaterial({ color: 0xffd700, side: THREE.DoubleSide });
 
   // Muted cover palette (browns and grays)
-  const coverPalette = [
+  var coverPalette = [
     new THREE.MeshLambertMaterial({ color: 0x6B5B4F }), // warm brown
     new THREE.MeshLambertMaterial({ color: 0x5A5A5A }), // medium gray
     new THREE.MeshLambertMaterial({ color: 0x7A6A55 }), // tan brown
@@ -27,22 +42,11 @@ function buildPaintballArenaSymmetric() {
   ];
   var _coverIdx = 0;
 
-  // Helpers
-  function addSolidBox(x, y, z, sx, sy, sz, mat) {
-    var geom = new THREE.BoxGeometry(sx, sy, sz);
-    var mesh = new THREE.Mesh(geom, mat);
-    mesh.position.set(x, y, z);
-    group.add(mesh);
-    solids.push(mesh);
-    var box = new THREE.Box3().setFromObject(mesh);
-    colliders.push(box);
-    return mesh;
-  }
-  // Cover sits on the floor (y = -1), cycles through palette colors
+  // Cover sits on the floor (y = GROUND_Y), cycles through palette colors
   function addCover(x, z, sx, sy, sz) {
-    var y = -1 + sy / 2;
+    var y = GROUND_Y + sy / 2;
     var mat = coverPalette[_coverIdx++ % coverPalette.length];
-    return addSolidBox(x, y, z, sx, sy, sz, mat);
+    return arenaAddSolidBox(group, solids, colliders, x, y, z, sx, sy, sz, mat);
   }
   // Z-symmetric cover: places block at (x,z) and mirror at (x,-z)
   function mirroredCover(x, z, sx, sy, sz) {
@@ -50,21 +54,11 @@ function buildPaintballArenaSymmetric() {
     if (Math.abs(z) > 0.5) addCover(x, -z, sx, sy, sz);
   }
 
-  // Floor mesh for ground-height raycasting (surface at Y = -1, not a collider)
-  var floorGeom = new THREE.PlaneGeometry(arenaHalfW * 2 + 10, arenaHalfL * 2 + 10);
-  var floorMesh = new THREE.Mesh(floorGeom, new THREE.MeshBasicMaterial({ visible: false }));
-  floorMesh.rotation.x = -Math.PI / 2;
-  floorMesh.position.y = -1;
-  group.add(floorMesh);
-  solids.push(floorMesh);
+  // Floor mesh for ground-height raycasting (surface at Y = GROUND_Y, not a collider)
+  arenaAddFloor(group, solids, arenaHalfW, arenaHalfL);
 
   // Perimeter walls (short wooden fence panels)
-  // Front/back (along X)
-  addSolidBox(0, wallHeight / 2 - 1, -arenaHalfL, arenaHalfW * 2, wallHeight, 0.5, wallMat);
-  addSolidBox(0, wallHeight / 2 - 1,  arenaHalfL, arenaHalfW * 2, wallHeight, 0.5, wallMat);
-  // Left/right (along Z)
-  addSolidBox(-arenaHalfW, wallHeight / 2 - 1, 0, 0.5, wallHeight, arenaHalfL * 2, wallMat);
-  addSolidBox( arenaHalfW, wallHeight / 2 - 1, 0, 0.5, wallHeight, arenaHalfL * 2, wallMat);
+  arenaAddPerimeterWalls(group, solids, colliders, arenaHalfW, arenaHalfL, wallHeight, wallMat);
 
   // ── ZONE A: CENTER CONTESTED AREA (|Z| < 7) ──
   // Split pillars + L-walls creating peek corners
@@ -137,14 +131,14 @@ function buildPaintballArenaSymmetric() {
 
   // Spawns opposite along Z axis
   var spawnZ = arenaHalfL - 8;
-  var spawnA = new THREE.Vector3(0, 2, -spawnZ); // Player (camera/eye)
-  var spawnB = new THREE.Vector3(0, 0,  spawnZ); // AI (grounded body)
+  var spawnA = new THREE.Vector3(0, 0, -spawnZ);
+  var spawnB = new THREE.Vector3(0, 0,  spawnZ);
 
   // Gold spawn rings on floor (use RingGeometry rotated flat)
   function addGoldSpawnRing(pos) {
     var ring = new THREE.RingGeometry(0.8, 1.2, 64);
     var ringMesh = new THREE.Mesh(ring, ringMat);
-    ringMesh.position.set(pos.x, -0.99, pos.z);
+    ringMesh.position.set(pos.x, GROUND_Y + 0.01, pos.z);
     ringMesh.rotation.x = -Math.PI / 2;
     ringMesh.renderOrder = 1;
     group.add(ringMesh);
@@ -156,39 +150,11 @@ function buildPaintballArenaSymmetric() {
   // Waypoints (5x5 grid scaled for smaller arena)
   for (var x of [-20, -10, 0, 10, 20]) {
     for (var z of [-35, -17, 0, 17, 35]) {
-      waypoints.push(new THREE.Vector3(x, 0, z));
+      waypoints.push(new THREE.Vector3(x, GROUND_Y, z));
     }
   }
 
   // ── SCENERY: Trees around the perimeter ──
-  var trunkMat = new THREE.MeshLambertMaterial({ color: 0x5C4033 });
-  var canopyMat = new THREE.MeshLambertMaterial({ color: 0x2E5930 });
-  var canopyDarkMat = new THREE.MeshLambertMaterial({ color: 0x1E3E22 });
-
-  function addTree(x, z, scale) {
-    scale = scale || 1;
-    var trunkH = 3 * scale;
-    var trunkR = 0.3 * scale;
-    var canopyH = 4 * scale;
-    var canopyR = 2 * scale;
-    var mat = (scale > 1.1) ? canopyDarkMat : canopyMat;
-
-    var trunk = new THREE.Mesh(
-      new THREE.CylinderGeometry(trunkR * 0.7, trunkR, trunkH, 8),
-      trunkMat
-    );
-    trunk.position.set(x, -1 + trunkH / 2, z);
-    group.add(trunk);
-
-    var canopy = new THREE.Mesh(
-      new THREE.ConeGeometry(canopyR, canopyH, 8),
-      mat
-    );
-    canopy.position.set(x, -1 + trunkH + canopyH / 2, z);
-    group.add(canopy);
-  }
-
-  // Trees scattered outside the arena walls
   var trees = [
     // Along +X side
     [36, -30, 1.2], [39, -12, 0.9], [35, 5, 1.1], [40, 20, 1.0], [37, 35, 0.8],
@@ -204,7 +170,7 @@ function buildPaintballArenaSymmetric() {
     [45, 45, 1.4], [-45, 45, 1.3], [45, -45, 1.0], [-45, -45, 1.1],
     [50, 0, 1.4], [-50, 10, 1.3],
   ];
-  trees.forEach(function(t) { addTree(t[0], t[1], t[2]); });
+  arenaAddTrees(group, trees);
 
   // Attach to scene
   scene.add(group);

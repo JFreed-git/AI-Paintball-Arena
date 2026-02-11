@@ -1,0 +1,99 @@
+{
+  "id": "marksman",
+  "name": "Marksman",
+  "description": "Precise single-shot marker. High accuracy, moderate fire rate.",
+  "color": 6750156,
+  "maxHealth": 100,
+  "walkSpeed": 4.5,
+  "sprintSpeed": 8.5,
+  "jumpVelocity": 8.5,
+  "hitbox": [
+    {
+      "name": "head",
+      "shape": "sphere",
+      "offsetX": 0,
+      "offsetY": 1.75,
+      "offsetZ": 0,
+      "damageMultiplier": 2,
+      "radius": 0.4
+    },
+    {
+      "name": "torso",
+      "shape": "cylinder",
+      "offsetX": 0,
+      "offsetY": 0.75,
+      "offsetZ": 0,
+      "damageMultiplier": 1,
+      "radius": 0.45,
+      "height": 1.5
+    }
+  ],
+  "modelType": "standard",
+  "weapon": {
+    "cooldownMs": 130,
+    "magSize": 10,
+    "reloadTimeSec": 2.5,
+    "damage": 15,
+    "spreadRad": 0,
+    "sprintSpreadRad": 0.02,
+    "maxRange": 200,
+    "pellets": 1,
+    "projectileSpeed": 140,
+    "projectileGravity": 0,
+    "splashRadius": 0,
+    "scope": {
+      "type": "scope",
+      "zoomFOV": 35,
+      "overlay": null,
+      "spreadMultiplier": 0.15
+    },
+    "modelType": "rifle",
+    "tracerColor": 6750156,
+    "crosshair": {
+      "style": "cross",
+      "baseSpreadPx": 8,
+      "sprintSpreadPx": 20,
+      "color": "#00ffaa"
+    },
+    "abilities": [],
+    "fpOffset": {
+      "x": 0.28,
+      "y": -0.22,
+      "z": -0.45
+    },
+    "fpRotation": {
+      "x": 0.05,
+      "y": -0.15,
+      "z": 0
+    }
+  },
+  "passives": [],
+  "abilities": [],
+  "bodyParts": [
+    {
+      "name": "head",
+      "shape": "sphere",
+      "offsetX": 0,
+      "offsetY": 1.6,
+      "offsetZ": 0,
+      "rotationX": 0,
+      "rotationY": 0,
+      "rotationZ": 0,
+      "color": "#50d7aa",
+      "radius": 0.2
+    },
+    {
+      "name": "torso",
+      "shape": "cylinder",
+      "offsetX": 0,
+      "offsetY": 1.1,
+      "offsetZ": 0,
+      "rotationX": 0,
+      "rotationY": 0,
+      "rotationZ": 0,
+      "color": "#22a076",
+      "radius": 0.225,
+      "height": 0.75
+    }
+  ]
+}

@@ -1,4 +1,28 @@
-// Environment setup (background, fog, lights, ground)
+/**
+ * environment.js — Scene environment setup
+ *
+ * PURPOSE: Sets up the global scene environment shared by all game modes:
+ * sky background, fog, lighting (hemisphere + ambient + directional), and the
+ * large grass ground plane. Called once at boot by game.js.
+ *
+ * EXPORTS (bare global): setupEnvironment()
+ *
+ * DEPENDENCIES: Three.js (THREE), game.js (scene global)
+ *
+ * DESIGN NOTES:
+ *   - Lighting is identical for all modes. The outdoor paintball aesthetic uses
+ *     warm sunlight with sky-colored hemisphere bounce.
+ *   - The 400x400m grass plane extends well beyond any arena for seamless horizon.
+ *   - Ground plane Y is hardcoded to -1 (should use GROUND_Y for consistency).
+ *
+ * TODO (future):
+ *   - Use GROUND_Y constant instead of hardcoded -1 for ground plane position
+ *   - Per-mode lighting presets (e.g. dimmer for indoor arenas)
+ *   - Time-of-day system (dawn, noon, dusk, night)
+ *   - Weather effects (rain, fog density changes)
+ *   - Skybox texture instead of flat color
+ */
+
 function setupEnvironment() {
   // Sky blue background and fog
   scene.background = new THREE.Color(0x87CEEB);

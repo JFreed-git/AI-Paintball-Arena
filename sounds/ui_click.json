@@ -1,0 +1,16 @@
+{
+  "id": "ui_click",
+  "name": "UI Click",
+  "synthesis": {
+    "type": "tone",
+    "waveform": "sine",
+    "frequency": 1200,
+    "duration": 0.03,
+    "volume": 0.12,
+    "attack": 0.001,
+    "decay": 0.029
+  },
+  "bindings": [
+    { "event": "ui_click", "filter": {} }
+  ]
+}

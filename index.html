@@ -23,6 +23,7 @@
 
             <!-- Paintball HUD -->
             <div id="healthContainer" class="hidden">
+                <div id="weaponNameDisplay" class="hidden"></div>
                 <div id="sprintIndicator" class="hidden">SPRINTING</div>
                 <div id="healthBar">
                     <div id="healthFill" style="width: 100%"></div>
@@ -30,6 +31,13 @@
                 <div id="ammoRow">
                     <span id="ammoDisplay">0/0</span>
                     <span id="reloadIndicator" class="hidden">Reloading...</span>
+                    <div id="meleeCooldown" class="hidden">
+                        <svg width="26" height="26" viewBox="0 0 26 26">
+                            <circle class="melee-cd-bg" cx="13" cy="13" r="11" />
+                            <circle class="melee-cd-fill" cx="13" cy="13" r="11" />
+                        </svg>
+                        <span class="melee-cd-label">V</span>
+                    </div>
                 </div>
             </div>
         </div>
@@ -49,6 +57,7 @@
             <div class="actions">
                 <button id="gotoPaintball">Play Paintball</button>
                 <button id="gotoLAN">Play LAN</button>
+                <button id="gotoTraining">Training Range</button>
             </div>
         </div>
 
@@ -81,6 +90,14 @@
             </div>
         </div>
 
+        <div id="trainingMenu" class="menu hidden">
+            <h2>Training Range</h2>
+            <div class="actions">
+                <button id="startTraining">Start Training</button>
+                <button class="secondary" id="backFromTraining">Back</button>
+            </div>
+        </div>
+
         <div id="lanMenu" class="menu hidden">
             <h2>LAN Multiplayer</h2>
             <div class="field">
@@ -94,33 +111,6 @@
                     <select id="lanMapSelect">
                         <option value="__default__" selected>Default Arena</option>
                     </select>
-                </label>
-            </div>
-
-            <h3>Room Settings (host can configure)</h3>
-            <div class="field">
-                <label>Fire Cooldown (ms)
-                    <input type="number" id="fireCooldownMs" min="50" max="2000" step="1" value="166" />
-                </label>
-            </div>
-            <div class="field">
-                <label>Magazine Size
-                    <input type="number" id="magSize" min="1" max="200" step="1" value="6" />
-                </label>
-            </div>
-            <div class="field">
-                <label>Reload Time (sec)
-                    <input type="number" id="reloadTimeSec" min="0.2" max="10" step="0.1" value="2.5" />
-                </label>
-            </div>
-            <div class="field">
-                <label>Player Health
-                    <input type="number" id="playerHealth" min="1" max="1000" step="1" value="100" />
-                </label>
-            </div>
-            <div class="field">
-                <label>Player Damage
-                    <input type="number" id="playerDamage" min="1" max="500" step="1" value="20" />
                 </label>
             </div>
 
@@ -144,77 +134,18 @@
             </div>
         </div>
 
-        <!-- Map Editor UI -->
-        <div id="editorUI" class="hidden">
-            <div id="editorToolbar">
-                <button class="editor-tool active" data-tool="select">Select</button>
-                <button class="editor-tool" data-tool="box">Box</button>
-                <button class="editor-tool" data-tool="cylinder">Cylinder</button>
-                <button class="editor-tool" data-tool="halfCylinder">Half-Cyl</button>
-                <button class="editor-tool" data-tool="ramp">Ramp</button>
-                <span class="editor-sep"></span>
-                <button class="editor-btn" id="editorMirrorToggle">Mirror: Off</button>
-                <span class="editor-sep"></span>
-                <button class="editor-btn" id="editorUndo">Undo</button>
-                <button class="editor-btn" id="editorRedo">Redo</button>
-                <span class="editor-sep"></span>
-                <button class="editor-btn" id="editorSave">Save</button>
-                <button class="editor-btn" id="editorLoad">Load</button>
-                <button class="editor-btn" id="editorNew">New</button>
-                <span class="editor-sep"></span>
-                <button class="editor-btn" id="editorPlayerMode">Player</button>
-                <button class="editor-btn" id="editorSettings">Settings</button>
-                <button class="editor-btn editor-exit" id="editorExit">Exit</button>
-            </div>
+        <div id="trainingStats" class="hidden">
+            Shots: <span id="tsShotCount">0</span><br>
+            Hits: <span id="tsHitCount">0</span><br>
+            Kills: <span id="tsKillCount">0</span><br>
+            Accuracy: <span id="tsAccuracy">-</span>
+        </div>
 
-            <div id="editorPropsPanel" class="hidden">
-                <button class="panel-close" id="epropClose">&times;</button>
-                <h4>Properties</h4>
-                <div class="eprop"><label>Type</label><span id="epropType">-</span></div>
-                <div class="eprop"><label>X</label><input type="number" id="epropX" step="0.5" /></div>
-                <div class="eprop"><label>Z</label><input type="number" id="epropZ" step="0.5" /></div>
-                <div class="eprop"><label>Y</label><input type="number" id="epropY" step="0.5" /></div>
-                <div class="eprop" id="epropSizeRow"><label>Size X</label><input type="number" id="epropSX" step="0.5" min="0.5" /></div>
-                <div class="eprop" id="epropSYRow"><label>Height</label><input type="number" id="epropSY" step="0.5" min="0.5" /></div>
-                <div class="eprop" id="epropSZRow"><label>Size Z</label><input type="number" id="epropSZ" step="0.5" min="0.5" /></div>
-                <div class="eprop" id="epropRadiusRow"><label>Radius</label><input type="number" id="epropRadius" step="0.25" min="0.25" /></div>
-                <div class="eprop"><label>Rotation</label><input type="number" id="epropRot" step="90" /></div>
-                <div class="eprop"><label>Color</label><input type="color" id="epropColor" value="#6B5B4F" /></div>
-                <button class="editor-btn" id="epropMirror">Mirror Copy</button>
-                <button class="editor-btn editor-danger" id="epropDelete">Delete</button>
-            </div>
-
-            <div id="editorSettingsPanel" class="hidden">
-                <button class="panel-close" id="esCloseX">&times;</button>
-                <h4>Map Settings</h4>
-                <div class="eprop"><label>Map Name</label><input type="text" id="esMapName" value="my-map" /></div>
-                <div class="eprop"><label>Arena Width</label><input type="number" id="esArenaW" step="1" min="20" value="60" /></div>
-                <div class="eprop"><label>Arena Length</label><input type="number" id="esArenaL" step="1" min="20" value="90" /></div>
-                <div class="eprop"><label>Wall Height</label><input type="number" id="esWallH" step="0.5" min="1" value="3.5" /></div>
-                <div class="eprop"><label>Spawn A X</label><input type="number" id="esSpawnAX" step="1" value="0" /></div>
-                <div class="eprop"><label>Spawn A Z</label><input type="number" id="esSpawnAZ" step="1" value="-37" /></div>
-                <div class="eprop"><label>Spawn B X</label><input type="number" id="esSpawnBX" step="1" value="0" /></div>
-                <div class="eprop"><label>Spawn B Z</label><input type="number" id="esSpawnBZ" step="1" value="37" /></div>
-                <button class="editor-btn" id="esApply">Apply</button>
-                <button class="editor-btn" id="esClose">Close</button>
-            </div>
-
-            <div id="editorLoadPanel" class="hidden">
-                <button class="panel-close" id="editorLoadCloseX">&times;</button>
-                <h4>Load Map</h4>
-                <select id="editorLoadSelect"></select>
-                <button class="editor-btn" id="editorLoadConfirm">Load</button>
-                <button class="editor-btn editor-danger" id="editorDeleteMap">Delete</button>
-                <button class="editor-btn" id="editorLoadCancel">Cancel</button>
-            </div>
-
-            <div id="editorPlayerHint" class="hidden">Player Mode — Press P to return to editor</div>
-
-            <div id="editorStatusBar">
-                <span id="editorToolLabel">Tool: Select</span>
-                <span id="editorControlsHint">RMB+WASD: Fly | LMB: Select/Place</span>
-                <span id="editorObjCount">Objects: 0</span>
-            </div>
+        <div id="heroSelectOverlay" class="hidden">
+            <div id="heroSelectTitle">SELECT HERO</div>
+            <div id="heroSelectTimer" class="hidden">15</div>
+            <div id="heroSelectWaiting" class="hidden">Waiting for opponent...</div>
+            <div id="heroSelectHint">Press H to close</div>
         </div>
 
         <div id="devConsole" class="hidden">
@@ -231,27 +162,55 @@
                 <button class="dev-cmd" data-cmd="spectator">Spectator Camera: OFF</button>
                 <button class="dev-cmd" data-cmd="killEnemy">Kill Enemy</button>
                 <button class="dev-cmd" data-cmd="heal">Heal Player</button>
-                <button class="dev-cmd" data-cmd="mapEditor">Map Editor</button>
+                <button class="dev-cmd" data-cmd="showHitboxes">Show Hitboxes: OFF</button>
+                <button class="dev-cmd" data-cmd="showAIState">AI State: OFF</button>
             </div>
         </div>
     </div>
 
+    <!-- External libraries -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="/socket.io/socket.io.js"></script>
-    <script src="gameShared.js"></script>
+
+    <!-- Core systems (no game-mode dependencies) -->
+    <script src="config.js"></script>
+    <script src="audio.js"></script>
+    <script src="weapon.js"></script>
+    <script src="weaponModels.js"></script>
     <script src="physics.js"></script>
-    <script src="multiplayer.js"></script>
+    <script src="crosshair.js"></script>
+    <script src="hud.js"></script>
+    <script src="roundFlow.js"></script>
+    <script src="heroes.js"></script>
+    <script src="abilities.js"></script>
+    <script src="heroSelectUI.js"></script>
+
+    <!-- Menu system -->
+    <script src="menuRenderer.js"></script>
+
+    <!-- Input, UI, environment -->
     <script src="menuNavigation.js"></script>
-    <script src="playerControls.js"></script>
+    <script src="input.js"></script>
     <script src="environment.js"></script>
-    <script src="playerModels.js"></script>
-    <script src="paintballEnvironment.js"></script>
+
+    <!-- Player and arenas -->
+    <script src="player.js"></script>
+    <script src="arenaBuilder.js"></script>
+    <script src="arenaCompetitive.js"></script>
+    <script src="arenaTraining.js"></script>
     <script src="mapFormat.js"></script>
-    <script src="mapEditor.js"></script>
-    <!-- Paintball mode scripts -->
+
+    <!-- Combat and AI -->
     <script src="projectiles.js"></script>
     <script src="aiOpponent.js"></script>
-    <script src="paintballGame.js"></script>
+    <script src="trainingBot.js"></script>
+
+    <!-- Game modes -->
+    <script src="modeAI.js"></script>
+    <script src="modeLAN.js"></script>
+    <script src="modeTraining.js"></script>
+
+    <!-- Bootstrap and dev tools (must be last) -->
     <script src="game.js"></script>
     <script src="devConsole.js"></script>
 </body>

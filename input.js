@@ -1,10 +1,17 @@
 /**
- * Player controls and input handlers
- * Camera defaults/reset are defined here to keep input + camera behavior together.
+ * input.js — Keyboard/mouse input handling and pointer lock management
+ *
+ * PURPOSE: Captures WASD movement, mouse look, sprint, reload, jump, and fire
+ *          inputs. Manages pointer lock lifecycle and camera defaults/reset.
+ * EXPORTS (window): getInputState, resetCameraToDefaults
+ * EXPORTS (bare global): bindPlayerControls, DEFAULT_CAMERA_POS
+ * DEPENDENCIES: THREE (r128), camera/renderer globals (game.js),
+ *               mouseSensitivity (menuNavigation.js), showOnlyMenu/setHUDVisible (menuNavigation.js)
+ * TODO (future): Ability keybind support, ADS (right-click) input
  */
 
 // Camera defaults and reset live with player controls
-const DEFAULT_CAMERA_POS = new THREE.Vector3(0, (typeof GROUND_Y !== 'undefined' ? GROUND_Y : -1) + (typeof EYE_HEIGHT !== 'undefined' ? EYE_HEIGHT : 3.0), 5);
+const DEFAULT_CAMERA_POS = new THREE.Vector3(0, (typeof GROUND_Y !== 'undefined' ? GROUND_Y : -1) + (typeof EYE_HEIGHT !== 'undefined' ? EYE_HEIGHT : 2.0), 5);
 const DEFAULT_CAMERA_YAW = 0;   // facing -Z
 const DEFAULT_CAMERA_PITCH = 0; // level
 function resetCameraToDefaults() {
@@ -18,7 +25,7 @@ function resetCameraToDefaults() {
 }
 
 /* Paintball input state (inputs live here; physics elsewhere) */
-const INPUT_STATE = { fireDown: false, sprint: false, reloadPressed: false, jump: false, moveX: 0, moveZ: 0 };
+const INPUT_STATE = { fireDown: false, sprint: false, reloadPressed: false, jump: false, meleePressed: false, moveX: 0, moveZ: 0 };
 let _w = false, _a = false, _s = false, _d = false;
 function recomputeMoveAxes() {
   INPUT_STATE.moveZ = (_w ? 1 : 0) + (_s ? -1 : 0);
@@ -38,6 +45,10 @@ function getInputState() {
     out.jump = true;
     INPUT_STATE.jump = false;
   }
+  if (INPUT_STATE.meleePressed) {
+    out.meleePressed = true;
+    INPUT_STATE.meleePressed = false;
+  }
   return out;
 }
 // Expose to paintball mode
@@ -51,6 +62,15 @@ function bindPlayerControls(renderer) {
     // Additional input hooks for Paintball mode
     renderer.domElement.addEventListener('mousedown', onMouseDownGeneric);
     renderer.domElement.addEventListener('mouseup', onMouseUpGeneric);
+    // Click canvas to acquire pointer lock when a game mode is active
+    renderer.domElement.addEventListener('click', function () {
+      if (window._splitViewMode) return; // parent overlay handles lock
+      var anyActive = window.paintballActive || window.multiplayerActive || window.trainingRangeActive || window._splitScreenActive;
+      if (!anyActive) return;
+      if (window._heroSelectOpen || window.devConsoleOpen) return;
+      if (document.pointerLockElement === renderer.domElement) return; // already locked
+      renderer.domElement.requestPointerLock();
+    });
   }
 
   // Global listeners
@@ -60,7 +80,9 @@ function bindPlayerControls(renderer) {
 }
 
 function onMouseMove(event) {
-  if (!window.paintballActive && !window.multiplayerActive) return;
+  if (window._splitScreenActive) return; // iframes handle their own mouse via postMessage
+  if (!window.paintballActive && !window.multiplayerActive && !window.trainingRangeActive) return;
+  if (window._heroSelectOpen) return;
 
   // Raycasting mouse coords (kept for completeness)
   mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
@@ -90,10 +112,16 @@ function onWindowResize() {
 }
 
 function onPointerLockChange() {
+  if (window._splitViewMode) return; // iframe: parent overlay manages lock
+  if (window._splitScreenActive) return; // parent: devSplitScreen manages its own lifecycle
   const canvas = renderer && renderer.domElement;
   const locked = document.pointerLockElement === canvas;
 
   if (!locked) {
+    // Don't treat as ESC during hero selection or between-round transitions
+    if (window._heroSelectOpen) return;
+    if (window._roundTransition) return;
+
     // Heuristic:
     // - If the document is focused and visible, treat pointer unlock as explicit ESC.
     // - If focus/visibility was lost (Alt-Tab), do nothing; clicking will re-lock.
@@ -101,12 +129,18 @@ function onPointerLockChange() {
     const visible = typeof document.visibilityState === 'string' ? (document.visibilityState === 'visible') : true;
 
     if (focused && visible && !window.devConsoleOpen) {
-      if (window.paintballActive) {
+      if (window._splitScreenActive) {
+        try { if (typeof stopSplitScreen === 'function') stopSplitScreen(); } catch {}
+      } else if (window.paintballActive) {
         try { if (typeof stopPaintballInternal === 'function') stopPaintballInternal(); } catch {}
         showOnlyMenu('mainMenu');
         setHUDVisible(false);
       } else if (window.multiplayerActive) {
         try { if (typeof stopMultiplayerInternal === 'function') stopMultiplayerInternal(); } catch {}
+        showOnlyMenu('mainMenu');
+        setHUDVisible(false);
+      } else if (window.trainingRangeActive) {
+        try { if (typeof stopTrainingRangeInternal === 'function') stopTrainingRangeInternal(); } catch {}
         showOnlyMenu('mainMenu');
         setHUDVisible(false);
       }
@@ -116,11 +150,17 @@ function onPointerLockChange() {
 
 function onGlobalKeyDown(e) {
   if (window.editorActive) return;
+  if (window._splitViewMode) return; // iframe: parent forwards input via postMessage
+  if (window._splitScreenActive) return; // parent: devSplitScreen.js handles all input
   if (e.key === 'Escape') {
-    if (window.paintballActive) {
+    if (window._splitScreenActive) {
+      try { if (typeof stopSplitScreen === 'function') stopSplitScreen(); } catch {}
+    } else if (window.paintballActive) {
       try { if (typeof stopPaintballInternal === 'function') stopPaintballInternal(); } catch {}
     } else if (window.multiplayerActive) {
       try { if (typeof stopMultiplayerInternal === 'function') stopMultiplayerInternal(); } catch {}
+    } else if (window.trainingRangeActive) {
+      try { if (typeof stopTrainingRangeInternal === 'function') stopTrainingRangeInternal(); } catch {}
     }
     showOnlyMenu('mainMenu');
     setHUDVisible(false);
@@ -136,11 +176,14 @@ function onGlobalKeyDown(e) {
     case 'ShiftLeft': INPUT_STATE.sprint = true; break;
     case 'KeyR': INPUT_STATE.reloadPressed = true; break;
     case 'Space': INPUT_STATE.jump = true; break;
+    case 'KeyV': INPUT_STATE.meleePressed = true; break;
   }
 }
 
 function onGlobalKeyUp(e) {
   if (window.editorActive) return;
+  if (window._splitViewMode) return;
+  if (window._splitScreenActive) return;
   switch (e.code) {
     case 'KeyW': _w = false; recomputeMoveAxes(); break;
     case 'KeyA': _a = false; recomputeMoveAxes(); break;
@@ -149,3 +192,56 @@ function onGlobalKeyUp(e) {
     case 'ShiftLeft': INPUT_STATE.sprint = false; break;
   }
 }
+
+/* ── SplitView input forwarding (postMessage from parent overlay) ── */
+window.addEventListener('message', function (evt) {
+  if (!window._splitViewMode) return;
+  var d = evt.data;
+  if (!d || !d.type) return;
+
+  switch (d.type) {
+    case 'svMouseMove': {
+      var base = 0.002;
+      var factor = base * mouseSensitivity;
+      camera.rotation.y -= d.movementX * factor;
+      camera.rotation.x -= d.movementY * factor;
+      var maxPitch = Math.PI / 2 - 0.004;
+      camera.rotation.x = Math.max(-maxPitch, Math.min(maxPitch, camera.rotation.x));
+      camera.rotation.z = 0;
+      break;
+    }
+    case 'svMouseDown':
+      INPUT_STATE.fireDown = true;
+      break;
+    case 'svMouseUp':
+      INPUT_STATE.fireDown = false;
+      break;
+    case 'svKeyDown':
+      switch (d.code) {
+        case 'KeyW': _w = true; recomputeMoveAxes(); break;
+        case 'KeyA': _a = true; recomputeMoveAxes(); break;
+        case 'KeyS': _s = true; recomputeMoveAxes(); break;
+        case 'KeyD': _d = true; recomputeMoveAxes(); break;
+        case 'ShiftLeft': INPUT_STATE.sprint = true; break;
+        case 'KeyR': INPUT_STATE.reloadPressed = true; break;
+        case 'Space': INPUT_STATE.jump = true; break;
+        case 'KeyV': INPUT_STATE.meleePressed = true; break;
+      }
+      break;
+    case 'svKeyUp':
+      switch (d.code) {
+        case 'KeyW': _w = false; recomputeMoveAxes(); break;
+        case 'KeyA': _a = false; recomputeMoveAxes(); break;
+        case 'KeyS': _s = false; recomputeMoveAxes(); break;
+        case 'KeyD': _d = false; recomputeMoveAxes(); break;
+        case 'ShiftLeft': INPUT_STATE.sprint = false; break;
+      }
+      break;
+    case 'svResetKeys':
+      _w = _a = _s = _d = false;
+      INPUT_STATE.sprint = false;
+      INPUT_STATE.fireDown = false;
+      recomputeMoveAxes();
+      break;
+  }
+});

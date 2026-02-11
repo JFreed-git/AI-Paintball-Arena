@@ -1,0 +1,17 @@
+{
+  "id": "melee_hit",
+  "name": "Melee Hit",
+  "synthesis": {
+    "type": "noise_burst",
+    "frequency": 800,
+    "filterType": "bandpass",
+    "filterQ": 0.6,
+    "duration": 0.08,
+    "volume": 0.35,
+    "attack": 0.001,
+    "decay": 0.079
+  },
+  "bindings": [
+    { "event": "melee_hit", "filter": {} }
+  ]
+}

@@ -1,0 +1,16 @@
+{
+  "id": "reload_start",
+  "name": "Reload Start",
+  "synthesis": {
+    "type": "tone",
+    "waveform": "square",
+    "frequency": 600,
+    "duration": 0.06,
+    "volume": 0.15,
+    "attack": 0.002,
+    "decay": 0.058
+  },
+  "bindings": [
+    { "event": "reload_start", "filter": {} }
+  ]
+}
