@@ -938,7 +938,10 @@ window.registerCustomWeaponModel = registerCustomWeaponModel;
     }
 
     function loadIframe() {
-      if (lgIframe) lgIframe.src = 'http://localhost:3000';
+      if (lgIframe) {
+        lgIframe.removeAttribute('srcdoc'); // Clear srcdoc so src takes effect
+        lgIframe.src = 'http://localhost:3000';
+      }
     }
 
     // Try server first — if already running, load immediately
