@@ -1,0 +1,881 @@
+/**
+ * modeFFA.js — Free-For-All game mode (host game loop)
+ *
+ * PURPOSE: Host-authoritative FFA mode for 2-8 players. The host runs physics
+ *          for all players, manages kill scoring, and broadcasts snapshots at
+ *          ~30Hz. Client joining logic is in Task 017, combat in Task 018.
+ * EXPORTS (window): ffaActive, getFFAState, startFFAHost, stopFFAInternal
+ * DEPENDENCIES: THREE (r128), Socket.IO, scene/camera/renderer globals (game.js),
+ *               hud.js, roundFlow.js, crosshair.js, physics.js, projectiles.js,
+ *               weapon.js, heroes.js, heroSelectUI.js, input.js,
+ *               arenaCompetitive.js, player.js (Player),
+ *               mapFormat.js (buildArenaFromMap, getDefaultMapData),
+ *               menuNavigation.js (showOnlyMenu, setHUDVisible)
+ */
+
+(function () {
+  window.ffaActive = false;
+  window.getFFAState = function () { return state; };
+
+  var PLAYER_RADIUS = 0.5;
+  var WALK_SPEED = 4.5;
+  var SPRINT_SPEED = 8.5;
+  var SNAPSHOT_RATE = 33;       // ms between snapshots (~30Hz)
+  var DEFAULT_HEALTH = 100;
+  var MAX_DT = 0.05;            // max delta-time clamp (seconds)
+  var RESPAWN_DELAY_MS = 3000;  // time before respawning after death
+  var ROUND_BANNER_MS = 1200;
+  var COUNTDOWN_SECONDS = 3;
+  var SHOT_DELAY_AFTER_COUNTDOWN = GAME_CONFIG.SHOT_DELAY_AFTER_COUNTDOWN;
+
+  var socket = null;
+  var state = null;
+
+  function mkHudRefs() {
+    return {
+      healthContainer: document.getElementById('healthContainer'),
+      healthFill: document.getElementById('healthFill'),
+      ammoDisplay: document.getElementById('ammoDisplay'),
+      reloadIndicator: document.getElementById('reloadIndicator'),
+      sprintIndicator: document.getElementById('sprintIndicator'),
+      bannerEl: document.getElementById('roundBanner'),
+      countdownEl: document.getElementById('roundCountdown'),
+      meleeCooldown: document.getElementById('meleeCooldown'),
+    };
+  }
+
+  function updateHUDForLocalPlayer() {
+    if (!state || !state.localId) return;
+    var entry = state.players[state.localId];
+    if (!entry || !entry.entity) return;
+    var p = entry.entity;
+    sharedUpdateHealthBar(state.hud.healthFill, p.health, p.maxHealth || DEFAULT_HEALTH);
+    sharedUpdateAmmoDisplay(state.hud.ammoDisplay, p.weapon.ammo, p.weapon.magSize);
+    sharedUpdateMeleeCooldown(state.hud.meleeCooldown, p.weapon, performance.now());
+  }
+
+  function showFFAHUD(show) {
+    if (!state || !state.hud) return;
+    if (state.hud.healthContainer) state.hud.healthContainer.classList.toggle('hidden', !show);
+  }
+
+  function showRoundBanner(text, ms) {
+    if (!state) return;
+    sharedShowRoundBanner(text, state.hud.bannerEl, state.bannerTimerRef, ms);
+  }
+
+  function startRoundCountdown(seconds) {
+    if (!state) return;
+    sharedStartRoundCountdown({
+      seconds: seconds || COUNTDOWN_SECONDS,
+      countdownEl: state.hud.countdownEl,
+      timerRef: state.countdownTimerRef,
+      onStart: function () {
+        if (!state) return;
+        state.inputEnabled = false;
+        state.match.roundActive = false;
+        // Delay first shot for all players
+        var now = performance.now();
+        var ids = Object.keys(state.players);
+        for (var i = 0; i < ids.length; i++) {
+          var e = state.players[ids[i]];
+          if (e && e.entity && e.entity.weapon) {
+            e.entity.weapon.lastShotTime = now + SHOT_DELAY_AFTER_COUNTDOWN;
+          }
+        }
+      },
+      onReady: function () {
+        if (!state) return;
+        state.inputEnabled = true;
+        state.match.roundActive = true;
+      }
+    });
+  }
+
+  function applyHeroWeapon(player, heroId) {
+    if (!player) return;
+    if (typeof window.applyHeroToPlayer === 'function') {
+      window.applyHeroToPlayer(player, heroId);
+    } else {
+      var hero = (typeof window.getHeroById === 'function' && window.getHeroById(heroId)) || window.HEROES[0];
+      player.weapon = new Weapon(hero.weapon);
+    }
+    player.weapon.reset();
+  }
+
+  function createPlayerInstance(opts) {
+    var heroId = (opts && opts.heroId) || 'marksman';
+    var hero = (typeof window.getHeroById === 'function' && window.getHeroById(heroId)) || window.HEROES[0];
+    var w = new Weapon(hero.weapon);
+    var p = new Player({
+      position: opts.position ? opts.position.clone() : new THREE.Vector3(),
+      feetY: GROUND_Y,
+      walkSpeed: WALK_SPEED,
+      sprintSpeed: SPRINT_SPEED,
+      radius: PLAYER_RADIUS,
+      maxHealth: DEFAULT_HEALTH,
+      color: opts.color || 0xff5555,
+      cameraAttached: !!opts.cameraAttached,
+      weapon: w
+    });
+    p.input = {
+      moveX: 0, moveZ: 0, sprint: false, jump: false,
+      fireDown: false, reloadPressed: false, meleeDown: false,
+      forward: new THREE.Vector3(0, 0, -1)
+    };
+    p.yaw = 0;
+    p.pitch = 0;
+    return p;
+  }
+
+  // Assign a spawn point from the FFA array, rotating through them
+  function getSpawnPosition(index) {
+    if (!state || !state.spawnsFFA || state.spawnsFFA.length === 0) {
+      return new THREE.Vector3(0, 0, 0);
+    }
+    return state.spawnsFFA[index % state.spawnsFFA.length].clone();
+  }
+
+  function newState(settings) {
+    return {
+      players: {},        // { [socketId]: { entity: Player, heroId, alive, input: {}, isAI: false, respawnAt: 0 } }
+      arena: null,
+      spawnsFFA: [],
+      match: {
+        scores: {},       // { [socketId]: { kills: 0, deaths: 0 } }
+        killLimit: (settings && settings.killLimit) || 10,
+        roundActive: false
+      },
+      isHost: false,
+      localId: null,
+      hud: mkHudRefs(),
+      lastTs: 0,
+      loopHandle: 0,
+      inputEnabled: false,
+      bannerTimerRef: { id: 0 },
+      countdownTimerRef: { id: 0 },
+      heroSelectTimerRef: { id: 0 },
+      _spawnIndex: 0,     // rotating spawn index
+      _remoteInputs: {},  // { [socketId]: latestInputPayload }
+      _remoteInputPending: {}, // { [socketId]: { jump, reload, melee } }
+      _meleeSwingState: {} // { [socketId]: { swinging, swingEnd } }
+    };
+  }
+
+  function resetAllPlayersForRound() {
+    if (!state) return;
+    var ids = Object.keys(state.players);
+    state._spawnIndex = 0;
+    for (var i = 0; i < ids.length; i++) {
+      var id = ids[i];
+      var entry = state.players[id];
+      if (!entry || !entry.entity) continue;
+      var spawnPos = getSpawnPosition(state._spawnIndex++);
+      entry.entity.resetForRound(spawnPos);
+      entry.alive = true;
+      entry.respawnAt = 0;
+      state.match.scores[id] = { kills: 0, deaths: 0 };
+      state._meleeSwingState[id] = { swinging: false, swingEnd: 0 };
+    }
+
+    // Sync local player camera
+    var local = state.players[state.localId];
+    if (local && local.entity) {
+      local.entity.syncCameraFromPlayer();
+      camera.rotation.set(0, 0, 0, 'YXZ');
+    }
+  }
+
+  function respawnPlayer(id) {
+    if (!state || !state.players[id]) return;
+    var entry = state.players[id];
+    var spawnPos = getSpawnPosition(state._spawnIndex++);
+    entry.entity.resetForRound(spawnPos);
+    entry.alive = true;
+    entry.respawnAt = 0;
+
+    if (id === state.localId) {
+      entry.entity.syncCameraFromPlayer();
+      camera.rotation.set(0, 0, 0, 'YXZ');
+      updateHUDForLocalPlayer();
+    }
+  }
+
+  function recordKill(killerId, victimId) {
+    if (!state || !state.match || !state.match.scores) return;
+    if (!state.match.scores[killerId]) state.match.scores[killerId] = { kills: 0, deaths: 0 };
+    if (!state.match.scores[victimId]) state.match.scores[victimId] = { kills: 0, deaths: 0 };
+    state.match.scores[killerId].kills++;
+    state.match.scores[victimId].deaths++;
+
+    // Check win condition
+    if (state.match.scores[killerId].kills >= state.match.killLimit) {
+      endMatch(killerId);
+    }
+  }
+
+  function endMatch(winnerId) {
+    if (!state) return;
+    state.match.roundActive = false;
+    if (typeof clearAllProjectiles === 'function') clearAllProjectiles();
+    if (typeof playGameSound === 'function') playGameSound('elimination');
+
+    var winnerName = 'Player';
+    if (winnerId === state.localId) {
+      winnerName = 'You';
+    } else {
+      // Could look up player name from server data
+      winnerName = 'Player ' + winnerId.substring(0, 4);
+    }
+
+    showRoundBanner(winnerName + ' wins!', ROUND_BANNER_MS);
+
+    // Emit match over to all players
+    if (socket) {
+      socket.emit('matchOver', { winnerId: winnerId, scores: state.match.scores });
+    }
+
+    setTimeout(function () {
+      if (!state) return;
+      window.stopFFAInternal();
+      showOnlyMenu('postMatchResults');
+      setHUDVisible(false);
+    }, ROUND_BANNER_MS + 500);
+  }
+
+  // Build all other players' hit targets (excluding the shooter)
+  function buildHitTargets(shooterId) {
+    var targets = [];
+    var entities = [];
+    var ids = Object.keys(state.players);
+    for (var i = 0; i < ids.length; i++) {
+      if (ids[i] === shooterId) continue;
+      var entry = state.players[ids[i]];
+      if (!entry || !entry.entity || !entry.entity.alive) continue;
+      targets.push({ segments: entry.entity.getHitSegments(), entity: entry.entity, playerId: ids[i] });
+      entities.push(entry.entity);
+    }
+    return { targets: targets, entities: entities };
+  }
+
+  function getPlayerDirection(id) {
+    var entry = state.players[id];
+    if (!entry) return new THREE.Vector3(0, 0, -1);
+    if (id === state.localId) {
+      var dir = new THREE.Vector3();
+      camera.getWorldDirection(dir);
+      return dir;
+    }
+    var inp = entry.entity.input;
+    if (inp.forward && inp.forward.isVector3) return inp.forward.clone().normalize();
+    if (inp.forward && Array.isArray(inp.forward) && inp.forward.length === 3) {
+      return new THREE.Vector3(inp.forward[0], inp.forward[1], inp.forward[2]).normalize();
+    }
+    return new THREE.Vector3(0, 0, -1);
+  }
+
+  function getPlayerOrigin(id) {
+    if (id === state.localId) return camera.position.clone();
+    var entry = state.players[id];
+    return entry ? entry.entity.position.clone() : new THREE.Vector3();
+  }
+
+  function handleReload(id, now) {
+    var entry = state.players[id];
+    if (!entry || !entry.entity) return;
+    if (sharedHandleReload(entry.entity.weapon, now)) {
+      if (id === state.localId) sharedSetReloadingUI(false, state.hud.reloadIndicator);
+    }
+  }
+
+  function handleMelee(id, now) {
+    var entry = state.players[id];
+    if (!entry || !entry.entity || !entry.entity.alive) return true;
+    var ms = state._meleeSwingState[id];
+    if (!ms) { ms = { swinging: false, swingEnd: 0 }; state._meleeSwingState[id] = ms; }
+    var w = entry.entity.weapon;
+    var inp = entry.entity.input;
+
+    if (ms.swinging) {
+      if (now >= ms.swingEnd) ms.swinging = false;
+      return false;
+    }
+
+    if (!inp.meleeDown) return true;
+    if (w.reloading) return true;
+    if ((now - w.lastMeleeTime) < w.meleeCooldownMs) return true;
+
+    var dir = getPlayerDirection(id);
+    var origin = getPlayerOrigin(id);
+    var hitInfo = buildHitTargets(id);
+
+    sharedMeleeAttack(w, origin, dir, {
+      solids: state.arena.solids,
+      targets: hitInfo.targets,
+      onHit: function (target, point, dist, totalDamage) {
+        if (window.devGodMode && target.playerId === state.localId) return;
+        var victimEntry = null;
+        var victimId = null;
+        // Find which player was hit
+        for (var j = 0; j < hitInfo.targets.length; j++) {
+          if (hitInfo.targets[j].entity === target || hitInfo.targets[j].entity === target.entity) {
+            victimId = hitInfo.targets[j].playerId;
+            victimEntry = state.players[victimId];
+            break;
+          }
+        }
+        if (!victimEntry || !victimEntry.entity.alive) return;
+
+        victimEntry.entity.takeDamage(totalDamage);
+        if (id === state.localId && typeof playGameSound === 'function') playGameSound('hit_marker');
+        if (victimId === state.localId && typeof playGameSound === 'function') playGameSound('damage_taken');
+        if (victimId === state.localId) updateHUDForLocalPlayer();
+
+        if (state.match.roundActive && !victimEntry.entity.alive) {
+          victimEntry.alive = false;
+          victimEntry.respawnAt = performance.now() + RESPAWN_DELAY_MS;
+          if (typeof playGameSound === 'function') playGameSound('elimination');
+          recordKill(id, victimId);
+        }
+      }
+    });
+
+    ms.swinging = true;
+    ms.swingEnd = now + w.meleeSwingMs;
+    if (id === state.localId) {
+      if (typeof playGameSound === 'function') playGameSound('melee_swing');
+      if (typeof window.triggerFPMeleeSwing === 'function') window.triggerFPMeleeSwing(w.meleeSwingMs);
+    }
+    if (entry.entity.triggerMeleeSwing) entry.entity.triggerMeleeSwing(w.meleeSwingMs);
+
+    if (socket && state.isHost) {
+      socket.emit('melee', { playerId: id, swingMs: w.meleeSwingMs });
+    }
+
+    if (id === state.localId) updateHUDForLocalPlayer();
+    inp.meleeDown = false;
+    return false;
+  }
+
+  function handleShooting(id, now) {
+    var entry = state.players[id];
+    if (!entry || !entry.entity || !entry.entity.alive) return;
+    var w = entry.entity.weapon;
+    var inp = entry.entity.input;
+
+    if (inp.reloadPressed) {
+      if (sharedStartReload(w, now)) {
+        if (id === state.localId) sharedSetReloadingUI(true, state.hud.reloadIndicator);
+      }
+      inp.reloadPressed = false;
+      return;
+    }
+    if (w.reloading) return;
+    if (!inp.fireDown) return;
+    if ((now - w.lastShotTime) < w.cooldownMs) return;
+    if (w.ammo <= 0) {
+      if (sharedStartReload(w, now)) {
+        if (id === state.localId) sharedSetReloadingUI(true, state.hud.reloadIndicator);
+      }
+      return;
+    }
+
+    var dir = getPlayerDirection(id);
+    var origin = getPlayerOrigin(id);
+    if (id !== state.localId) {
+      origin.add(dir.clone().multiplyScalar(0.2)).add(new THREE.Vector3(0, -0.05, 0));
+    } else {
+      origin.add(dir.clone().multiplyScalar(0.2)).add(new THREE.Vector3(0, -0.05, 0));
+    }
+
+    var hitInfo = buildHitTargets(id);
+    var tracerColor = (id === state.localId) ? 0x66ffcc : 0x66aaff;
+
+    var result = sharedFireWeapon(w, origin, dir, {
+      sprinting: !!inp.sprint,
+      solids: state.arena.solids,
+      targets: hitInfo.targets,
+      projectileTargetEntities: hitInfo.entities,
+      tracerColor: tracerColor,
+      onHit: function (target, point, dist, pelletIdx, damageMultiplier) {
+        var victimId = null;
+        var victimEntry = null;
+        for (var j = 0; j < hitInfo.targets.length; j++) {
+          if (hitInfo.targets[j].entity === target || hitInfo.targets[j].entity === target.entity) {
+            victimId = hitInfo.targets[j].playerId;
+            victimEntry = state.players[victimId];
+            break;
+          }
+        }
+        if (!victimEntry || !victimEntry.entity.alive) return;
+        if (window.devGodMode && victimId === state.localId) return;
+
+        victimEntry.entity.takeDamage(w.damage * (damageMultiplier || 1.0));
+        if (id === state.localId && typeof playGameSound === 'function') playGameSound('hit_marker');
+        if (victimId === state.localId && typeof playGameSound === 'function') playGameSound('damage_taken');
+        if (victimId === state.localId) updateHUDForLocalPlayer();
+
+        if (state.match.roundActive && !victimEntry.entity.alive) {
+          victimEntry.alive = false;
+          victimEntry.respawnAt = performance.now() + RESPAWN_DELAY_MS;
+          if (typeof playGameSound === 'function') playGameSound('elimination');
+          recordKill(id, victimId);
+          return false;
+        }
+      },
+      onPelletFired: function (pelletResult) {
+        if (state.isHost && socket) {
+          try {
+            if (w.projectileSpeed && w.projectileSpeed > 0) {
+              socket.emit('shot', {
+                o: [origin.x, origin.y, origin.z],
+                d: pelletResult.dir ? [pelletResult.dir.x, pelletResult.dir.y, pelletResult.dir.z] : [0, 0, -1],
+                c: tracerColor,
+                s: w.projectileSpeed,
+                g: w.projectileGravity || 0,
+                w: w.modelType
+              });
+            } else if (pelletResult && pelletResult.point) {
+              socket.emit('shot', {
+                o: [origin.x, origin.y, origin.z],
+                e: [pelletResult.point.x, pelletResult.point.y, pelletResult.point.z],
+                c: tracerColor,
+                w: w.modelType
+              });
+            }
+          } catch (e) { console.warn('ffa: shot emit failed:', e); }
+        }
+      }
+    });
+
+    if (id === state.localId) updateHUDForLocalPlayer();
+    if (result.magazineEmpty) {
+      if (sharedStartReload(w, now)) {
+        if (id === state.localId) sharedSetReloadingUI(true, state.hud.reloadIndicator);
+      }
+    }
+  }
+
+  // ── Host Tick ──
+
+  function simulateHostTick(dt) {
+    if (!state) return;
+    var ids = Object.keys(state.players);
+    var now = performance.now();
+
+    // Phase 1: Apply inputs and update physics for all players
+    for (var i = 0; i < ids.length; i++) {
+      var id = ids[i];
+      var entry = state.players[id];
+      if (!entry || !entry.entity) continue;
+
+      // Handle respawning
+      if (!entry.alive && entry.respawnAt > 0 && now >= entry.respawnAt) {
+        respawnPlayer(id);
+      }
+      if (!entry.alive) continue;
+
+      // Apply local or remote input
+      if (id === state.localId) {
+        var localInput = window.getInputState ? window.getInputState() : {};
+        var enabledLocal = !!state.inputEnabled;
+        entry.entity.input.moveX = enabledLocal ? (localInput.moveX || 0) : 0;
+        entry.entity.input.moveZ = enabledLocal ? (localInput.moveZ || 0) : 0;
+        entry.entity.input.sprint = enabledLocal && !!localInput.sprint;
+        entry.entity.input.jump = enabledLocal && !!localInput.jump;
+        entry.entity.input.fireDown = enabledLocal && !!localInput.fireDown;
+        entry.entity.input.meleeDown = enabledLocal && !!localInput.meleePressed;
+        if (enabledLocal && localInput.reloadPressed) entry.entity.input.reloadPressed = true;
+
+        sharedSetCrosshairBySprint(!!localInput.sprint, entry.entity.weapon.spreadRad, entry.entity.weapon.sprintSpreadRad);
+        sharedSetSprintUI(!!localInput.sprint, state.hud.sprintIndicator);
+
+        // Physics
+        var prevGrounded = entry.entity.grounded;
+        updateFullPhysics(
+          entry.entity,
+          { moveX: entry.entity.input.moveX, moveZ: entry.entity.input.moveZ, sprint: entry.entity.input.sprint, jump: entry.entity.input.jump },
+          { colliders: state.arena.colliders, solids: state.arena.solids },
+          dt
+        );
+        entry.entity._hitboxYaw = camera.rotation.y;
+        entry.entity._syncMeshPosition();
+        entry.entity.syncCameraFromPlayer();
+
+        // Movement sounds
+        if (typeof playGameSound === 'function') {
+          if (prevGrounded && !entry.entity.grounded) playGameSound('jump');
+          if (!prevGrounded && entry.entity.grounded) playGameSound('land');
+          var moving = (entry.entity.input.moveX !== 0 || entry.entity.input.moveZ !== 0);
+          if (moving && entry.entity.grounded && typeof playFootstepIfDue === 'function') {
+            playFootstepIfDue(!!entry.entity.input.sprint, null, now);
+          }
+        }
+      } else {
+        // Remote player
+        var ri = state._remoteInputs[id] || {};
+        var pending = state._remoteInputPending[id] || {};
+        var activeRound = !!(state.match && state.match.roundActive);
+
+        entry.entity.input.moveX = activeRound ? (ri.moveX || 0) : 0;
+        entry.entity.input.moveZ = activeRound ? (ri.moveZ || 0) : 0;
+        entry.entity.input.sprint = activeRound && !!ri.sprint;
+        if (activeRound && (ri.jump || pending.jump)) entry.entity.input.jump = true;
+        entry.entity.input.fireDown = activeRound && !!ri.fireDown;
+        if (activeRound && (ri.meleeDown || pending.melee)) entry.entity.input.meleeDown = true;
+        if (activeRound && (ri.reloadPressed || pending.reload)) entry.entity.input.reloadPressed = true;
+
+        if (ri.forward && Array.isArray(ri.forward) && ri.forward.length === 3) {
+          entry.entity.input.forward = new THREE.Vector3(ri.forward[0], ri.forward[1], ri.forward[2]);
+        }
+
+        // Compute world-space move direction from their forward vector
+        var fwd = (entry.entity.input.forward && entry.entity.input.forward.isVector3)
+          ? entry.entity.input.forward.clone()
+          : new THREE.Vector3(0, 0, -1);
+        fwd.y = 0;
+        if (fwd.lengthSq() < 1e-6) fwd.set(0, 0, -1);
+        fwd.normalize();
+        var right = new THREE.Vector3().crossVectors(fwd, new THREE.Vector3(0, 1, 0)).normalize();
+        var moveDir = new THREE.Vector3();
+        moveDir.addScaledVector(fwd, entry.entity.input.moveZ || 0);
+        moveDir.addScaledVector(right, entry.entity.input.moveX || 0);
+        if (moveDir.lengthSq() > 1e-6) moveDir.normalize(); else moveDir.set(0, 0, 0);
+
+        updateFullPhysics(
+          entry.entity,
+          { worldMoveDir: moveDir, sprint: entry.entity.input.sprint, jump: entry.entity.input.jump },
+          { colliders: state.arena.colliders, solids: state.arena.solids },
+          dt
+        );
+        entry.entity.input.jump = false;
+
+        // Sync hitbox yaw from their forward vector
+        var riFwd = ri.forward;
+        if (riFwd && Array.isArray(riFwd) && riFwd.length === 3) {
+          entry.entity._hitboxYaw = Math.atan2(riFwd[0], riFwd[2]);
+        }
+        entry.entity._meshGroup.rotation.set(0, entry.entity._hitboxYaw, 0);
+        entry.entity._syncMeshPosition();
+
+        // Clear pending one-shot flags
+        if (state._remoteInputPending[id]) {
+          state._remoteInputPending[id].jump = false;
+          state._remoteInputPending[id].reload = false;
+          state._remoteInputPending[id].melee = false;
+        }
+      }
+    }
+
+    // Phase 2: Combat (melee + shooting) after all physics
+    for (var i = 0; i < ids.length; i++) {
+      var id = ids[i];
+      var entry = state.players[id];
+      if (!entry || !entry.entity || !entry.alive) continue;
+      var ms = state._meleeSwingState[id];
+      var canShoot = handleMelee(id, now);
+      if (canShoot && (!ms || !ms.swinging)) handleShooting(id, now);
+      handleReload(id, now);
+    }
+
+    // Phase 3: Update projectiles
+    if (typeof updateProjectiles === 'function') updateProjectiles(dt);
+
+    // Phase 4: Hitbox viz
+    if (window.devShowHitboxes && window.updateHitboxVisuals) window.updateHitboxVisuals();
+
+    // Phase 5: Update 3D health bars for remote players
+    for (var i = 0; i < ids.length; i++) {
+      if (ids[i] === state.localId) continue;
+      var entry = state.players[ids[i]];
+      if (entry && entry.entity && entry.entity.alive) {
+        entry.entity.update3DHealthBar(camera.position, state.arena.solids, { checkLOS: true });
+      }
+    }
+
+    // Phase 6: Send snapshot
+    maybeSendSnapshot(now);
+  }
+
+  var lastSnapshotMs = 0;
+  function maybeSendSnapshot(nowMs) {
+    if (!socket) return;
+    if ((nowMs - lastSnapshotMs) < SNAPSHOT_RATE) return;
+    lastSnapshotMs = nowMs;
+
+    var playersSnap = {};
+    var ids = Object.keys(state.players);
+    for (var i = 0; i < ids.length; i++) {
+      var id = ids[i];
+      var entry = state.players[id];
+      if (!entry || !entry.entity) continue;
+      playersSnap[id] = {
+        pos: [entry.entity.position.x, entry.entity.position.y, entry.entity.position.z],
+        feetY: entry.entity.feetY,
+        grounded: entry.entity.grounded,
+        health: entry.entity.health,
+        alive: entry.alive,
+        yaw: entry.entity._hitboxYaw,
+        ammo: entry.entity.weapon.ammo,
+        magSize: entry.entity.weapon.magSize,
+        reloading: entry.entity.weapon.reloading,
+        reloadEnd: entry.entity.weapon.reloadEnd
+      };
+    }
+
+    socket.emit('snapshot', {
+      players: playersSnap,
+      scores: state.match.scores,
+      t: nowMs
+    });
+  }
+
+  // ── Main Loop ──
+
+  function tick(ts) {
+    if (!window.ffaActive || !state) return;
+
+    var dt = state.lastTs ? Math.min(MAX_DT, (ts - state.lastTs) / 1000) : 0;
+    state.lastTs = ts;
+
+    if (state.isHost) {
+      simulateHostTick(dt);
+    }
+    // Client tick will be added in Task 017
+
+    // Update melee cooldown timer for local player
+    var local = state.players[state.localId];
+    if (local && local.entity && local.entity.weapon && state.hud.meleeCooldown) {
+      sharedUpdateMeleeCooldown(state.hud.meleeCooldown, local.entity.weapon, performance.now());
+    }
+
+    state.loopHandle = requestAnimationFrame(tick);
+  }
+
+  // ── Public API ──
+
+  window.startFFAHost = function (roomId, settings) {
+    if (!roomId || typeof roomId !== 'string') { alert('Please enter a Room ID'); return; }
+    if (window.paintballActive) { try { stopPaintballInternal(); } catch (e) {} }
+    if (window.multiplayerActive) { try { stopMultiplayerInternal(); } catch (e) {} }
+    if (window.ffaActive) { try { stopFFAInternal(); } catch (e) {} }
+
+    var mapName = settings && settings.mapName;
+
+    function doHost(mapData) {
+      ensureSocket();
+      socket.emit('createRoom', roomId, Object.assign({}, settings || {}, { maxPlayers: (settings && settings.maxPlayers) || 8 }), function (res) {
+        if (!res || !res.ok) { alert(res && res.error ? res.error : 'Failed to create room'); return; }
+        startFFASession(settings || {}, mapData);
+      });
+    }
+
+    if (mapName && mapName !== '__default__' && typeof fetchMapData === 'function') {
+      fetchMapData(mapName).then(doHost).catch(function () { doHost(null); });
+    } else {
+      doHost(null);
+    }
+  };
+
+  function ensureSocket() {
+    if (socket) return;
+    if (typeof io !== 'function') {
+      alert('Socket.IO client not found. Make sure the server is running.');
+      return;
+    }
+    socket = io();
+
+    socket.on('roomClosed', function () {
+      alert('Host left. Room closed.');
+      stopFFAInternal();
+      showOnlyMenu('mainMenu');
+      setHUDVisible(false);
+    });
+
+    // Remote player input (host receives)
+    socket.on('input', function (payload) {
+      if (!state || !state.isHost || !payload || !payload.clientId) return;
+      var cid = payload.clientId;
+      if (!state._remoteInputPending[cid]) state._remoteInputPending[cid] = { jump: false, reload: false, melee: false };
+      if (payload.jump) state._remoteInputPending[cid].jump = true;
+      if (payload.reloadPressed) state._remoteInputPending[cid].reload = true;
+      if (payload.meleeDown) state._remoteInputPending[cid].melee = true;
+      state._remoteInputs[cid] = payload;
+    });
+
+    // New player joined
+    socket.on('clientJoined', function (payload) {
+      if (!state || !state.isHost) return;
+      var clientId = payload && payload.clientId;
+      if (!clientId) return;
+      addRemotePlayer(clientId);
+      showRoundBanner('Player joined', ROUND_BANNER_MS);
+    });
+
+    socket.on('clientLeft', function (payload) {
+      if (!state || !state.isHost) return;
+      var clientId = payload && payload.clientId;
+      if (!clientId) return;
+      removePlayer(clientId);
+      showRoundBanner('Player left', ROUND_BANNER_MS);
+    });
+
+    // Hero selection from remote player
+    socket.on('heroSelect', function (payload) {
+      if (!state || !state.isHost) return;
+      if (payload && payload.heroId && payload.clientId) {
+        var entry = state.players[payload.clientId];
+        if (entry) {
+          entry.heroId = payload.heroId;
+          applyHeroWeapon(entry.entity, payload.heroId);
+        }
+      }
+    });
+  }
+
+  function addRemotePlayer(clientId) {
+    if (!state || state.players[clientId]) return;
+    var spawnPos = getSpawnPosition(state._spawnIndex++);
+    var p = createPlayerInstance({
+      position: spawnPos,
+      color: randomPlayerColor(),
+      cameraAttached: false
+    });
+    state.players[clientId] = {
+      entity: p,
+      heroId: 'marksman',
+      alive: true,
+      isAI: false,
+      respawnAt: 0
+    };
+    state.match.scores[clientId] = { kills: 0, deaths: 0 };
+    state._meleeSwingState[clientId] = { swinging: false, swingEnd: 0 };
+    state._remoteInputs[clientId] = {};
+    state._remoteInputPending[clientId] = { jump: false, reload: false, melee: false };
+  }
+
+  function removePlayer(id) {
+    if (!state || !state.players[id]) return;
+    var entry = state.players[id];
+    if (entry.entity) {
+      try { entry.entity.destroy(); } catch (e) { console.warn('ffa: player.destroy failed:', e); }
+    }
+    delete state.players[id];
+    delete state.match.scores[id];
+    delete state._meleeSwingState[id];
+    delete state._remoteInputs[id];
+    delete state._remoteInputPending[id];
+  }
+
+  var _playerColors = [0x66ffcc, 0xff8844, 0x55aaff, 0xff55aa, 0xaaff55, 0xffff55, 0xaa55ff, 0xff5555];
+  var _colorIdx = 0;
+  function randomPlayerColor() {
+    return _playerColors[(_colorIdx++) % _playerColors.length];
+  }
+
+  function startFFASession(settings, mapData) {
+    state = newState(settings);
+    state.isHost = true;
+    state.localId = socket.id;
+
+    // Build arena
+    state.arena = (mapData && typeof buildArenaFromMap === 'function')
+      ? buildArenaFromMap(mapData)
+      : (typeof buildArenaFromMap === 'function' ? buildArenaFromMap(getDefaultMapData()) : buildPaintballArenaSymmetric());
+
+    state.spawnsFFA = state.arena.spawnsFFA || [];
+
+    // Fallback: if no FFA spawns, use A/B spawns
+    if (state.spawnsFFA.length === 0 && state.arena.spawns) {
+      state.spawnsFFA = [state.arena.spawns.A.clone(), state.arena.spawns.B.clone()];
+    }
+
+    // Create host player
+    _colorIdx = 0;
+    var hostSpawn = getSpawnPosition(state._spawnIndex++);
+    var hostPlayer = createPlayerInstance({
+      position: hostSpawn,
+      color: randomPlayerColor(),
+      cameraAttached: true
+    });
+    state.players[state.localId] = {
+      entity: hostPlayer,
+      heroId: 'marksman',
+      alive: true,
+      isAI: false,
+      respawnAt: 0
+    };
+    state.match.scores[state.localId] = { kills: 0, deaths: 0 };
+    state._meleeSwingState[state.localId] = { swinging: false, swingEnd: 0 };
+
+    // Setup HUD
+    setHUDVisible(true);
+    showOnlyMenu(null);
+    showFFAHUD(true);
+    setCrosshairDimmed(false);
+    setCrosshairSpread(0);
+    updateHUDForLocalPlayer();
+
+    if (renderer && renderer.domElement && renderer.domElement.requestPointerLock) {
+      renderer.domElement.requestPointerLock();
+    }
+
+    // Sync camera to host spawn
+    hostPlayer.syncCameraFromPlayer();
+    camera.rotation.set(0, 0, 0, 'YXZ');
+
+    showRoundBanner('Waiting for players...', 999999);
+
+    window.ffaActive = true;
+    state.lastTs = 0;
+    lastSnapshotMs = 0;
+    state.loopHandle = requestAnimationFrame(tick);
+  }
+
+  // Called when all players are in and host presses start
+  window.startFFARound = function () {
+    if (!state || !state.isHost) return;
+    resetAllPlayersForRound();
+    updateHUDForLocalPlayer();
+    startRoundCountdown(COUNTDOWN_SECONDS);
+    if (socket) socket.emit('startRound', { seconds: COUNTDOWN_SECONDS });
+  };
+
+  window.stopFFAInternal = function () {
+    try { if (socket && state) socket.emit('leaveRoom'); } catch (e) {}
+    if (state && state.loopHandle) {
+      try { cancelAnimationFrame(state.loopHandle); } catch (e) {}
+      state.loopHandle = 0;
+    }
+    try { if (typeof window.closePreRoundHeroSelect === 'function') window.closePreRoundHeroSelect(); } catch (e) {}
+    if (state) {
+      if (state.bannerTimerRef && state.bannerTimerRef.id) {
+        clearTimeout(state.bannerTimerRef.id);
+        state.bannerTimerRef.id = 0;
+      }
+      if (state.countdownTimerRef && state.countdownTimerRef.id) {
+        clearInterval(state.countdownTimerRef.id);
+        state.countdownTimerRef.id = 0;
+      }
+      // Destroy all player instances
+      var ids = Object.keys(state.players);
+      for (var i = 0; i < ids.length; i++) {
+        var entry = state.players[ids[i]];
+        if (entry && entry.entity) {
+          try { entry.entity.destroy(); } catch (e) { console.warn('ffa: player.destroy failed:', e); }
+        }
+      }
+      if (state.arena && state.arena.group && state.arena.group.parent) {
+        state.arena.group.parent.remove(state.arena.group);
+      }
+      showFFAHUD(false);
+      if (typeof clearAllProjectiles === 'function') clearAllProjectiles();
+      setCrosshairDimmed(false);
+      setCrosshairSpread(0);
+      if (typeof clearFirstPersonWeapon === 'function') clearFirstPersonWeapon();
+    }
+    window.ffaActive = false;
+    lastSnapshotMs = 0;
+    state = null;
+  };
+})();
