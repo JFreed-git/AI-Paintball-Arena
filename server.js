@@ -1,8 +1,9 @@
 /**
- * Simple LAN relay server for Paintball Arena multiplayer (2 players per room).
+ * LAN relay server for Paintball Arena multiplayer (up to 8 players per room).
  * - Serves static files from this directory
  * - Socket.IO for signaling: create/join rooms, relay client inputs to host, host snapshots to clients
- * - Stores per-room settings (rounds to win)
+ * - Stores per-room settings (rounds to win, max players)
+ * - Lobby infrastructure: player names, ready state, player list broadcast
  *
  * Run:
  *   npm init -y
@@ -310,8 +311,22 @@ app.post('/api/heroes/:id', function (req, res) {
   }
 });
 
-// roomId -> { hostId: string, players: Set<string>, settings: object }
+// roomId -> { hostId, players: Set, settings, playerNames: Map, readyState: Map }
 const rooms = new Map();
+
+// Build the player list payload for a room
+function buildPlayerList(room) {
+  var list = [];
+  room.players.forEach(function (id) {
+    list.push({
+      id: id,
+      name: room.playerNames.get(id) || 'Player',
+      ready: room.readyState.get(id) || false,
+      isHost: id === room.hostId
+    });
+  });
+  return list;
+}
 
 io.on('connection', (socket) => {
   let currentRoom = null;
@@ -324,27 +339,46 @@ io.on('connection', (socket) => {
     if (rooms.has(roomId)) {
       return typeof ack === 'function' && ack({ ok: false, error: 'Room already exists' });
     }
-    rooms.set(roomId, { hostId: socket.id, players: new Set([socket.id]), settings: sanitizeSettings(settings) });
+    var sanitized = sanitizeSettings(settings);
+    var playerNames = new Map();
+    var readyState = new Map();
+    var hostName = (settings && typeof settings.playerName === 'string') ? settings.playerName.substring(0, 30) : 'Host';
+    playerNames.set(socket.id, hostName);
+    readyState.set(socket.id, true); // host is always ready
+    rooms.set(roomId, { hostId: socket.id, players: new Set([socket.id]), settings: sanitized, playerNames: playerNames, readyState: readyState });
     socket.join(roomId);
     currentRoom = roomId;
+    io.to(roomId).emit('playerList', buildPlayerList(rooms.get(roomId)));
     typeof ack === 'function' && ack({ ok: true, role: 'host', playerNumber: 1 });
   });
 
   // Join an existing room as a client (non-host)
-  socket.on('joinRoom', (roomId, ack) => {
+  socket.on('joinRoom', (roomId, playerName, ack) => {
+    // Backward compat: if playerName is a function, it's the old 2-arg call
+    if (typeof playerName === 'function') {
+      ack = playerName;
+      playerName = null;
+    }
     const room = rooms.get(roomId);
     if (!room) return typeof ack === 'function' && ack({ ok: false, error: 'Room not found' });
-    if (room.players.size >= 2) return typeof ack === 'function' && ack({ ok: false, error: 'Room full' });
+    if (room.players.size >= room.settings.maxPlayers) return typeof ack === 'function' && ack({ ok: false, error: 'Room full' });
 
     room.players.add(socket.id);
+    var name = (playerName && typeof playerName === 'string') ? playerName.substring(0, 30) : ('Player ' + room.players.size);
+    room.playerNames.set(socket.id, name);
+    room.readyState.set(socket.id, false);
     socket.join(roomId);
     currentRoom = roomId;
 
-    // Notify host that client joined
+    // Notify host that client joined (backward compat)
     io.to(room.hostId).emit('clientJoined', { clientId: socket.id });
 
+    // Broadcast updated player list to all room members
+    io.to(roomId).emit('playerList', buildPlayerList(room));
+
     // Tell joiner who the host is and the settings
-    typeof ack === 'function' && ack({ ok: true, role: 'client', playerNumber: 2, hostId: room.hostId, settings: room.settings || {} });
+    var playerNumber = Array.from(room.players).indexOf(socket.id) + 1;
+    typeof ack === 'function' && ack({ ok: true, role: 'client', playerNumber: playerNumber, hostId: room.hostId, settings: room.settings || {} });
   });
 
   // Client input -> to host
@@ -392,6 +426,30 @@ io.on('connection', (socket) => {
     socket.to(currentRoom).emit('heroSelect', payload);
   });
 
+  // Set ready state for a player in a room
+  socket.on('setReady', (roomId, ready) => {
+    const room = rooms.get(roomId || currentRoom);
+    if (!room || !room.players.has(socket.id)) return;
+    room.readyState.set(socket.id, !!ready);
+    io.to(roomId || currentRoom).emit('playerList', buildPlayerList(room));
+  });
+
+  // Host starts the game — validates at least 2 players and all non-host players ready
+  socket.on('startGame', (roomId, ack) => {
+    const rid = roomId || currentRoom;
+    const room = rooms.get(rid);
+    if (!room) return typeof ack === 'function' && ack({ ok: false, error: 'Room not found' });
+    if (socket.id !== room.hostId) return typeof ack === 'function' && ack({ ok: false, error: 'Only host can start' });
+    if (room.players.size < 2) return typeof ack === 'function' && ack({ ok: false, error: 'Need at least 2 players' });
+    var allReady = true;
+    room.players.forEach(function (id) {
+      if (id !== room.hostId && !room.readyState.get(id)) allReady = false;
+    });
+    if (!allReady) return typeof ack === 'function' && ack({ ok: false, error: 'Not all players are ready' });
+    io.to(rid).emit('gameStarted', { players: buildPlayerList(room), settings: room.settings });
+    typeof ack === 'function' && ack({ ok: true });
+  });
+
   // Relay melee visual events from host to clients
   relayHostEvent('melee');
 
@@ -415,13 +473,17 @@ io.on('connection', (socket) => {
       // Host leaving: close room and notify any clients
       io.to(currentRoom).emit('roomClosed');
       rooms.delete(currentRoom);
-      // Host implicitly leaves via disconnect or socket.leave
       try { socket.leave(currentRoom); } catch (e) { console.warn('socket.leave failed:', e); }
     } else {
       // Client leaving: remove from room and notify host
+      var rid = currentRoom;
       room.players.delete(socket.id);
-      try { socket.leave(currentRoom); } catch (e) { console.warn('socket.leave failed:', e); }
+      room.playerNames.delete(socket.id);
+      room.readyState.delete(socket.id);
+      try { socket.leave(rid); } catch (e) { console.warn('socket.leave failed:', e); }
       io.to(room.hostId).emit('clientLeft', { clientId: socket.id });
+      // Broadcast updated player list
+      io.to(rid).emit('playerList', buildPlayerList(room));
     }
     currentRoom = null;
   });
@@ -432,6 +494,8 @@ io.on('connection', (socket) => {
     if (!room) { currentRoom = null; return; }
 
     room.players.delete(socket.id);
+    room.playerNames.delete(socket.id);
+    room.readyState.delete(socket.id);
 
     if (socket.id === room.hostId) {
       // Host left: close room
@@ -440,6 +504,8 @@ io.on('connection', (socket) => {
     } else {
       // Client left
       io.to(room.hostId).emit('clientLeft', { clientId: socket.id });
+      // Broadcast updated player list to remaining players
+      io.to(currentRoom).emit('playerList', buildPlayerList(room));
     }
     currentRoom = null;
   });
@@ -449,6 +515,7 @@ function sanitizeSettings(s) {
   s = s || {};
   const out = {
     roundsToWin: clampInt(s.roundsToWin, 1, 10, 2),
+    maxPlayers: clampInt(s.maxPlayers, 2, 8, 8),
   };
   if (s.mapName && typeof s.mapName === 'string') out.mapName = s.mapName.substring(0, 100);
   return out;
