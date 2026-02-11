@@ -34,16 +34,13 @@
   var state = null;
 
   function newState(difficulty) {
-    var roundsInput = document.getElementById('roundsToWinPaintball');
-    var toWin = roundsInput ? Math.max(1, Math.min(10, parseInt(roundsInput.value, 10) || 2)) : 2;
-
     return {
       difficulty: difficulty || 'Easy',
       _heroId: null,
       arena: null,
       ai: null,
       player: null, // Player instance created after state
-      match: { playerWins: 0, aiWins: 0, toWin: toWin, roundActive: true },
+      match: { playerWins: 0, aiWins: 0, toWin: ROUNDS_TO_WIN, roundActive: true },
       spawns: { A: new THREE.Vector3(), B: new THREE.Vector3() },
       hud: {
         healthContainer: document.getElementById('healthContainer'),
