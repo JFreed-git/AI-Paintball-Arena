@@ -896,14 +896,6 @@ window.registerCustomWeaponModel = registerCustomWeaponModel;
 
   // --- Launch Game (full game in iframe) ---
   function launchGame() {
-    // Ensure server is running
-    if (window.devAPI) {
-      var info = window.devAPI.serverStatus();
-      if (info.status !== 'running') {
-        window.devAPI.serverStart();
-      }
-    }
-
     // Hide sidebar and all panels
     var sidebar = document.getElementById('devSidebar');
     var expandTab = document.getElementById('devSidebarExpand');
@@ -928,12 +920,37 @@ window.registerCustomWeaponModel = registerCustomWeaponModel;
     var lgPanel = document.getElementById('launchGamePanel');
     if (lgPanel) lgPanel.style.display = 'block';
 
-    // Set iframe src
-    var lgIframe = document.getElementById('lgIframe');
-    if (lgIframe) lgIframe.src = 'http://localhost:3000';
-
     // Add viewport mode class for full-screen styling
     document.body.classList.add('viewport-mode');
+
+    var lgIframe = document.getElementById('lgIframe');
+
+    // Ensure server is running before loading iframe
+    function loadIframe() {
+      if (lgIframe) lgIframe.src = 'http://localhost:3000';
+    }
+
+    if (!window.devAPI) { loadIframe(); return; }
+
+    var info = window.devAPI.serverStatus();
+    if (info.status === 'running') { loadIframe(); return; }
+
+    // Show loading indicator in iframe area
+    if (lgIframe) lgIframe.srcdoc = '<html><body style="background:#111;color:#aaa;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;font-family:sans-serif;font-size:18px">Starting server\u2026</body></html>';
+
+    window.devAPI.serverStart();
+    var attempts = 0;
+    var poll = setInterval(function () {
+      attempts++;
+      var s = window.devAPI.serverStatus();
+      if (s.status === 'running') {
+        clearInterval(poll);
+        loadIframe();
+      } else if (attempts > 20 || s.status === 'error') {
+        clearInterval(poll);
+        if (lgIframe) lgIframe.srcdoc = '<html><body style="background:#111;color:#f66;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;font-family:sans-serif;font-size:18px">Server failed to start' + (s.error ? ': ' + s.error : '') + '</body></html>';
+      }
+    }, 500);
   }
 
   function closeLaunchGame() {
