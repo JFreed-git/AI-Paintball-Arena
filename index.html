@@ -163,55 +163,24 @@
 
         <div id="lobbyMenu" class="menu-screen hidden">
             <div class="lobby-header">
-                <h2>FFA Lobby</h2>
-                <div class="lobby-room-id">Room: <span id="lobbyRoomId">---</span></div>
+                <h2>Game Lobby</h2>
+                <div class="lobby-info">
+                    <span class="lobby-map-name" id="lobbyMapName">Default Arena</span>
+                    <span class="lobby-mode-badge" id="lobbyModeBadge">FFA</span>
+                </div>
+                <div class="lobby-room-id">Room Code: <span id="lobbyRoomId">---</span></div>
             </div>
             <div class="lobby-body">
                 <div class="lobby-players">
                     <h3>Players</h3>
                     <div id="lobbyPlayerList">
-                        <div class="player-row empty-slot"><span class="player-name">Open Slot</span></div>
-                        <div class="player-row empty-slot"><span class="player-name">Open Slot</span></div>
-                        <div class="player-row empty-slot"><span class="player-name">Open Slot</span></div>
-                        <div class="player-row empty-slot"><span class="player-name">Open Slot</span></div>
-                        <div class="player-row empty-slot"><span class="player-name">Open Slot</span></div>
-                        <div class="player-row empty-slot"><span class="player-name">Open Slot</span></div>
-                        <div class="player-row empty-slot"><span class="player-name">Open Slot</span></div>
-                        <div class="player-row empty-slot"><span class="player-name">Open Slot</span></div>
-                    </div>
-                </div>
-                <div class="lobby-settings host-only">
-                    <h3>Match Settings</h3>
-                    <div class="field">
-                        <label>Map
-                            <select id="lobbyMapSelect">
-                                <option value="__default__" selected>Default Arena</option>
-                            </select>
-                        </label>
-                    </div>
-                    <div class="field">
-                        <label>Kill Limit
-                            <input type="number" id="lobbyKillLimit" min="5" max="50" step="5" value="10" />
-                        </label>
-                    </div>
-                    <div class="field">
-                        <label>Max Players
-                            <select id="lobbyMaxPlayers">
-                                <option value="2">2</option>
-                                <option value="3">3</option>
-                                <option value="4">4</option>
-                                <option value="5">5</option>
-                                <option value="6">6</option>
-                                <option value="7">7</option>
-                                <option value="8" selected>8</option>
-                            </select>
-                        </label>
+                        <!-- JS populates slots dynamically based on map maxPlayers -->
                     </div>
                 </div>
             </div>
             <div class="lobby-actions">
-                <button id="lobbyReadyBtn" class="lobby-ready">Ready</button>
-                <button id="lobbyStartBtn" class="host-only lobby-start">Start Game</button>
+                <button id="lobbyStartBtn" class="lobby-start">Start Game</button>
+                <button id="lobbyReadyBtn" class="lobby-ready hidden">Ready</button>
                 <button id="lobbyBackBtn" class="secondary">Back</button>
             </div>
         </div>

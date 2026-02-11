@@ -153,6 +153,156 @@ function bindUI() {
     showOnlyMenu('mainMenu');
   });
 
+  // ── Game Setup Screen Logic ──
+
+  var _gameSetupMaps = [];
+  var _gameSetupSelected = null;
+
+  function initGameSetup() {
+    var mapGrid = document.getElementById('mapGrid');
+    if (!mapGrid) return;
+    mapGrid.innerHTML = '<div style="color:#666;padding:20px;text-align:center;">Loading maps...</div>';
+    _gameSetupMaps = [];
+    _gameSetupSelected = null;
+
+    var defaultMapData = typeof getDefaultMapData === 'function' ? getDefaultMapData() : null;
+    var defaultEntry = {
+      name: 'Default Arena',
+      mapData: defaultMapData,
+      maxPlayers: defaultMapData ? (typeof getMapMaxPlayers === 'function' ? getMapMaxPlayers(defaultMapData) : 2) : 6,
+      supportedModes: (defaultMapData && defaultMapData.supportedModes) || ['ffa']
+    };
+
+    _fetchServerMaps(function (serverMaps) {
+      _gameSetupMaps = [defaultEntry].concat(serverMaps);
+      _renderMapCards();
+    });
+  }
+
+  function _fetchServerMaps(callback) {
+    if (typeof fetchMapList !== 'function') { callback([]); return; }
+    fetchMapList().then(function (names) {
+      if (!names || !names.length) { callback([]); return; }
+      var entries = [];
+      var pending = names.length;
+      names.forEach(function (name) {
+        fetchMapData(name).then(function (mapData) {
+          entries.push({
+            name: mapData.name || name,
+            mapData: mapData,
+            maxPlayers: typeof getMapMaxPlayers === 'function' ? getMapMaxPlayers(mapData) : 2,
+            supportedModes: mapData.supportedModes || ['ffa']
+          });
+          if (--pending === 0) callback(entries);
+        }).catch(function () {
+          if (--pending === 0) callback(entries);
+        });
+      });
+    }).catch(function () { callback([]); });
+  }
+
+  function _renderMapCards() {
+    var mapGrid = document.getElementById('mapGrid');
+    if (!mapGrid) return;
+    mapGrid.innerHTML = '';
+    if (_gameSetupMaps.length === 0) {
+      mapGrid.innerHTML = '<div style="color:#666;padding:20px;">No maps available</div>';
+      return;
+    }
+    _gameSetupMaps.forEach(function (entry, idx) {
+      var card = document.createElement('div');
+      card.className = 'map-card';
+      card.setAttribute('data-map-idx', String(idx));
+
+      var thumb = document.createElement('div');
+      thumb.className = 'map-card-thumb';
+      thumb.textContent = 'Generating...';
+
+      var badge = document.createElement('div');
+      badge.className = 'map-card-badge';
+      badge.textContent = entry.maxPlayers + 'P';
+
+      var info = document.createElement('div');
+      info.className = 'map-card-info';
+      var nameEl = document.createElement('div');
+      nameEl.className = 'map-card-name';
+      nameEl.textContent = entry.name;
+      var modesEl = document.createElement('div');
+      modesEl.className = 'map-card-modes';
+      modesEl.textContent = entry.supportedModes.join(', ').toUpperCase();
+      info.appendChild(nameEl);
+      info.appendChild(modesEl);
+
+      card.appendChild(thumb);
+      card.appendChild(badge);
+      card.appendChild(info);
+      mapGrid.appendChild(card);
+
+      card.addEventListener('click', function () { _selectMapCard(idx); });
+
+      if (entry.mapData && typeof generateMapThumbnail === 'function') {
+        generateMapThumbnail(entry.mapData, function (dataURL) {
+          if (dataURL) {
+            var img = document.createElement('img');
+            img.src = dataURL;
+            img.alt = entry.name;
+            thumb.textContent = '';
+            thumb.appendChild(img);
+          } else {
+            thumb.textContent = 'No preview';
+          }
+        });
+      } else {
+        thumb.textContent = 'No preview';
+      }
+    });
+    _selectMapCard(0);
+  }
+
+  function _selectMapCard(idx) {
+    _gameSetupSelected = _gameSetupMaps[idx] || null;
+    var mapGrid = document.getElementById('mapGrid');
+    if (mapGrid) {
+      var cards = mapGrid.querySelectorAll('.map-card');
+      cards.forEach(function (c, i) { c.classList.toggle('selected', i === idx); });
+    }
+    var modeSelect = document.getElementById('setupMode');
+    if (modeSelect && _gameSetupSelected) {
+      var modes = _gameSetupSelected.supportedModes || ['ffa'];
+      var modeLabels = { ffa: 'Free-For-All', tdm: 'Team Deathmatch', ctf: 'Capture the Flag' };
+      modeSelect.innerHTML = '';
+      modes.forEach(function (mode) {
+        var opt = document.createElement('option');
+        opt.value = mode;
+        opt.textContent = modeLabels[mode] || mode.toUpperCase();
+        modeSelect.appendChild(opt);
+      });
+    }
+  }
+
+  var setupBack = document.getElementById('setupBack');
+  var setupBackBottom = document.getElementById('setupBackBottom');
+  if (setupBack) setupBack.addEventListener('click', function () { showOnlyMenu('startGameMenu'); });
+  if (setupBackBottom) setupBackBottom.addEventListener('click', function () { showOnlyMenu('startGameMenu'); });
+
+  var setupCreateGame = document.getElementById('setupCreateGame');
+  if (setupCreateGame) setupCreateGame.addEventListener('click', function () {
+    if (!_gameSetupSelected) return;
+    var modeSelect = document.getElementById('setupMode');
+    var roundsInput = document.getElementById('setupRounds');
+    var killLimitInput = document.getElementById('setupKillLimit');
+    window.gameSetupConfig = {
+      mapName: _gameSetupSelected.name,
+      mapData: _gameSetupSelected.mapData,
+      mode: modeSelect ? modeSelect.value : 'ffa',
+      rounds: roundsInput ? parseInt(roundsInput.value, 10) || 3 : 3,
+      killLimit: killLimitInput ? parseInt(killLimitInput.value, 10) || 10 : 10,
+      maxPlayers: _gameSetupSelected.maxPlayers
+    };
+    showOnlyMenu('lobbyMenu');
+    lobbyShowAsHost();
+  });
+
   // Navigation (Paintball only — legacy)
   const gotoPaintball = document.getElementById('gotoPaintball');
   const backFromPaintball = document.getElementById('backFromPaintball');
@@ -295,7 +445,7 @@ function bindLobbyUI() {
   var lobbyStartBtn = document.getElementById('lobbyStartBtn');
   var lobbyBackBtn = document.getElementById('lobbyBackBtn');
 
-  // FFA sub-menu navigation
+  // FFA sub-menu navigation (legacy — kept for backward compat)
   var gotoFFA = document.getElementById('gotoFFA');
   var backFromFFA = document.getElementById('backFromFFA');
   var ffaCreateBtn = document.getElementById('ffaCreateBtn');
@@ -309,7 +459,6 @@ function bindLobbyUI() {
   });
   if (ffaCreateBtn) ffaCreateBtn.addEventListener('click', function () {
     showOnlyMenu('lobbyMenu');
-    populateMapDropdown('lobbyMapSelect');
     lobbyShowAsHost();
   });
   if (ffaJoinBtn) ffaJoinBtn.addEventListener('click', function () {
@@ -319,7 +468,7 @@ function bindLobbyUI() {
     window.lobbyJoinRoom(roomId);
   });
 
-  // Ready button
+  // Ready button (non-host only)
   if (lobbyReadyBtn) {
     lobbyReadyBtn.addEventListener('click', function () {
       if (!window._lobbyState || window._lobbyState.isHost) return;
@@ -332,7 +481,7 @@ function bindLobbyUI() {
     });
   }
 
-  // Start button (host only)
+  // Start button — always enabled for host (solo + AI is valid)
   if (lobbyStartBtn) {
     lobbyStartBtn.addEventListener('click', function () {
       if (!window._lobbyState || !window._lobbyState.isHost) return;
@@ -342,18 +491,16 @@ function bindLobbyUI() {
           alert(res && res.error ? res.error : 'Cannot start game');
           return;
         }
-        // Start FFA mode
         launchFFAFromLobby();
       });
     });
   }
 
-  // Back button — return to where the user came from
+  // Back button — return to game setup
   if (lobbyBackBtn) {
     lobbyBackBtn.addEventListener('click', function () {
-      var returnTo = (window._lobbyState && window._lobbyState.joinedFrom) || 'mainMenu';
       lobbyCleanup();
-      showOnlyMenu(returnTo);
+      showOnlyMenu('gameSetupMenu');
     });
   }
 }
@@ -370,21 +517,18 @@ function lobbyEnsureSocket() {
   sock.on('playerList', function (list) {
     if (!window._lobbyState) return;
     window._lobbyState.playerList = list;
-    lobbyRenderPlayerList(list);
-    lobbyUpdateStartButton(list);
+    lobbyRenderSlots();
   });
 
   sock.on('roomClosed', function () {
-    var returnTo = (window._lobbyState && window._lobbyState.joinedFrom) || 'mainMenu';
     alert('Host left. Room closed.');
     lobbyCleanup();
-    showOnlyMenu(returnTo);
+    showOnlyMenu('gameSetupMenu');
   });
 
   sock.on('gameStarted', function (payload) {
     if (!window._lobbyState) return;
     if (!window._lobbyState.isHost) {
-      // Client: transition to FFA
       launchFFAFromLobby();
     }
   });
@@ -392,56 +536,89 @@ function lobbyEnsureSocket() {
   return sock;
 }
 
+// Get max players from gameSetupConfig or lobbyState fallback
+function lobbyGetMaxPlayers() {
+  if (window._lobbyState && window._lobbyState.maxPlayers) return window._lobbyState.maxPlayers;
+  var cfg = window.gameSetupConfig;
+  if (cfg && cfg.maxPlayers) return cfg.maxPlayers;
+  if (cfg && cfg.mapData && cfg.mapData.maxPlayers) return cfg.mapData.maxPlayers;
+  return 6;
+}
+
+// Get hero names for AI dropdown
+function lobbyGetHeroNames() {
+  var heroes = window.HEROES || [];
+  var names = [];
+  for (var i = 0; i < heroes.length; i++) {
+    if (heroes[i] && heroes[i].id && heroes[i].name) {
+      names.push({ id: heroes[i].id, name: heroes[i].name });
+    }
+  }
+  return names;
+}
+
+// Show lobby as host — called from game setup "Create Game" flow
 function lobbyShowAsHost() {
+  var cfg = window.gameSetupConfig || {};
+  var maxPlayers = cfg.maxPlayers || (cfg.mapData && cfg.mapData.maxPlayers) || 6;
+
   window._lobbyState = {
     roomId: generateRoomId(),
     isHost: true,
     ready: true,
     playerList: [],
-    joinedFrom: 'startGameMenu'
+    aiSlots: {},
+    maxPlayers: maxPlayers,
+    joinedFrom: 'gameSetupMenu'
   };
+
+  // Update header info
+  var mapNameEl = document.getElementById('lobbyMapName');
+  var modeBadgeEl = document.getElementById('lobbyModeBadge');
   var roomIdEl = document.getElementById('lobbyRoomId');
+  if (mapNameEl) mapNameEl.textContent = cfg.mapName || 'Default Arena';
+  if (modeBadgeEl) modeBadgeEl.textContent = (cfg.mode || 'ffa').toUpperCase();
   if (roomIdEl) roomIdEl.textContent = window._lobbyState.roomId;
 
-  // Show host-only elements
-  var hostOnlyEls = document.querySelectorAll('#lobbyMenu .host-only');
-  hostOnlyEls.forEach(function (el) { el.style.display = ''; });
-
-  // Hide ready button for host, show start button
+  // Show start button, hide ready button (host doesn't need ready)
   var readyBtn = document.getElementById('lobbyReadyBtn');
   var startBtn = document.getElementById('lobbyStartBtn');
-  if (readyBtn) readyBtn.style.display = 'none';
-  if (startBtn) startBtn.style.display = '';
+  if (readyBtn) readyBtn.classList.add('hidden');
+  if (startBtn) startBtn.classList.remove('hidden');
+
+  // Render initial slots
+  lobbyRenderSlots();
 
   // Create room on server
   var sock = lobbyEnsureSocket();
   if (!sock) return;
 
-  var killLimitEl = document.getElementById('lobbyKillLimit');
-  var maxPlayersEl = document.getElementById('lobbyMaxPlayers');
-  var mapSelectEl = document.getElementById('lobbyMapSelect');
-
   var settings = {
-    killLimit: killLimitEl ? parseInt(killLimitEl.value, 10) || 10 : 10,
-    maxPlayers: maxPlayersEl ? parseInt(maxPlayersEl.value, 10) || 8 : 8,
-    mapName: (mapSelectEl && mapSelectEl.value) ? mapSelectEl.value : '__default__'
+    killLimit: cfg.killLimit || 10,
+    maxPlayers: maxPlayers,
+    mapName: cfg.mapName || '__default__',
+    rounds: cfg.rounds || 3
   };
 
   sock.emit('createRoom', window._lobbyState.roomId, settings, function (res) {
     if (!res || !res.ok) {
       alert(res && res.error ? res.error : 'Failed to create room');
-      showOnlyMenu('mainMenu');
+      lobbyCleanup();
+      showOnlyMenu('gameSetupMenu');
       return;
+    }
+    if (res.roomId) {
+      window._lobbyState.roomId = res.roomId;
+      if (roomIdEl) roomIdEl.textContent = res.roomId;
     }
   });
 }
 
-// Expose for external use (e.g., joining from a URL or button)
-// onError: optional callback(errorMessage) for inline error display
+// Expose for external use (joining from join room input)
 window.lobbyJoinRoom = function (roomId, onError) {
   if (!roomId) {
-    if (onError) onError('Please enter a Room ID');
-    else alert('Please enter a Room ID');
+    if (onError) onError('Please enter a Room Code');
+    else alert('Please enter a Room Code');
     return;
   }
   window._lobbyState = {
@@ -449,6 +626,8 @@ window.lobbyJoinRoom = function (roomId, onError) {
     isHost: false,
     ready: false,
     playerList: [],
+    aiSlots: {},
+    maxPlayers: 6,
     joinedFrom: 'startGameMenu'
   };
 
@@ -464,109 +643,240 @@ window.lobbyJoinRoom = function (roomId, onError) {
       return;
     }
 
-    // Success — show lobby as non-host
+    if (res.settings && res.settings.maxPlayers) {
+      window._lobbyState.maxPlayers = res.settings.maxPlayers;
+    }
+
     showOnlyMenu('lobbyMenu');
     var roomIdEl = document.getElementById('lobbyRoomId');
     if (roomIdEl) roomIdEl.textContent = roomId;
 
-    // Hide host-only elements
-    var hostOnlyEls = document.querySelectorAll('#lobbyMenu .host-only');
-    hostOnlyEls.forEach(function (el) { el.style.display = 'none'; });
+    var mapNameEl = document.getElementById('lobbyMapName');
+    var modeBadgeEl = document.getElementById('lobbyModeBadge');
+    if (mapNameEl) mapNameEl.textContent = (res.settings && res.settings.mapName) || 'Game';
+    if (modeBadgeEl) modeBadgeEl.textContent = 'FFA';
 
-    // Show ready button, hide start button
     var readyBtn = document.getElementById('lobbyReadyBtn');
     var startBtn = document.getElementById('lobbyStartBtn');
-    if (readyBtn) { readyBtn.style.display = ''; readyBtn.textContent = 'Ready'; readyBtn.classList.remove('is-ready'); }
-    if (startBtn) startBtn.style.display = 'none';
+    if (readyBtn) { readyBtn.classList.remove('hidden'); readyBtn.textContent = 'Ready'; readyBtn.classList.remove('is-ready'); }
+    if (startBtn) startBtn.classList.add('hidden');
+
+    lobbyRenderSlots();
   });
 };
 
-function lobbyRenderPlayerList(list) {
+// Render all player/AI slots in the lobby
+function lobbyRenderSlots() {
   var container = document.getElementById('lobbyPlayerList');
-  if (!container) return;
-  var maxPlayers = 8;
-  if (window._lobbyState && window._lobbyState.playerList) {
-    var maxEl = document.getElementById('lobbyMaxPlayers');
-    maxPlayers = maxEl ? parseInt(maxEl.value, 10) || 8 : 8;
-  }
+  if (!container || !window._lobbyState) return;
+
+  var ls = window._lobbyState;
+  var maxPlayers = ls.maxPlayers || 6;
+  var playerList = ls.playerList || [];
+  var aiSlots = ls.aiSlots || {};
+  var isHost = ls.isHost;
 
   container.innerHTML = '';
+
+  // Map players: slot 0 = host, rest = remote players in order
+  var slotPlayers = {};
+  for (var p = 0; p < playerList.length; p++) {
+    if (playerList[p].isHost) {
+      slotPlayers[0] = playerList[p];
+    }
+  }
+  var nextSlot = 1;
+  for (var p2 = 0; p2 < playerList.length; p2++) {
+    if (!playerList[p2].isHost) {
+      // Bump AI from this slot if needed
+      if (aiSlots[nextSlot]) delete aiSlots[nextSlot];
+      slotPlayers[nextSlot] = playerList[p2];
+      nextSlot++;
+    }
+  }
 
   for (var i = 0; i < maxPlayers; i++) {
     var row = document.createElement('div');
     row.className = 'player-row';
 
-    if (i < list.length) {
-      var p = list[i];
-      row.classList.toggle('is-ready', !!p.ready);
-      row.classList.toggle('is-host', !!p.isHost);
+    var player = slotPlayers[i];
+    var ai = aiSlots[i];
 
-      var nameSpan = document.createElement('span');
-      nameSpan.className = 'player-name';
-      nameSpan.textContent = p.name || 'Player';
-      row.appendChild(nameSpan);
+    if (i === 0 && isHost) {
+      // Slot 0: Host player
+      row.classList.add('is-host');
+      var hostName = document.createElement('span');
+      hostName.className = 'player-name';
+      var savedName = null;
+      try { savedName = localStorage.getItem('playerName'); } catch (e) {}
+      hostName.textContent = savedName || 'Player 1';
+      row.appendChild(hostName);
 
-      var heroSpan = document.createElement('span');
-      heroSpan.className = 'player-hero';
-      heroSpan.textContent = ''; // Hero selection not yet chosen
-      row.appendChild(heroSpan);
+      var hostBadge = document.createElement('span');
+      hostBadge.className = 'player-ready host-badge';
+      hostBadge.textContent = 'HOST';
+      row.appendChild(hostBadge);
+    } else if (player) {
+      // Remote player
+      row.classList.toggle('is-ready', !!player.ready);
+      var pName = document.createElement('span');
+      pName.className = 'player-name';
+      pName.textContent = player.name || 'Player';
+      row.appendChild(pName);
 
-      var statusSpan = document.createElement('span');
-      statusSpan.className = 'player-ready';
-      if (p.isHost) {
-        statusSpan.textContent = 'HOST';
-        statusSpan.classList.add('host-badge');
-      } else {
-        statusSpan.textContent = p.ready ? 'READY' : '';
-      }
-      row.appendChild(statusSpan);
+      var pStatus = document.createElement('span');
+      pStatus.className = 'player-ready';
+      pStatus.textContent = player.ready ? 'READY' : '';
+      if (player.ready) pStatus.classList.add('is-ready');
+      row.appendChild(pStatus);
+    } else if (ai) {
+      // AI slot
+      row.classList.add('ai-slot');
+      lobbyRenderAISlot(row, i, ai, isHost);
     } else {
+      // Empty slot
       row.classList.add('empty-slot');
-      var openSpan = document.createElement('span');
-      openSpan.className = 'player-name';
-      openSpan.textContent = 'Open Slot';
-      row.appendChild(openSpan);
+      if (isHost) {
+        var addBtn = document.createElement('button');
+        addBtn.className = 'ai-add-btn';
+        addBtn.textContent = '+ Add AI';
+        addBtn.setAttribute('data-slot', String(i));
+        addBtn.addEventListener('click', function () {
+          var slotIdx = parseInt(this.getAttribute('data-slot'), 10);
+          lobbyAddAI(slotIdx);
+        });
+        row.appendChild(addBtn);
+      } else {
+        var openSpan = document.createElement('span');
+        openSpan.className = 'player-name';
+        openSpan.textContent = 'Open Slot';
+        row.appendChild(openSpan);
+      }
     }
 
     container.appendChild(row);
   }
 }
 
-function lobbyUpdateStartButton(list) {
-  var startBtn = document.getElementById('lobbyStartBtn');
-  if (!startBtn || !window._lobbyState || !window._lobbyState.isHost) return;
+// Render AI config controls inside a slot row
+function lobbyRenderAISlot(row, slotIndex, aiConfig, isHost) {
+  var nameSpan = document.createElement('span');
+  nameSpan.className = 'player-name';
+  nameSpan.textContent = 'AI Bot';
+  row.appendChild(nameSpan);
 
-  var canStart = list.length >= 2;
-  for (var i = 0; i < list.length; i++) {
-    if (!list[i].isHost && !list[i].ready) {
-      canStart = false;
-      break;
+  if (isHost) {
+    // Hero dropdown
+    var heroSel = document.createElement('select');
+    heroSel.className = 'ai-hero-select';
+    heroSel.setAttribute('data-slot', String(slotIndex));
+
+    var randomOpt = document.createElement('option');
+    randomOpt.value = 'random';
+    randomOpt.textContent = 'Random';
+    heroSel.appendChild(randomOpt);
+
+    var heroes = lobbyGetHeroNames();
+    for (var h = 0; h < heroes.length; h++) {
+      var opt = document.createElement('option');
+      opt.value = heroes[h].id;
+      opt.textContent = heroes[h].name;
+      heroSel.appendChild(opt);
     }
+    heroSel.value = aiConfig.hero || 'random';
+    heroSel.addEventListener('change', function () {
+      var idx = parseInt(this.getAttribute('data-slot'), 10);
+      if (window._lobbyState && window._lobbyState.aiSlots[idx]) {
+        window._lobbyState.aiSlots[idx].hero = this.value;
+      }
+    });
+    row.appendChild(heroSel);
+
+    // Difficulty dropdown
+    var diffSel = document.createElement('select');
+    diffSel.className = 'ai-diff-select';
+    diffSel.setAttribute('data-slot', String(slotIndex));
+
+    var diffs = ['Easy', 'Medium', 'Hard'];
+    for (var d = 0; d < diffs.length; d++) {
+      var dOpt = document.createElement('option');
+      dOpt.value = diffs[d];
+      dOpt.textContent = diffs[d];
+      diffSel.appendChild(dOpt);
+    }
+    diffSel.value = aiConfig.difficulty || 'Medium';
+    diffSel.addEventListener('change', function () {
+      var idx = parseInt(this.getAttribute('data-slot'), 10);
+      if (window._lobbyState && window._lobbyState.aiSlots[idx]) {
+        window._lobbyState.aiSlots[idx].difficulty = this.value;
+      }
+    });
+    row.appendChild(diffSel);
+
+    // Remove button
+    var removeBtn = document.createElement('button');
+    removeBtn.className = 'ai-remove-btn';
+    removeBtn.textContent = 'X';
+    removeBtn.setAttribute('data-slot', String(slotIndex));
+    removeBtn.addEventListener('click', function () {
+      var idx = parseInt(this.getAttribute('data-slot'), 10);
+      lobbyRemoveAI(idx);
+    });
+    row.appendChild(removeBtn);
+  } else {
+    var infoSpan = document.createElement('span');
+    infoSpan.className = 'player-ready';
+    infoSpan.textContent = (aiConfig.difficulty || 'Medium') + ' AI';
+    infoSpan.style.color = '#55bbff';
+    row.appendChild(infoSpan);
   }
-  startBtn.disabled = !canStart;
-  startBtn.style.opacity = canStart ? '1' : '0.5';
+}
+
+function lobbyAddAI(slotIndex) {
+  if (!window._lobbyState || !window._lobbyState.isHost) return;
+  window._lobbyState.aiSlots[slotIndex] = { hero: 'random', difficulty: 'Medium' };
+  lobbyRenderSlots();
+}
+
+function lobbyRemoveAI(slotIndex) {
+  if (!window._lobbyState || !window._lobbyState.isHost) return;
+  delete window._lobbyState.aiSlots[slotIndex];
+  lobbyRenderSlots();
+}
+
+// Collect all slot configs for game start
+function lobbyCollectSlotConfigs() {
+  if (!window._lobbyState) return { players: [], aiConfigs: [] };
+  var ls = window._lobbyState;
+  var aiConfigs = [];
+  var keys = Object.keys(ls.aiSlots || {});
+  for (var i = 0; i < keys.length; i++) {
+    var ai = ls.aiSlots[keys[i]];
+    aiConfigs.push({ hero: ai.hero || 'random', difficulty: ai.difficulty || 'Medium' });
+  }
+  return { players: ls.playerList || [], aiConfigs: aiConfigs };
 }
 
 function launchFFAFromLobby() {
   if (!window._lobbyState) return;
   var ls = window._lobbyState;
+  var cfg = window.gameSetupConfig || {};
+  var slotData = lobbyCollectSlotConfigs();
 
   if (ls.isHost) {
-    var killLimitEl = document.getElementById('lobbyKillLimit');
-    var mapSelectEl = document.getElementById('lobbyMapSelect');
     var settings = {
-      killLimit: killLimitEl ? parseInt(killLimitEl.value, 10) || 10 : 10,
-      mapName: (mapSelectEl && mapSelectEl.value) ? mapSelectEl.value : '__default__'
+      killLimit: cfg.killLimit || 10,
+      mapName: cfg.mapName || '__default__',
+      rounds: cfg.rounds || 3,
+      aiConfigs: slotData.aiConfigs
     };
     if (typeof window.startFFAHost === 'function') {
       window.startFFAHost(ls.roomId, settings);
     }
   } else {
-    // Client joining FFA — will be handled by joinFFAGame (Task 017)
     if (typeof window.joinFFAGame === 'function') {
       window.joinFFAGame(ls.roomId);
     } else {
-      // Fallback: just hide menus and wait for host snapshot
       showOnlyMenu(null);
     }
   }
