@@ -1615,6 +1615,7 @@
     _remoteInterp = {};
 
     window.ffaActive = false;
+    if (typeof window.stopFFAScoreboardPolling === 'function') window.stopFFAScoreboardPolling();
     lastSnapshotMs = 0;
     state = null;
     socket = null;
