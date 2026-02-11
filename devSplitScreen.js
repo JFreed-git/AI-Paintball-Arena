@@ -58,14 +58,19 @@
       if (threeCanvas) threeCanvas.style.display = 'none';
 
       // Build host URL
+      var heroP1 = opts.heroP1 || '';
+      var heroP2 = opts.heroP2 || '';
       var hostUrl = 'http://localhost:3000/?splitView=1&autoHost=' +
         encodeURIComponent(roomId) +
         '&map=' + encodeURIComponent(mapName) +
+        '&hero=' + encodeURIComponent(heroP1) +
         '&rounds=2';
 
-      // Build client URL
+      // Build client URL (include map so client builds same arena)
       var clientUrl = 'http://localhost:3000/?splitView=1&autoJoin=' +
-        encodeURIComponent(roomId);
+        encodeURIComponent(roomId) +
+        '&map=' + encodeURIComponent(mapName) +
+        '&hero=' + encodeURIComponent(heroP2);
 
       // Create left iframe (host) immediately
       var leftIframe = createIframe(hostUrl, false);
