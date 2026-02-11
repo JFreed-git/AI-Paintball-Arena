@@ -418,6 +418,7 @@ io.on('connection', (socket) => {
   relayHostEvent('matchOver');
   relayHostEvent('startHeroSelect');
   relayHostEvent('heroesConfirmed');
+  relayHostEvent('ffaKill');
 
   // heroSelect — bidirectional relay (either player to the other)
   socket.on('heroSelect', function (payload) {

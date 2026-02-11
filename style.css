@@ -361,6 +361,49 @@ body {
     background: rgba(255, 255, 255, 0.06);
 }
 
+/* ── Kill Feed ── */
+#ffaKillFeed {
+    position: absolute;
+    top: 20px;
+    right: 20px;
+    z-index: 180;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    pointer-events: none;
+}
+
+#ffaKillFeed.hidden {
+    display: none;
+}
+
+.kill-feed-entry {
+    background: rgba(0, 0, 0, 0.6);
+    padding: 4px 10px;
+    border-radius: 4px;
+    font-size: 13px;
+    font-weight: bold;
+    white-space: nowrap;
+    opacity: 1;
+    transition: opacity 0.5s ease;
+}
+
+.kill-feed-entry.kf-fading {
+    opacity: 0;
+}
+
+.kf-killer {
+    color: #ff8844;
+}
+
+.kf-arrow {
+    color: #888;
+}
+
+.kf-victim {
+    color: #ff5555;
+}
+
 /* Paintball HUD */
 #healthContainer {
     position: absolute;

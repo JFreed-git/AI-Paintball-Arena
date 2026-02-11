@@ -31,6 +31,18 @@
   var socket = null;
   var state = null;
 
+  // ── Client-side prediction state ──
+  var _predictedPos = null;
+  var _predictedFeetY = GROUND_Y;
+  var _predictedVVel = 0;
+  var _predictedGrounded = true;
+  var _lastSnapshotTime = 0;
+  var _prevLocalReloading = false;
+  var LERP_RATE = 0.15;
+  var SNAP_THRESHOLD_SQ = 25;
+  var TRACER_LIFETIME = 70;
+  var _remoteInterp = {};  // { [id]: { from, to } } for smooth remote interpolation
+
   function mkHudRefs() {
     return {
       healthContainer: document.getElementById('healthContainer'),
@@ -57,6 +69,61 @@
   function showFFAHUD(show) {
     if (!state || !state.hud) return;
     if (state.hud.healthContainer) state.hud.healthContainer.classList.toggle('hidden', !show);
+    var kf = document.getElementById('ffaKillFeed');
+    if (kf) kf.classList.toggle('hidden', !show);
+  }
+
+  // ── Kill Feed ──
+  var KILL_FEED_MAX = 4;
+  var KILL_FEED_FADE_MS = 4000;
+
+  function ensureKillFeedDOM() {
+    var el = document.getElementById('ffaKillFeed');
+    if (!el) {
+      el = document.createElement('div');
+      el.id = 'ffaKillFeed';
+      el.className = 'hidden';
+      var gc = document.getElementById('gameContainer');
+      if (gc) gc.appendChild(el);
+    }
+    return el;
+  }
+
+  function showKillFeedEntry(killerName, victimName) {
+    var feed = ensureKillFeedDOM();
+    if (!feed) return;
+    feed.classList.remove('hidden');
+
+    var row = document.createElement('div');
+    row.className = 'kill-feed-entry';
+    row.innerHTML = '<span class="kf-killer">' + escapeHTML(killerName) + '</span>' +
+      ' <span class="kf-arrow">\u2192</span> ' +
+      '<span class="kf-victim">' + escapeHTML(victimName) + '</span>';
+    feed.appendChild(row);
+
+    // Limit visible entries
+    while (feed.children.length > KILL_FEED_MAX) {
+      feed.removeChild(feed.firstChild);
+    }
+
+    // Auto-fade after delay
+    setTimeout(function () {
+      row.classList.add('kf-fading');
+      setTimeout(function () {
+        if (row.parentNode) row.parentNode.removeChild(row);
+      }, 500);
+    }, KILL_FEED_FADE_MS);
+  }
+
+  function clearKillFeed() {
+    var feed = document.getElementById('ffaKillFeed');
+    if (feed) feed.innerHTML = '';
+  }
+
+  function escapeHTML(str) {
+    var div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
   }
 
   function showRoundBanner(text, ms) {
@@ -164,6 +231,7 @@
 
   function resetAllPlayersForRound() {
     if (!state) return;
+    clearKillFeed();
     var ids = Object.keys(state.players);
     state._spawnIndex = 0;
     for (var i = 0; i < ids.length; i++) {
@@ -199,14 +267,46 @@
       camera.rotation.set(0, 0, 0, 'YXZ');
       updateHUDForLocalPlayer();
     }
+
+    entry.entity._syncMeshPosition();
+
+    // Broadcast immediate snapshot so clients see the respawn
+    if (state.isHost) maybeSendSnapshot(performance.now(), true);
   }
 
-  function recordKill(killerId, victimId) {
+  function getPlayerName(id) {
+    if (!id) return 'Unknown';
+    if (state && state.players[id] && state.players[id].name) return state.players[id].name;
+    if (id === (state && state.localId)) return 'You';
+    return 'Player ' + id.substring(0, 4);
+  }
+
+  function recordKill(killerId, victimId, weapon) {
     if (!state || !state.match || !state.match.scores) return;
     if (!state.match.scores[killerId]) state.match.scores[killerId] = { kills: 0, deaths: 0 };
     if (!state.match.scores[victimId]) state.match.scores[victimId] = { kills: 0, deaths: 0 };
     state.match.scores[killerId].kills++;
     state.match.scores[victimId].deaths++;
+
+    // Broadcast kill event to all clients
+    var killPayload = {
+      killerId: killerId,
+      victimId: victimId,
+      weapon: weapon || 'unknown',
+      killerName: getPlayerName(killerId),
+      victimName: getPlayerName(victimId)
+    };
+    if (socket && state.isHost) {
+      socket.emit('ffaKill', killPayload);
+    }
+
+    // Show local kill feed
+    showKillFeedEntry(killPayload.killerName, killPayload.victimName);
+
+    // Update scoreboard if available
+    if (typeof window.updateFFAScoreboard === 'function') {
+      window.updateFFAScoreboard();
+    }
 
     // Check win condition
     if (state.match.scores[killerId].kills >= state.match.killLimit) {
@@ -335,7 +435,7 @@
           victimEntry.alive = false;
           victimEntry.respawnAt = performance.now() + RESPAWN_DELAY_MS;
           if (typeof playGameSound === 'function') playGameSound('elimination');
-          recordKill(id, victimId);
+          recordKill(id, victimId, 'melee');
         }
       }
     });
@@ -419,7 +519,7 @@
           victimEntry.alive = false;
           victimEntry.respawnAt = performance.now() + RESPAWN_DELAY_MS;
           if (typeof playGameSound === 'function') playGameSound('elimination');
-          recordKill(id, victimId);
+          recordKill(id, victimId, w.modelType || 'gun');
           return false;
         }
       },
@@ -598,9 +698,9 @@
   }
 
   var lastSnapshotMs = 0;
-  function maybeSendSnapshot(nowMs) {
+  function maybeSendSnapshot(nowMs, force) {
     if (!socket) return;
-    if ((nowMs - lastSnapshotMs) < SNAPSHOT_RATE) return;
+    if (!force && (nowMs - lastSnapshotMs) < SNAPSHOT_RATE) return;
     lastSnapshotMs = nowMs;
 
     var playersSnap = {};
@@ -730,6 +830,16 @@
           applyHeroWeapon(entry.entity, payload.heroId);
         }
       }
+    });
+
+    // Kill event (clients receive from host)
+    socket.on('ffaKill', function (payload) {
+      if (!state || !payload) return;
+      showKillFeedEntry(payload.killerName || 'Player', payload.victimName || 'Player');
+      if (typeof window.updateFFAScoreboard === 'function') {
+        window.updateFFAScoreboard();
+      }
+      if (typeof playGameSound === 'function') playGameSound('elimination');
     });
   }
 
@@ -869,6 +979,7 @@
         state.arena.group.parent.remove(state.arena.group);
       }
       showFFAHUD(false);
+      clearKillFeed();
       if (typeof clearAllProjectiles === 'function') clearAllProjectiles();
       setCrosshairDimmed(false);
       setCrosshairSpread(0);
