@@ -86,7 +86,31 @@ function bindUI() {
     });
   }
 
-  // Navigation (Paintball only)
+  // Start Game sub-menu navigation
+  var gotoStartGame = document.getElementById('gotoStartGame');
+  var gotoHostGame = document.getElementById('gotoHostGame');
+  var gotoJoinGame = document.getElementById('gotoJoinGame');
+  var joinRoomSubmit = document.getElementById('joinRoomSubmit');
+  var backFromStartGame = document.getElementById('backFromStartGame');
+
+  if (gotoStartGame) gotoStartGame.addEventListener('click', function () {
+    showOnlyMenu('startGameMenu');
+    // Reset join room section when entering
+    var joinSection = document.getElementById('joinRoomSection');
+    if (joinSection) joinSection.classList.add('hidden');
+  });
+  if (gotoHostGame) gotoHostGame.addEventListener('click', function () {
+    showOnlyMenu('gameSetupMenu');
+  });
+  if (gotoJoinGame) gotoJoinGame.addEventListener('click', function () {
+    var joinSection = document.getElementById('joinRoomSection');
+    if (joinSection) joinSection.classList.toggle('hidden');
+  });
+  if (backFromStartGame) backFromStartGame.addEventListener('click', function () {
+    showOnlyMenu('mainMenu');
+  });
+
+  // Navigation (Paintball only — legacy)
   const gotoPaintball = document.getElementById('gotoPaintball');
   const backFromPaintball = document.getElementById('backFromPaintball');
 

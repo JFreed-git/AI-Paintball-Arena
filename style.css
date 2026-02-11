@@ -167,6 +167,92 @@ body {
     display: none;
 }
 
+.menu-screen h2 {
+    font-size: 26px;
+    margin-bottom: 16px;
+    text-align: center;
+}
+
+.menu-screen .actions {
+    display: flex;
+    gap: 12px;
+    justify-content: center;
+}
+
+.menu-screen .actions button {
+    padding: 10px 20px;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-weight: bold;
+    font-size: 14px;
+    min-width: 120px;
+    transition: background 0.2s ease, transform 0.05s ease;
+    background: #00ff88;
+    color: #000;
+}
+
+.menu-screen .actions button:hover {
+    background: #00d977;
+}
+
+.menu-screen .actions button:active {
+    transform: translateY(1px);
+}
+
+.menu-screen .actions button.secondary {
+    background: transparent;
+    color: #fff;
+    border: 1px solid #555;
+}
+
+.menu-screen .actions button.secondary:hover {
+    background: rgba(255, 255, 255, 0.06);
+}
+
+/* ── Start Game Sub-Menu ── */
+#startGameMenu {
+    width: 420px;
+}
+
+.start-game-actions {
+    margin-bottom: 12px;
+}
+
+#joinRoomSection {
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+#joinRoomSection .field {
+    margin: 10px 0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+#joinRoomSection label {
+    font-size: 14px;
+    color: #ddd;
+}
+
+#joinRoomSection input[type="text"] {
+    flex: 1;
+    padding: 8px 10px;
+    background: #222;
+    color: #fff;
+    border: 1px solid #444;
+    border-radius: 6px;
+    outline: none;
+    font-size: 14px;
+}
+
+#joinRoomSection input[type="text"]:focus {
+    border-color: #00ff88;
+}
+
 .lobby-header {
     text-align: center;
     margin-bottom: 16px;

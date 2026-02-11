@@ -55,31 +55,17 @@
           style: {}
         },
         {
-          uid: 'mm_4', type: 'button', text: 'FFA Match',
-          elementId: 'gotoFFA', variant: 'primary',
-          action: 'showMenu:ffaMenu',
-          x: 12, y: 172, width: 92, height: 40,
+          uid: 'mm_4', type: 'button', text: 'Start Game',
+          elementId: 'gotoStartGame', variant: 'primary',
+          action: 'showMenu:startGameMenu',
+          x: 60, y: 172, width: 140, height: 40,
           style: {}
         },
         {
-          uid: 'mm_5', type: 'button', text: 'Quick 1v1',
-          elementId: 'gotoPaintball', variant: 'primary',
-          action: 'showMenu:paintballMenu',
-          x: 114, y: 172, width: 92, height: 40,
-          style: {}
-        },
-        {
-          uid: 'mm_6', type: 'button', text: 'Play LAN',
-          elementId: 'gotoLAN', variant: 'primary',
-          action: 'showMenu:lanMenu',
-          x: 216, y: 172, width: 92, height: 40,
-          style: {}
-        },
-        {
-          uid: 'mm_7', type: 'button', text: 'Training',
-          elementId: 'gotoTraining', variant: 'primary',
+          uid: 'mm_5', type: 'button', text: 'Training Range',
+          elementId: 'gotoTraining', variant: 'secondary',
           action: 'showMenu:trainingMenu',
-          x: 318, y: 172, width: 92, height: 40,
+          x: 220, y: 172, width: 140, height: 40,
           style: {}
         }
       ]
