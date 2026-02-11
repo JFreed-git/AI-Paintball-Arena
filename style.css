@@ -361,6 +361,58 @@ body {
     background: rgba(255, 255, 255, 0.06);
 }
 
+/* ── Lobby AI Slots ── */
+.player-row.ai-slot {
+    background: rgba(0, 170, 255, 0.06);
+    border-color: rgba(0, 170, 255, 0.15);
+}
+
+.player-row.ai-slot .player-name {
+    color: #55bbff;
+}
+
+.ai-hero-select,
+.ai-diff-select {
+    padding: 2px 4px;
+    background: #1a1a1a;
+    color: #ccc;
+    border: 1px solid #444;
+    border-radius: 4px;
+    font-size: 11px;
+    outline: none;
+}
+
+.ai-remove-btn {
+    background: transparent;
+    border: 1px solid #555;
+    color: #ff5555;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 12px;
+    padding: 1px 6px;
+    line-height: 1;
+}
+
+.ai-remove-btn:hover {
+    background: rgba(255, 85, 85, 0.1);
+    border-color: #ff5555;
+}
+
+.ai-add-btn {
+    padding: 2px 8px;
+    background: rgba(0, 170, 255, 0.15);
+    color: #55bbff;
+    border: 1px solid rgba(0, 170, 255, 0.3);
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 11px;
+    font-weight: bold;
+}
+
+.ai-add-btn:hover {
+    background: rgba(0, 170, 255, 0.25);
+}
+
 /* ── Kill Feed ── */
 #ffaKillFeed {
     position: absolute;

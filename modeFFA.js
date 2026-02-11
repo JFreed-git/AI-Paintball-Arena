@@ -203,6 +203,193 @@
     return state.spawnsFFA[index % state.spawnsFFA.length].clone();
   }
 
+  // ── AI Bot Management ──
+  var _aiSlots = []; // { heroId, difficulty, name } — lobby AI slot definitions
+
+  function addAISlot(heroId, difficulty) {
+    var name = '[AI] Bot ' + (_aiSlots.length + 1);
+    _aiSlots.push({ heroId: heroId || 'marksman', difficulty: difficulty || 'Medium', name: name });
+    return _aiSlots.length - 1;
+  }
+
+  function removeAISlot(index) {
+    if (index >= 0 && index < _aiSlots.length) {
+      _aiSlots.splice(index, 1);
+    }
+  }
+
+  function clearAISlots() {
+    _aiSlots = [];
+  }
+
+  function spawnAIPlayers() {
+    if (!state || !state.arena) return;
+    for (var i = 0; i < _aiSlots.length; i++) {
+      var slot = _aiSlots[i];
+      var aiId = 'ai-' + i;
+      var spawnPos = getSpawnPosition(state._spawnIndex++);
+
+      var ai = new AIOpponent({
+        difficulty: slot.difficulty,
+        arena: state.arena,
+        spawn: { x: spawnPos.x, z: spawnPos.z },
+        color: randomPlayerColor()
+      });
+
+      // Apply selected hero
+      if (typeof window.applyHeroToPlayer === 'function') {
+        window.applyHeroToPlayer(ai.player, slot.heroId);
+      }
+
+      state.players[aiId] = {
+        entity: ai.player,
+        heroId: slot.heroId,
+        alive: true,
+        isAI: true,
+        aiInstance: ai,
+        name: slot.name,
+        respawnAt: 0
+      };
+      state.match.scores[aiId] = { kills: 0, deaths: 0 };
+      state._meleeSwingState[aiId] = { swinging: false, swingEnd: 0 };
+    }
+  }
+
+  function buildAITargetList(excludeId) {
+    var targets = [];
+    if (!state) return targets;
+    var ids = Object.keys(state.players);
+    for (var i = 0; i < ids.length; i++) {
+      if (ids[i] === excludeId) continue;
+      var entry = state.players[ids[i]];
+      if (!entry || !entry.entity || !entry.alive) continue;
+      var pos = (ids[i] === state.localId) ? camera.position.clone() : entry.entity.position.clone();
+      targets.push({
+        position: pos,
+        entity: entry.entity,
+        id: ids[i],
+        alive: entry.alive
+      });
+    }
+    return targets;
+  }
+
+  function tickAIPlayers(dt) {
+    if (!state) return;
+    var ids = Object.keys(state.players);
+    for (var i = 0; i < ids.length; i++) {
+      var id = ids[i];
+      var entry = state.players[id];
+      if (!entry || !entry.isAI || !entry.aiInstance || !entry.alive) continue;
+
+      var ai = entry.aiInstance;
+      // Set multi-targets (all other players)
+      ai.setTargets(buildAITargetList(id));
+
+      // Build context for the AI (fallback playerPos for single-target compat)
+      var fallbackPos = camera.position.clone();
+      var ctx = {
+        playerPos: fallbackPos,
+        playerSegments: [],
+        playerEntity: null,
+        onPlayerHit: function (aiId) {
+          return function (damage) {
+            // AI damage is handled via sharedFireWeapon/sharedMeleeAttack callbacks
+            // which already call takeDamage on the target entity
+          };
+        }(id)
+      };
+
+      ai.update(dt, ctx);
+
+      // Sync AI player state back to the entry
+      entry.entity._syncMeshPosition();
+    }
+  }
+
+  // Expose for lobby UI
+  window.ffaAddAISlot = addAISlot;
+  window.ffaRemoveAISlot = removeAISlot;
+  window.ffaClearAISlots = clearAISlots;
+  window.ffaGetAISlots = function () { return _aiSlots.slice(); };
+
+  // Update the lobby player list DOM to show AI slots with controls
+  window.ffaRenderAIInLobby = function (playerListEl, humanCount) {
+    if (!playerListEl) return;
+    var maxPlayers = 8;
+    var maxEl = document.getElementById('lobbyMaxPlayers');
+    if (maxEl) maxPlayers = parseInt(maxEl.value, 10) || 8;
+
+    var totalSlots = maxPlayers;
+    var filledHuman = humanCount || 0;
+
+    // Clear existing rows
+    playerListEl.innerHTML = '';
+
+    // Human player rows are rendered by the lobby JS logic (Task 019)
+    // Here we just handle AI slots and empty slots after humans
+
+    // AI slot rows
+    for (var i = 0; i < _aiSlots.length; i++) {
+      (function (idx) {
+        var slot = _aiSlots[idx];
+        var row = document.createElement('div');
+        row.className = 'player-row ai-slot';
+        row.innerHTML =
+          '<span class="player-name">' + escapeHTML(slot.name) + '</span>' +
+          '<select class="ai-hero-select">' + buildHeroOptions(slot.heroId) + '</select>' +
+          '<select class="ai-diff-select">' +
+          '<option value="Easy"' + (slot.difficulty === 'Easy' ? ' selected' : '') + '>Easy</option>' +
+          '<option value="Medium"' + (slot.difficulty === 'Medium' ? ' selected' : '') + '>Medium</option>' +
+          '<option value="Hard"' + (slot.difficulty === 'Hard' ? ' selected' : '') + '>Hard</option>' +
+          '</select>' +
+          '<span class="player-ready is-ready">Ready</span>' +
+          '<button class="ai-remove-btn">\u2715</button>';
+
+        var heroSel = row.querySelector('.ai-hero-select');
+        var diffSel = row.querySelector('.ai-diff-select');
+        var removeBtn = row.querySelector('.ai-remove-btn');
+
+        heroSel.addEventListener('change', function () { _aiSlots[idx].heroId = heroSel.value; });
+        diffSel.addEventListener('change', function () { _aiSlots[idx].difficulty = diffSel.value; });
+        removeBtn.addEventListener('click', function () {
+          removeAISlot(idx);
+          if (typeof window.ffaRefreshLobbyList === 'function') window.ffaRefreshLobbyList();
+        });
+
+        playerListEl.appendChild(row);
+      })(i);
+    }
+
+    // Empty slots with "Add AI" button
+    var remaining = totalSlots - filledHuman - _aiSlots.length;
+    for (var j = 0; j < remaining; j++) {
+      var emptyRow = document.createElement('div');
+      emptyRow.className = 'player-row empty-slot';
+      emptyRow.innerHTML = '<span class="player-name">Open Slot</span><button class="ai-add-btn host-only">Add AI</button>';
+      var addBtn = emptyRow.querySelector('.ai-add-btn');
+      addBtn.addEventListener('click', function () {
+        addAISlot('marksman', 'Medium');
+        if (typeof window.ffaRefreshLobbyList === 'function') window.ffaRefreshLobbyList();
+      });
+      playerListEl.appendChild(emptyRow);
+    }
+  };
+
+  function buildHeroOptions(selectedId) {
+    var heroes = (typeof window.HEROES !== 'undefined') ? window.HEROES : [];
+    var html = '';
+    for (var i = 0; i < heroes.length; i++) {
+      var h = heroes[i];
+      var sel = (h.id === selectedId) ? ' selected' : '';
+      html += '<option value="' + h.id + '"' + sel + '>' + h.name + '</option>';
+    }
+    if (heroes.length === 0) {
+      html = '<option value="marksman" selected>Marksman</option>';
+    }
+    return html;
+  }
+
   function newState(settings) {
     return {
       players: {},        // { [socketId]: { entity: Player, heroId, alive, input: {}, isAI: false, respawnAt: 0 } }
@@ -261,6 +448,13 @@
     entry.entity.resetForRound(spawnPos);
     entry.alive = true;
     entry.respawnAt = 0;
+
+    // Reset AI state on respawn
+    if (entry.isAI && entry.aiInstance) {
+      entry.aiInstance.alive = true;
+      entry.aiInstance.health = entry.aiInstance.maxHealth;
+      entry.aiInstance._enterState('SPAWN_RUSH');
+    }
 
     if (id === state.localId) {
       entry.entity.syncCameraFromPlayer();
@@ -575,6 +769,9 @@
       }
       if (!entry.alive) continue;
 
+      // AI players are updated via tickAIPlayers() — skip regular input/physics
+      if (entry.isAI) continue;
+
       // Apply local or remote input
       if (id === state.localId) {
         var localInput = window.getInputState ? window.getInputState() : {};
@@ -667,11 +864,16 @@
       }
     }
 
-    // Phase 2: Combat (melee + shooting) after all physics
+    // Phase 1b: AI players — update AI state machine, physics, and shooting
+    if (state.match.roundActive) {
+      tickAIPlayers(dt);
+    }
+
+    // Phase 2: Combat (melee + shooting) for human players after all physics
     for (var i = 0; i < ids.length; i++) {
       var id = ids[i];
       var entry = state.players[id];
-      if (!entry || !entry.entity || !entry.alive) continue;
+      if (!entry || !entry.entity || !entry.alive || entry.isAI) continue;
       var ms = state._meleeSwingState[id];
       var canShoot = handleMelee(id, now);
       if (canShoot && (!ms || !ms.swinging)) handleShooting(id, now);
@@ -917,6 +1119,9 @@
     };
     state.match.scores[state.localId] = { kills: 0, deaths: 0 };
     state._meleeSwingState[state.localId] = { swinging: false, swingEnd: 0 };
+
+    // Spawn AI bots from lobby slots
+    spawnAIPlayers();
 
     // Setup HUD
     setHUDVisible(true);

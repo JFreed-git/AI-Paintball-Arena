@@ -167,6 +167,38 @@ class AIOpponent {
     this._jumpCooldown = 0;
   }
 
+  // --- Multi-target support for FFA ---
+  // targetList: array of { position: Vector3, entity: Player, id: string, alive: boolean }
+  setTargets(targetList) {
+    this._multiTargets = targetList || [];
+  }
+
+  // Pick the nearest visible alive target from the multi-target list
+  _pickBestTarget() {
+    if (!this._multiTargets || this._multiTargets.length === 0) return null;
+    var solids = this.arena ? this.arena.solids : [];
+    var eye = this.eyePos;
+    var bestTarget = null;
+    var bestDist = Infinity;
+
+    for (var i = 0; i < this._multiTargets.length; i++) {
+      var t = this._multiTargets[i];
+      if (!t || !t.position) continue;
+      if (t.alive === false) continue;
+      var d = this.position.distanceTo(t.position);
+      if (d < bestDist) {
+        // Prefer nearest, with LOS bonus
+        var hasLOS = !hasBlockingBetween(eye, t.position, solids);
+        var effectiveDist = hasLOS ? d : d + 50; // penalize no-LOS targets
+        if (effectiveDist < bestDist) {
+          bestDist = effectiveDist;
+          bestTarget = t;
+        }
+      }
+    }
+    return bestTarget;
+  }
+
   // --- Delegation getters for backward compatibility ---
   get mesh() { return this.player._meshGroup; }
   get position() { return this.player.position; }
@@ -679,8 +711,21 @@ class AIOpponent {
     // Increment state timer
     this._stateTimer += dt;
 
+    // Multi-target support: pick best target if targets were set
+    var activeCtx = ctx;
+    if (this._multiTargets && this._multiTargets.length > 0) {
+      var best = this._pickBestTarget();
+      if (best) {
+        activeCtx = Object.assign({}, ctx, {
+          playerPos: best.position,
+          playerEntity: best.entity,
+          playerSegments: best.entity ? best.entity.getHitSegments() : [],
+        });
+      }
+    }
+
     // Compute common context
-    var playerPos = ctx.playerPos;
+    var playerPos = activeCtx.playerPos;
     var solids = this.arena.solids;
     var toPlayer = playerPos.clone().sub(this.position);
     toPlayer.y = 0;
@@ -780,7 +825,7 @@ class AIOpponent {
         wantJump = this._shouldJump(dt);
 
         // Shoot
-        this._tryShoot(ctx, hasLOS);
+        this._tryShoot(activeCtx, hasLOS);
 
         if (this.weapon.reloading) {
           this._lastBehavior = 'RELOADING';
@@ -841,7 +886,7 @@ class AIOpponent {
         }
 
         // Still shoot while seeking cover
-        this._tryShoot(ctx, hasLOS);
+        this._tryShoot(activeCtx, hasLOS);
         break;
 
       case 'HOLD_COVER':
@@ -872,7 +917,7 @@ class AIOpponent {
           case 'shooting':
             this._lastBehavior = 'PEEKING';
             moveDir.set(0, 0, 0);
-            this._tryShoot(ctx, hasLOS);
+            this._tryShoot(activeCtx, hasLOS);
             if (this._coverPeekTimer <= 0) {
               this._coverPeekState = 'peeking_back';
               this._coverPeekTimer = 0.3 + Math.random() * 0.2;
@@ -937,7 +982,7 @@ class AIOpponent {
         }
 
         // Shoot if has LOS while flanking
-        this._tryShoot(ctx, hasLOS);
+        this._tryShoot(activeCtx, hasLOS);
         break;
 
       case 'STUCK_RECOVER':
