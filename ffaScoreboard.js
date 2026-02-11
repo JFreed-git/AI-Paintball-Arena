@@ -79,11 +79,8 @@
     }
   }
 
-  function escapeHTML(str) {
-    var div = document.createElement('div');
-    div.textContent = str || '';
-    return div.innerHTML;
-  }
+  // escapeHTML is defined on window by modeFFA.js (loaded before this file)
+  var escapeHTML = window.escapeHTML;
 
   // ── Public: update in-game scoreboard ──
 
@@ -153,18 +150,19 @@
     if (_updateTimer) { clearInterval(_updateTimer); _updateTimer = 0; }
   }
 
-  // Watch for FFA mode activation to start periodic updates
-  var _wasActive = false;
-  function checkFFAActive() {
-    if (window.ffaActive && !_wasActive) {
-      _wasActive = true;
-      startPeriodicUpdate();
-    } else if (!window.ffaActive && _wasActive) {
-      _wasActive = false;
-      stopPeriodicUpdate();
-    }
+  // Start/stop scoreboard polling when FFA mode activates/deactivates
+  var _pollTimer = 0;
+
+  window.startFFAScoreboardPolling = function () {
+    stopFFAScoreboardPolling();
+    startPeriodicUpdate();
+  };
+
+  function stopFFAScoreboardPolling() {
+    if (_pollTimer) { clearInterval(_pollTimer); _pollTimer = 0; }
+    stopPeriodicUpdate();
   }
-  setInterval(checkFFAActive, 500);
+  window.stopFFAScoreboardPolling = stopFFAScoreboardPolling;
 
   // ── Post-match button wiring ──
 

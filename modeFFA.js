@@ -25,11 +25,13 @@
   var DEFAULT_HEALTH = 100;
   var MAX_DT = 0.05;            // max delta-time clamp (seconds)
   var RESPAWN_DELAY_MS = 3000;  // time before respawning after death
-  var ROUND_BANNER_MS = 1200;
-  var COUNTDOWN_SECONDS = 3;
+  var ROUND_BANNER_MS = GAME_CONFIG.ROUND_BANNER_MS;
+  var COUNTDOWN_SECONDS = GAME_CONFIG.COUNTDOWN_SECONDS;
   var SHOT_DELAY_AFTER_COUNTDOWN = GAME_CONFIG.SHOT_DELAY_AFTER_COUNTDOWN;
 
   var socket = null;
+  var _handlersAttached = false;
+  var _usingLobbySocket = false;
   var state = null;
 
   // ── Client-side prediction state ──
@@ -126,6 +128,7 @@
     div.textContent = str;
     return div.innerHTML;
   }
+  window.escapeHTML = escapeHTML;
 
   function showRoundBanner(text, ms) {
     if (!state) return;
@@ -216,6 +219,10 @@
   function removeAISlot(index) {
     if (index >= 0 && index < _aiSlots.length) {
       _aiSlots.splice(index, 1);
+      // Re-number remaining bot names
+      for (var i = 0; i < _aiSlots.length; i++) {
+        _aiSlots[i].name = '[AI] Bot ' + (i + 1);
+      }
     }
   }
 
@@ -1178,13 +1185,29 @@
 
   // ── Public API ──
 
-  window.startFFAHost = function (roomId, settings) {
+  window.startFFAHost = function (roomId, settings, existingSocket) {
     if (!roomId || typeof roomId !== 'string') { alert('Please enter a Room ID'); return; }
     if (window.paintballActive) { try { stopPaintballInternal(); } catch (e) {} }
     if (window.multiplayerActive) { try { stopMultiplayerInternal(); } catch (e) {} }
     if (window.ffaActive) { try { stopFFAInternal(); } catch (e) {} }
 
     var mapName = settings && settings.mapName;
+
+    if (existingSocket) {
+      // Reuse lobby socket — room already created on server
+      socket = existingSocket;
+      _usingLobbySocket = true;
+      attachSocketHandlers();
+      function doStartLobby(mapData) {
+        startFFASession(settings || {}, mapData);
+      }
+      if (mapName && mapName !== '__default__' && typeof fetchMapData === 'function') {
+        fetchMapData(mapName).then(doStartLobby).catch(function () { doStartLobby(null); });
+      } else {
+        doStartLobby(null);
+      }
+      return;
+    }
 
     function doHost(mapData) {
       ensureSocket();
@@ -1201,13 +1224,9 @@
     }
   };
 
-  function ensureSocket() {
-    if (socket) return;
-    if (typeof io !== 'function') {
-      alert('Socket.IO client not found. Make sure the server is running.');
-      return;
-    }
-    socket = io();
+  function attachSocketHandlers() {
+    if (_handlersAttached || !socket) return;
+    _handlersAttached = true;
 
     socket.on('roomClosed', function () {
       alert('Host left. Room closed.');
@@ -1330,6 +1349,16 @@
     });
   }
 
+  function ensureSocket() {
+    if (socket) return;
+    if (typeof io !== 'function') {
+      alert('Socket.IO client not found. Make sure the server is running.');
+      return;
+    }
+    socket = io();
+    attachSocketHandlers();
+  }
+
   function addRemotePlayer(clientId) {
     if (!state || state.players[clientId]) return;
     var spawnPos = getSpawnPosition(state._spawnIndex++);
@@ -1427,92 +1456,105 @@
     showRoundBanner('Waiting for players...', 999999);
 
     window.ffaActive = true;
+    if (typeof window.startFFAScoreboardPolling === 'function') window.startFFAScoreboardPolling();
     state.lastTs = 0;
     lastSnapshotMs = 0;
     state.loopHandle = requestAnimationFrame(tick);
   }
 
-  window.joinFFAGame = function (roomId) {
+  function initClientSession(clientSettings) {
+    state = newState(clientSettings || {});
+    state.isHost = false;
+    state.localId = socket.id;
+
+    var mapName = clientSettings && clientSettings.mapName;
+
+    function setupClient(mapData) {
+      state.arena = (mapData && typeof buildArenaFromMap === 'function')
+        ? buildArenaFromMap(mapData)
+        : (typeof buildArenaFromMap === 'function' ? buildArenaFromMap(getDefaultMapData()) : buildPaintballArenaSymmetric());
+
+      state.spawnsFFA = state.arena.spawnsFFA || [];
+      if (state.spawnsFFA.length === 0 && state.arena.spawns) {
+        state.spawnsFFA = [state.arena.spawns.A.clone(), state.arena.spawns.B.clone()];
+      }
+
+      // Create local player
+      _colorIdx = 0;
+      var spawnPos = getSpawnPosition(state._spawnIndex++);
+      var localPlayer = createPlayerInstance({
+        position: spawnPos,
+        color: randomPlayerColor(),
+        cameraAttached: true
+      });
+      state.players[state.localId] = {
+        entity: localPlayer,
+        heroId: 'marksman',
+        alive: true,
+        isAI: false,
+        respawnAt: 0
+      };
+      state.match.scores[state.localId] = { kills: 0, deaths: 0 };
+
+      // Reset prediction state
+      _predictedPos = localPlayer.position.clone();
+      _predictedFeetY = localPlayer.feetY;
+      _predictedVVel = 0;
+      _predictedGrounded = true;
+      _lastSnapshotTime = 0;
+      _prevLocalReloading = false;
+      _remoteInterp = {};
+
+      // Setup HUD
+      setHUDVisible(true);
+      showOnlyMenu(null);
+      showFFAHUD(true);
+      setCrosshairDimmed(false);
+      setCrosshairSpread(0);
+      updateHUDForLocalPlayer();
+
+      if (renderer && renderer.domElement && renderer.domElement.requestPointerLock) {
+        renderer.domElement.requestPointerLock();
+      }
+
+      localPlayer.syncCameraFromPlayer();
+      camera.rotation.set(0, 0, 0, 'YXZ');
+
+      showRoundBanner('Joined! Waiting for host...', 999999);
+
+      window.ffaActive = true;
+      if (typeof window.startFFAScoreboardPolling === 'function') window.startFFAScoreboardPolling();
+      state.lastTs = 0;
+      state.loopHandle = requestAnimationFrame(tick);
+    }
+
+    if (mapName && mapName !== '__default__' && typeof fetchMapData === 'function') {
+      fetchMapData(mapName).then(setupClient).catch(function () { setupClient(null); });
+    } else {
+      setupClient(null);
+    }
+  }
+
+  window.joinFFAGame = function (roomId, existingSocket, lobbySettings) {
     if (!roomId || typeof roomId !== 'string') { alert('Please enter a Room ID'); return; }
     if (window.paintballActive) { try { stopPaintballInternal(); } catch (e) {} }
     if (window.multiplayerActive) { try { stopMultiplayerInternal(); } catch (e) {} }
     if (window.ffaActive) { try { stopFFAInternal(); } catch (e) {} }
 
+    if (existingSocket) {
+      // Reuse lobby socket — already joined room on server
+      socket = existingSocket;
+      _usingLobbySocket = true;
+      attachSocketHandlers();
+      initClientSession(lobbySettings || {});
+      return;
+    }
+
     ensureSocket();
 
     socket.emit('joinRoom', roomId, function (res) {
       if (!res || !res.ok) { alert(res && res.error ? res.error : 'Failed to join room'); return; }
-
-      state = newState(res.settings || {});
-      state.isHost = false;
-      state.localId = socket.id;
-
-      // Build arena (same map as host)
-      var mapName = res.settings && res.settings.mapName;
-
-      function setupClient(mapData) {
-        state.arena = (mapData && typeof buildArenaFromMap === 'function')
-          ? buildArenaFromMap(mapData)
-          : (typeof buildArenaFromMap === 'function' ? buildArenaFromMap(getDefaultMapData()) : buildPaintballArenaSymmetric());
-
-        state.spawnsFFA = state.arena.spawnsFFA || [];
-        if (state.spawnsFFA.length === 0 && state.arena.spawns) {
-          state.spawnsFFA = [state.arena.spawns.A.clone(), state.arena.spawns.B.clone()];
-        }
-
-        // Create local player
-        _colorIdx = 0;
-        var spawnPos = getSpawnPosition(state._spawnIndex++);
-        var localPlayer = createPlayerInstance({
-          position: spawnPos,
-          color: randomPlayerColor(),
-          cameraAttached: true
-        });
-        state.players[state.localId] = {
-          entity: localPlayer,
-          heroId: 'marksman',
-          alive: true,
-          isAI: false,
-          respawnAt: 0
-        };
-        state.match.scores[state.localId] = { kills: 0, deaths: 0 };
-
-        // Reset prediction state
-        _predictedPos = localPlayer.position.clone();
-        _predictedFeetY = localPlayer.feetY;
-        _predictedVVel = 0;
-        _predictedGrounded = true;
-        _lastSnapshotTime = 0;
-        _prevLocalReloading = false;
-        _remoteInterp = {};
-
-        // Setup HUD
-        setHUDVisible(true);
-        showOnlyMenu(null);
-        showFFAHUD(true);
-        setCrosshairDimmed(false);
-        setCrosshairSpread(0);
-        updateHUDForLocalPlayer();
-
-        if (renderer && renderer.domElement && renderer.domElement.requestPointerLock) {
-          renderer.domElement.requestPointerLock();
-        }
-
-        localPlayer.syncCameraFromPlayer();
-        camera.rotation.set(0, 0, 0, 'YXZ');
-
-        showRoundBanner('Joined! Waiting for host...', 999999);
-
-        window.ffaActive = true;
-        state.lastTs = 0;
-        state.loopHandle = requestAnimationFrame(tick);
-      }
-
-      if (mapName && mapName !== '__default__' && typeof fetchMapData === 'function') {
-        fetchMapData(mapName).then(setupClient).catch(function () { setupClient(null); });
-      } else {
-        setupClient(null);
-      }
+      initClientSession(res.settings || {});
     });
   };
 
@@ -1540,6 +1582,10 @@
       if (state.countdownTimerRef && state.countdownTimerRef.id) {
         clearInterval(state.countdownTimerRef.id);
         state.countdownTimerRef.id = 0;
+      }
+      if (state.heroSelectTimerRef && state.heroSelectTimerRef.id) {
+        clearTimeout(state.heroSelectTimerRef.id);
+        state.heroSelectTimerRef.id = 0;
       }
       // Destroy all player instances
       var ids = Object.keys(state.players);
@@ -1571,5 +1617,8 @@
     window.ffaActive = false;
     lastSnapshotMs = 0;
     state = null;
+    socket = null;
+    _handlersAttached = false;
+    _usingLobbySocket = false;
   };
 })();
