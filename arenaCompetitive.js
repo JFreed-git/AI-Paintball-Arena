@@ -9,7 +9,7 @@
  * spawn side has a layout advantage. Spawns are at opposite ends of the Z axis.
  *
  * EXPORTS (bare global):
- *   buildPaintballArenaSymmetric() → { group, colliders, solids, waypoints, spawns: { A, B } }
+ *   buildPaintballArenaSymmetric() → { group, colliders, solids, waypoints, spawns: { A, B }, spawnsFFA: [Vector3] }
  *
  * DEPENDENCIES: Three.js, game.js (scene global), physics.js (GROUND_Y),
  *   arenaBuilder.js (arenaAddSolidBox, arenaAddFloor, arenaAddPerimeterWalls, arenaAddTrees)
@@ -134,6 +134,22 @@ function buildPaintballArenaSymmetric() {
   var spawnA = new THREE.Vector3(0, 0, -spawnZ);
   var spawnB = new THREE.Vector3(0, 0,  spawnZ);
 
+  // FFA spawn points — 6 positions distributed around the map:
+  //   (1) back-left   (-22, -38)    Zone D, left side
+  //   (2) back-right  ( 22, -38)    Zone D, right side
+  //   (3) front-left  (-22,  38)    Zone D (mirrored), left side
+  //   (4) front-right ( 22,  38)    Zone D (mirrored), right side
+  //   (5) mid-left    (-26,   0)    Center map, left edge lane
+  //   (6) mid-right   ( 26,   0)    Center map, right edge lane
+  var spawnsFFA = [
+    new THREE.Vector3(-22, 0, -38),
+    new THREE.Vector3( 22, 0, -38),
+    new THREE.Vector3(-22, 0,  38),
+    new THREE.Vector3( 22, 0,  38),
+    new THREE.Vector3(-26, 0,   0),
+    new THREE.Vector3( 26, 0,   0)
+  ];
+
   // Gold spawn rings on floor (use RingGeometry rotated flat)
   function addGoldSpawnRing(pos) {
     var ring = new THREE.RingGeometry(0.8, 1.2, 64);
@@ -146,6 +162,7 @@ function buildPaintballArenaSymmetric() {
 
   addGoldSpawnRing(spawnA);
   addGoldSpawnRing(spawnB);
+  spawnsFFA.forEach(addGoldSpawnRing);
 
   // Waypoints (5x5 grid scaled for smaller arena)
   for (var x of [-20, -10, 0, 10, 20]) {
@@ -180,6 +197,7 @@ function buildPaintballArenaSymmetric() {
     colliders: colliders,
     solids: solids,
     waypoints: waypoints,
-    spawns: { A: spawnA, B: spawnB }
+    spawns: { A: spawnA, B: spawnB },
+    spawnsFFA: spawnsFFA
   };
 }
