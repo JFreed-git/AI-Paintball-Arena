@@ -293,6 +293,7 @@ function getPanelElementId(panelId) {
     heroEditor: 'panelHeroEditor',
     weaponModelBuilder: 'panelWeaponModelBuilder',
     menuBuilder: 'panelMenuBuilder',
+    audioManager: 'panelAudioManager',
     mapEditor: 'panelMapEditor',
     quickTest: 'panelQuickTest'
   };
@@ -338,6 +339,10 @@ function getPanelElementId(panelId) {
     var mbToolbar = document.getElementById('mbViewportToolbar');
     if (mbToolbar) mbToolbar.classList.add('hidden');
 
+    // Hide audio manager viewport
+    var amViewport = document.getElementById('amViewportContainer');
+    if (amViewport) amViewport.classList.add('hidden');
+
     if (sidebar) sidebar.classList.remove('expanded');
     _prevExpandedPanel = null;
   }
@@ -382,6 +387,12 @@ function getPanelElementId(panelId) {
           }
         }, 50);
       }
+    } else if (panelId === 'audioManager') {
+      var amViewport = document.getElementById('amViewportContainer');
+      if (amViewport) {
+        amViewport.classList.remove('hidden');
+        amViewport.classList.add('viewport-mode');
+      }
     }
 
     _prevExpandedPanel = panelId;
@@ -412,7 +423,7 @@ function getPanelElementId(panelId) {
     });
 
     // Expand layout for editor panels
-    if (panelId === 'heroEditor' || panelId === 'weaponModelBuilder' || panelId === 'menuBuilder') {
+    if (panelId === 'heroEditor' || panelId === 'weaponModelBuilder' || panelId === 'menuBuilder' || panelId === 'audioManager') {
       expandEditorLayout(panelId);
     }
 
@@ -471,6 +482,11 @@ function getPanelElementId(panelId) {
       if (heToolbar) heToolbar.classList.add('hidden');
       if (mbToolbar) mbToolbar.classList.add('hidden');
       if (rightExpandTab) rightExpandTab.classList.add('hidden');
+    }
+
+    // Load audio manager sounds when switching to that panel
+    if (panelId === 'audioManager') {
+      if (typeof window._initAudioManager === 'function') window._initAudioManager();
     }
 
     if (panelId === 'splitScreen' || panelId === 'quickTest' || panelId === 'heroEditor') {

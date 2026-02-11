@@ -7,7 +7,8 @@
     maps:            { list: 'listMaps',         read: 'readMap',          write: 'writeMap',          del: 'deleteMap' },
     heroes:          { list: 'listHeroes',        read: 'readHero',         write: 'writeHero',         del: 'deleteHero' },
     'weapon-models': { list: 'listWeaponModels',  read: 'readWeaponModel',  write: 'writeWeaponModel',  del: 'deleteWeaponModel' },
-    menus:           { list: 'listMenus',         read: 'readMenu',          write: 'writeMenu',          del: 'deleteMenu' }
+    menus:           { list: 'listMenus',         read: 'readMenu',          write: 'writeMenu',          del: 'deleteMenu' },
+    sounds:          { list: 'listSounds',        read: 'readSound',         write: 'writeSound',         del: 'deleteSound' }
   };
 
   function makeResponse(body, status) {

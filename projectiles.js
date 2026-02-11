@@ -517,6 +517,9 @@
         if (weapon.ammo <= 0) projMagEmpty = true;
       }
 
+      // Fire sound
+      if (typeof playGameSound === 'function') playGameSound('weapon_fire', { weaponModelType: weapon.modelType });
+
       return { pelletsFired: pelletCount, hits: 0, results: projResults, magazineEmpty: projMagEmpty };
     }
 
@@ -612,6 +615,9 @@
       weapon.lastShotTime = performance.now();
       if (weapon.ammo <= 0) magazineEmpty = true;
     }
+
+    // Fire sound
+    if (typeof playGameSound === 'function') playGameSound('weapon_fire', { weaponModelType: weapon.modelType });
 
     return { pelletsFired: stopped ? results.length : pelletCount, hits: hits, results: results, magazineEmpty: magazineEmpty };
   }
@@ -831,6 +837,9 @@
     if (closestTarget && onHit) {
       onHit(closestTarget, closestPoint, closestDist, totalDamage, dmgMult);
     }
+
+    // Melee hit sound
+    if (closestTarget && typeof playGameSound === 'function') playGameSound('melee_hit');
 
     weapon.lastMeleeTime = performance.now();
 

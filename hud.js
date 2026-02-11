@@ -44,6 +44,7 @@
     if (weapon.reloading && now >= weapon.reloadEnd) {
       weapon.reloading = false;
       weapon.ammo = weapon.magSize;
+      if (typeof playGameSound === 'function') playGameSound('reload_end');
       return true;
     }
     return false;
@@ -57,6 +58,7 @@
     if (weapon.reloading || weapon.ammo >= weapon.magSize) return false;
     weapon.reloading = true;
     weapon.reloadEnd = now + (weapon.reloadTimeSec || 2.5) * 1000;
+    if (typeof playGameSound === 'function') playGameSound('reload_start');
     return true;
   };
 
@@ -107,6 +109,28 @@
   window.sharedUpdateAmmoDisplay = function (ammoEl, current, magSize) {
     if (!ammoEl) return;
     ammoEl.textContent = current + '/' + magSize;
+  };
+
+  /**
+   * Update melee cooldown circular timer.
+   * Shows remaining cooldown as a filling arc; hidden when no weapon has melee.
+   */
+  var MELEE_CD_CIRCUMFERENCE = 2 * Math.PI * 11; // r=11 matches SVG
+  window.sharedUpdateMeleeCooldown = function (containerEl, weapon, now) {
+    if (!containerEl) return;
+    if (!weapon || !weapon.meleeCooldownMs) {
+      containerEl.classList.add('hidden');
+      return;
+    }
+    containerEl.classList.remove('hidden');
+    var elapsed = now - (weapon.lastMeleeTime || 0);
+    var progress = Math.min(1, elapsed / weapon.meleeCooldownMs);
+    var offset = MELEE_CD_CIRCUMFERENCE * (1 - progress);
+    var fillCircle = containerEl.querySelector('.melee-cd-fill');
+    if (fillCircle) {
+      fillCircle.style.strokeDashoffset = offset;
+    }
+    containerEl.classList.toggle('on-cooldown', progress < 1);
   };
 
 })();

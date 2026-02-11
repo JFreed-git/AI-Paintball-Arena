@@ -1,0 +1,16 @@
+{
+  "id": "jump",
+  "name": "Jump",
+  "synthesis": {
+    "type": "sweep",
+    "duration": 0.12,
+    "volume": 0.15,
+    "attack": 0.005,
+    "decay": 0.115,
+    "waveform": "sine",
+    "startFreq": 250,
+    "endFreq": 500,
+    "noiseAmount": 0.3
+  },
+  "bindings": []
+}

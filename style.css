@@ -205,6 +205,51 @@ body {
     text-shadow: 0 0 6px rgba(255,204,0,0.5);
 }
 
+/* Melee cooldown circular timer */
+#meleeCooldown {
+    position: relative;
+    width: 26px;
+    height: 26px;
+    flex-shrink: 0;
+}
+
+#meleeCooldown svg {
+    transform: rotate(-90deg);
+    display: block;
+}
+
+#meleeCooldown .melee-cd-bg {
+    fill: none;
+    stroke: #333;
+    stroke-width: 2.5;
+}
+
+#meleeCooldown .melee-cd-fill {
+    fill: none;
+    stroke: #00ff88;
+    stroke-width: 2.5;
+    stroke-dasharray: 69.115;
+    stroke-dashoffset: 0;
+    stroke-linecap: round;
+    transition: stroke 0.15s ease;
+}
+
+#meleeCooldown.on-cooldown .melee-cd-fill {
+    stroke: #ffcc00;
+}
+
+#meleeCooldown .melee-cd-label {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 10px;
+    font-weight: bold;
+    color: #aaa;
+    font-family: Consolas, 'Courier New', monospace;
+    line-height: 1;
+}
+
 /* Enhanced crosshair for paintball */
 #crosshair {
     position: absolute;

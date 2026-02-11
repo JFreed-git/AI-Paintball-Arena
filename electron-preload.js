@@ -120,7 +120,11 @@ function writeJSON(subdir, name, data) {
   if (!clean) return { error: 'Invalid name', status: 400 };
   var dir = path.join(BASE, subdir);
   ensureDir(dir);
-  fs.writeFileSync(path.join(dir, clean + '.json'), JSON.stringify(data, null, 2), 'utf8');
+  try {
+    fs.writeFileSync(path.join(dir, clean + '.json'), JSON.stringify(data, null, 2), 'utf8');
+  } catch (err) {
+    return { error: err.message, status: 500 };
+  }
   return { ok: true, status: 200 };
 }
 
@@ -129,7 +133,11 @@ function deleteJSON(subdir, name) {
   if (!clean) return { error: 'Invalid name', status: 400 };
   var filePath = path.join(BASE, subdir, clean + '.json');
   if (!fs.existsSync(filePath)) return { error: 'Not found', status: 404 };
-  fs.unlinkSync(filePath);
+  try {
+    fs.unlinkSync(filePath);
+  } catch (err) {
+    return { error: err.message, status: 500 };
+  }
   return { ok: true, status: 200 };
 }
 
@@ -153,6 +161,11 @@ contextBridge.exposeInMainWorld('devAPI', {
   readMenu:          function (name)       { return readJSON('menus', name); },
   writeMenu:         function (name, data) { return writeJSON('menus', name, data); },
   deleteMenu:        function (name)       { return deleteJSON('menus', name); },
+
+  listSounds:        function ()           { return listJSON('sounds'); },
+  readSound:         function (name)       { return readJSON('sounds', name); },
+  writeSound:        function (name, data) { return writeJSON('sounds', name, data); },
+  deleteSound:       function (name)       { return deleteJSON('sounds', name); },
 
   serverStart:       function ()           { return _serverStart(); },
   serverStop:        function ()           { return _serverStop(); },

@@ -131,6 +131,7 @@
     if (!state || !state.match) return;
     state.match.roundActive = false;
     if (typeof clearAllProjectiles === 'function') clearAllProjectiles();
+    if (typeof playGameSound === 'function') playGameSound('elimination');
 
     if (who === 'p1') state.match.player1Wins++;
     else if (who === 'p2') state.match.player2Wins++;
@@ -400,6 +401,8 @@
         if (other && other.alive) {
           if (window.devGodMode && isLocalPlayer(other)) return;
           other.takeDamage(totalDamage);
+          if (isLocalPlayer(p) && typeof playGameSound === 'function') playGameSound('hit_marker');
+          if (isLocalPlayer(other) && typeof playGameSound === 'function') playGameSound('damage_taken');
           if (isLocalPlayer(other)) updateHUDForPlayer(other);
           if (isHost && state.match && state.match.roundActive && !other.alive) {
             endRound((p === state.players.host) ? 'p1' : 'p2');
@@ -412,6 +415,7 @@
     ms.swinging = true;
     ms.swingEnd = now + w.meleeSwingMs;
     if (isLocalPlayer(p)) {
+      if (typeof playGameSound === 'function') playGameSound('melee_swing');
       if (typeof window.triggerFPMeleeSwing === 'function') window.triggerFPMeleeSwing(w.meleeSwingMs);
     }
     // Third-person animation on the attacker mesh (visible to remote)
@@ -487,6 +491,8 @@
             return; // God mode: skip damage for local player
           }
           other.takeDamage(w.damage * (damageMultiplier || 1.0));
+          if (isLocalPlayer(p) && typeof playGameSound === 'function') playGameSound('hit_marker');
+          if (isLocalPlayer(other) && typeof playGameSound === 'function') playGameSound('damage_taken');
           if (isLocalPlayer(other)) updateHUDForPlayer(other);
           if (isHost && state.match && state.match.roundActive && !other.alive) {
             endRound((p === state.players.host) ? 'p1' : 'p2');
@@ -504,13 +510,15 @@
                 d: pelletResult.dir ? [pelletResult.dir.x, pelletResult.dir.y, pelletResult.dir.z] : [0, 0, -1],
                 c: tracerColor,
                 s: w.projectileSpeed,
-                g: w.projectileGravity || 0
+                g: w.projectileGravity || 0,
+                w: w.modelType
               });
             } else if (pelletResult && pelletResult.point) {
               socket.emit('shot', {
                 o: [origin.x, origin.y, origin.z],
                 e: [pelletResult.point.x, pelletResult.point.y, pelletResult.point.z],
-                c: tracerColor
+                c: tracerColor,
+                w: w.modelType
               });
             }
           } catch (e) { console.warn('multiplayer: shot emit failed:', e); }
@@ -542,6 +550,7 @@
     sharedSetSprintUI(!!localInput.sprint, state.hud.sprintIndicator);
 
     // Host player physics via updateFullPhysics
+    var hostPrevGrounded = state.players.host.grounded;
     updateFullPhysics(
       state.players.host,
       { moveX: state.players.host.input.moveX, moveZ: state.players.host.input.moveZ, sprint: state.players.host.input.sprint, jump: state.players.host.input.jump },
@@ -551,6 +560,16 @@
     state.players.host._hitboxYaw = camera.rotation.y;
     state.players.host._syncMeshPosition();
     state.players.host.syncCameraFromPlayer();
+
+    // Host movement sounds
+    if (typeof playGameSound === 'function') {
+      if (hostPrevGrounded && !state.players.host.grounded) playGameSound('jump');
+      if (!hostPrevGrounded && state.players.host.grounded) playGameSound('land');
+      var hostMoving = (state.players.host.input.moveX !== 0 || state.players.host.input.moveZ !== 0);
+      if (hostMoving && state.players.host.grounded && typeof playFootstepIfDue === 'function') {
+        playFootstepIfDue(!!state.players.host.input.sprint, null, performance.now());
+      }
+    }
 
     // Remote input
     var ri = state.remoteInputLatest || {};
@@ -660,6 +679,7 @@
   var _predictedVVel = 0;
   var _predictedGrounded = true;
   var _lastSnapshotTime = 0;
+  var _prevLocalReloading = false;
   var LERP_RATE = 0.15; // how aggressively to snap toward server position per snapshot
 
   // Remote player interpolation state (smooth opponent movement on client)
@@ -740,7 +760,14 @@
         localP.feetY = _predictedFeetY;
         localP.health = C.health;
         localP.weapon.ammo = C.ammo;
-        localP.weapon.reloading = !!C.reloading;
+        var nowReloading = !!C.reloading;
+        // Detect reload transitions for audio
+        if (typeof playGameSound === 'function') {
+          if (!_prevLocalReloading && nowReloading) playGameSound('reload_start');
+          if (_prevLocalReloading && !nowReloading) playGameSound('reload_end');
+        }
+        _prevLocalReloading = nowReloading;
+        localP.weapon.reloading = nowReloading;
         localP.weapon.reloadEnd = C.reloadEnd || 0;
         sharedSetReloadingUI(localP.weapon.reloading, state.hud.reloadIndicator);
         updateHUDForPlayer(localP);
@@ -762,6 +789,7 @@
       if (camera && camera.getWorldDirection) camera.getWorldDirection(forward);
 
       // Client-side prediction: use same full physics as host for accurate prediction
+      var clientPrevGrounded = _predictedGrounded;
       if (_predictedPos && state.inputEnabled) {
         var localP = state.players.client;
         if (localP) {
@@ -801,6 +829,16 @@
           localP._syncMeshPosition();
 
           camera.position.copy(_predictedPos);
+
+          // Client movement sounds
+          if (typeof playGameSound === 'function') {
+            if (clientPrevGrounded && !_predictedGrounded) playGameSound('jump');
+            if (!clientPrevGrounded && _predictedGrounded) playGameSound('land');
+            var clientMoving = (input.moveX !== 0 || input.moveZ !== 0);
+            if (clientMoving && _predictedGrounded && typeof playFootstepIfDue === 'function') {
+              playFootstepIfDue(!!input.sprint, null, performance.now());
+            }
+          }
         }
       }
 
@@ -853,7 +891,6 @@
     if (localP && localP.weapon && state.hud.meleeCooldown) {
       sharedUpdateMeleeCooldown(state.hud.meleeCooldown, localP.weapon, performance.now());
     }
-
     state.loopHandle = requestAnimationFrame(tick);
   }
 
@@ -1014,6 +1051,7 @@
     socket.on('melee', function (payload) {
       if (isHost) return;
       if (!payload || !state) return;
+      if (typeof playGameSound === 'function') playGameSound('melee_swing');
       var swingMs = payload.swingMs || 350;
       // Play TP swing animation on the attacker's player mesh
       var attacker = (payload.playerId === 'host') ? state.players.host : state.players.client;
@@ -1032,6 +1070,7 @@
     socket.on('shot', function (payload) {
       if (isHost) return;
       if (!payload || !Array.isArray(payload.o)) return;
+      if (typeof playGameSound === 'function') playGameSound('weapon_fire', { weaponModelType: payload.w });
       var o = new THREE.Vector3(payload.o[0], payload.o[1], payload.o[2]);
       var color = (typeof payload.c === 'number') ? payload.c : 0x66ffcc;
 

@@ -217,3 +217,12 @@ function showOnlyMenu(idOrNull) {
     if (el) el.classList.remove('hidden');
   }
 }
+
+// UI click sound — single delegated handler on all menu buttons
+(function () {
+  document.addEventListener('click', function (e) {
+    if (e.target.tagName === 'BUTTON' && e.target.closest('.menu')) {
+      if (typeof playGameSound === 'function') playGameSound('ui_click');
+    }
+  });
+})();

@@ -1,0 +1,17 @@
+{
+  "id": "land",
+  "name": "Land",
+  "synthesis": {
+    "type": "noise_burst",
+    "frequency": 300,
+    "filterType": "lowpass",
+    "filterQ": 0.5,
+    "duration": 0.06,
+    "volume": 0.18,
+    "attack": 0.001,
+    "decay": 0.059
+  },
+  "bindings": [
+    { "event": "land", "filter": {} }
+  ]
+}

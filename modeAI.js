@@ -54,6 +54,7 @@
         countdownEl: document.getElementById('roundCountdown'),
         enemyHealthContainer: document.getElementById('enemyHealthContainer'),
         enemyHealthFill: document.getElementById('enemyHealthFill'),
+        meleeCooldown: document.getElementById('meleeCooldown'),
       },
       inputArmed: false,
       inputEnabled: false,
@@ -79,6 +80,7 @@
     if (state.ai) {
       sharedUpdateHealthBar(state.hud.enemyHealthFill, state.ai.health, state.ai.maxHealth || 100);
     }
+    sharedUpdateMeleeCooldown(state.hud.meleeCooldown, p.weapon, performance.now());
   }
 
   // Round/match flow — using shared countdown and banner
@@ -229,8 +231,10 @@
         onHit: function (target, point, dist, pelletIdx, damageMultiplier) {
           var dmg = w.damage * (damageMultiplier || 1.0);
           state.ai.takeDamage(dmg);
+          if (typeof playGameSound === 'function') playGameSound('hit_marker');
           updateHUD();
           if (!state.ai.alive && state.match.roundActive) {
+            if (typeof playGameSound === 'function') playGameSound('elimination');
             endRound('player');
             return false;
           }
@@ -278,8 +282,10 @@
       targets: aiTargets,
       onHit: function (target, point, dist, totalDamage) {
         state.ai.takeDamage(totalDamage);
+        if (typeof playGameSound === 'function') playGameSound('hit_marker');
         updateHUD();
         if (!state.ai.alive && state.match.roundActive) {
+          if (typeof playGameSound === 'function') playGameSound('elimination');
           endRound('player');
         }
       }
@@ -288,6 +294,7 @@
     // Start swing animation + block firing
     _meleeSwinging = true;
     _meleeSwingEnd = now + w.meleeSwingMs;
+    if (typeof playGameSound === 'function') playGameSound('melee_swing');
     if (typeof window.triggerFPMeleeSwing === 'function') window.triggerFPMeleeSwing(w.meleeSwingMs);
     if (state.player.triggerMeleeSwing) state.player.triggerMeleeSwing(w.meleeSwingMs);
   }
@@ -319,6 +326,7 @@
     sharedSetSprintUI(!!input.sprint, state.hud.sprintIndicator);
 
     if (state.inputEnabled && !window.devSpectatorMode) {
+      var prevGrounded = state.player.grounded;
       updateFullPhysics(
         state.player,
         { moveX: input.moveX || 0, moveZ: input.moveZ || 0, sprint: !!input.sprint, jump: !!input.jump },
@@ -329,6 +337,16 @@
       state.player._hitboxYaw = camera.rotation.y;
       state.player._syncMeshPosition();
       state.player.syncCameraFromPlayer();
+
+      // Movement sounds
+      if (typeof playGameSound === 'function') {
+        if (prevGrounded && !state.player.grounded) playGameSound('jump');
+        if (!prevGrounded && state.player.grounded) playGameSound('land');
+        var moving = (input.moveX !== 0 || input.moveZ !== 0);
+        if (moving && state.player.grounded && typeof playFootstepIfDue === 'function') {
+          playFootstepIfDue(!!input.sprint, state._heroId, performance.now());
+        }
+      }
     }
 
     // Update AI BEFORE shooting/projectiles so AI hitboxes are fresh for hit detection
@@ -345,6 +363,7 @@
           if (!state.player.alive) return;
           if (window.devGodMode) return;
           state.player.takeDamage(dmg);
+          if (typeof playGameSound === 'function') playGameSound('damage_taken');
           updateHUD();
           if (state.player.health <= 0) {
             if (state.match.roundActive) endRound('ai');

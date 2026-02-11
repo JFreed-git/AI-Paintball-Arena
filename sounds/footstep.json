@@ -1,0 +1,17 @@
+{
+  "id": "footstep",
+  "name": "Footstep",
+  "synthesis": {
+    "type": "noise_burst",
+    "frequency": 400,
+    "filterType": "lowpass",
+    "filterQ": 0.5,
+    "duration": 0.04,
+    "volume": 0.12,
+    "attack": 0.001,
+    "decay": 0.039
+  },
+  "bindings": [
+    { "event": "footstep", "filter": {} }
+  ]
+}

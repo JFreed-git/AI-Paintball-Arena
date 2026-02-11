@@ -1,0 +1,30 @@
+{
+  "name": "CloseSpawns",
+  "version": 2,
+  "arena": {
+    "width": 20,
+    "length": 20,
+    "wallHeight": 3.5
+  },
+  "spawns": [
+    {
+      "id": "spawn_1",
+      "position": [
+        1,
+        0,
+        -6
+      ],
+      "team": "A"
+    },
+    {
+      "id": "spawn_2",
+      "position": [
+        1,
+        0,
+        6
+      ],
+      "team": "B"
+    }
+  ],
+  "objects": []
+}

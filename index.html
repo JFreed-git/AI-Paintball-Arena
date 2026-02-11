@@ -31,6 +31,13 @@
                 <div id="ammoRow">
                     <span id="ammoDisplay">0/0</span>
                     <span id="reloadIndicator" class="hidden">Reloading...</span>
+                    <div id="meleeCooldown" class="hidden">
+                        <svg width="26" height="26" viewBox="0 0 26 26">
+                            <circle class="melee-cd-bg" cx="13" cy="13" r="11" />
+                            <circle class="melee-cd-fill" cx="13" cy="13" r="11" />
+                        </svg>
+                        <span class="melee-cd-label">V</span>
+                    </div>
                 </div>
             </div>
         </div>
@@ -167,6 +174,7 @@
 
     <!-- Core systems (no game-mode dependencies) -->
     <script src="config.js"></script>
+    <script src="audio.js"></script>
     <script src="weapon.js"></script>
     <script src="weaponModels.js"></script>
     <script src="physics.js"></script>

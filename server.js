@@ -161,6 +161,62 @@ app.delete('/api/menus/:name', function (req, res) {
   }
 });
 
+// ── Sound REST API ──
+const SOUNDS_DIR = path.join(__dirname, 'sounds');
+
+function ensureSoundsDir() {
+  if (!fs.existsSync(SOUNDS_DIR)) fs.mkdirSync(SOUNDS_DIR, { recursive: true });
+}
+
+app.get('/api/sounds', function (req, res) {
+  ensureSoundsDir();
+  try {
+    var files = fs.readdirSync(SOUNDS_DIR).filter(function (f) { return f.endsWith('.json'); });
+    var names = files.map(function (f) { return f.replace(/\.json$/, ''); });
+    res.json(names);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to list sounds' });
+  }
+});
+
+app.get('/api/sounds/:name', function (req, res) {
+  var name = sanitizeMapName(req.params.name);
+  if (!name) return res.status(400).json({ error: 'Invalid sound name' });
+  var filePath = path.join(SOUNDS_DIR, name + '.json');
+  if (!fs.existsSync(filePath)) return res.status(404).json({ error: 'Sound not found' });
+  try {
+    var data = fs.readFileSync(filePath, 'utf8');
+    res.type('json').send(data);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to read sound' });
+  }
+});
+
+app.post('/api/sounds/:name', function (req, res) {
+  var name = sanitizeMapName(req.params.name);
+  if (!name) return res.status(400).json({ error: 'Invalid sound name' });
+  ensureSoundsDir();
+  try {
+    fs.writeFileSync(path.join(SOUNDS_DIR, name + '.json'), JSON.stringify(req.body, null, 2), 'utf8');
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to save sound' });
+  }
+});
+
+app.delete('/api/sounds/:name', function (req, res) {
+  var name = sanitizeMapName(req.params.name);
+  if (!name) return res.status(400).json({ error: 'Invalid sound name' });
+  var filePath = path.join(SOUNDS_DIR, name + '.json');
+  if (!fs.existsSync(filePath)) return res.status(404).json({ error: 'Sound not found' });
+  try {
+    fs.unlinkSync(filePath);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to delete sound' });
+  }
+});
+
 // ── Hero REST API (read-only — editing happens in the Electron dev workbench) ──
 const HEROES_DIR = path.join(__dirname, 'heroes');
 

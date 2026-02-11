@@ -127,6 +127,7 @@
       reloadIndicator: document.getElementById('reloadIndicator'),
       sprintIndicator: document.getElementById('sprintIndicator'),
       weaponNameDisplay: document.getElementById('weaponNameDisplay'),
+      meleeCooldown: document.getElementById('meleeCooldown'),
       trainingStats: document.getElementById('trainingStats'),
       tsShotCount: document.getElementById('tsShotCount'),
       tsHitCount: document.getElementById('tsHitCount'),
@@ -157,6 +158,7 @@
     var p = state.player;
     sharedUpdateHealthBar(state.hud.healthFill, p.health, PLAYER_HEALTH);
     sharedUpdateAmmoDisplay(state.hud.ammoDisplay, p.weapon.ammo, p.weapon.magSize);
+    sharedUpdateMeleeCooldown(state.hud.meleeCooldown, p.weapon, performance.now());
 
     // Stats
     if (state.hud.tsShotCount) state.hud.tsShotCount.textContent = String(state.stats.shots);
@@ -245,6 +247,7 @@
 
     _meleeSwinging = true;
     _meleeSwingEnd = now + w.meleeSwingMs;
+    if (typeof playGameSound === 'function') playGameSound('melee_swing');
     if (typeof window.triggerFPMeleeSwing === 'function') window.triggerFPMeleeSwing(w.meleeSwingMs);
     if (state.player.triggerMeleeSwing) state.player.triggerMeleeSwing(w.meleeSwingMs);
     updateHUD();
@@ -301,6 +304,7 @@
           else if (typeof target.takeDamage === 'function') {
             target.takeDamage(w.damage * (damageMultiplier || 1.0));
           }
+          if (typeof playGameSound === 'function') playGameSound('hit_marker');
           state.stats.hits++;
         }
       });
@@ -356,6 +360,7 @@
     sharedSetSprintUI(!!input.sprint, state.hud.sprintIndicator);
 
     // Player physics
+    var prevGrounded = state.player.grounded;
     updateFullPhysics(
       state.player,
       { moveX: input.moveX || 0, moveZ: input.moveZ || 0, sprint: !!input.sprint, jump: !!input.jump },
@@ -365,6 +370,16 @@
     state.player._hitboxYaw = camera.rotation.y;
     state.player._syncMeshPosition();
     state.player.syncCameraFromPlayer();
+
+    // Movement sounds
+    if (typeof playGameSound === 'function') {
+      if (prevGrounded && !state.player.grounded) playGameSound('jump');
+      if (!prevGrounded && state.player.grounded) playGameSound('land');
+      var moving = (input.moveX !== 0 || input.moveZ !== 0);
+      if (moving && state.player.grounded && typeof playFootstepIfDue === 'function') {
+        playFootstepIfDue(!!input.sprint, state.currentHeroId, performance.now());
+      }
+    }
 
     // Update bots and targets BEFORE shooting/projectiles so hitboxes are fresh
     for (var i = 0; i < state.bots.length; i++) {

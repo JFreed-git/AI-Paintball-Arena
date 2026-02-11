@@ -29,6 +29,8 @@ All JS files use IIFEs `(function() { ... })()` for scope isolation. Public APIs
 | File | Purpose |
 |------|---------|
 | `config.js` | Shared constants: `GAME_CONFIG` (round timing, hero select timer) |
+| `audio.js` | Web Audio sound engine: synthesis, event-driven sound dispatch, AnalyserNode for viz, loads from `sounds/` |
+| `sounds/*.json` | Sound definition JSON files (editable via Audio Manager workbench) |
 | `weapon.js` | `Weapon` class — static stats + mutable state, `reset()` for rounds |
 | `weaponModels.js` | `WEAPON_MODEL_REGISTRY` — model type keys → `THREE.Group` builders |
 | `physics.js` | 3D movement engine: gravity, jumping, ground detection, AABB collision |
@@ -58,6 +60,7 @@ All JS files use IIFEs `(function() { ... })()` for scope isolation. Public APIs
 | `server.js` | Express + Socket.IO relay server, REST API, no game logic |
 | `index.html` | Main HTML page with all DOM and script tags in dependency order |
 | `style.css` | All CSS for menus, HUD, overlays, and game UI |
+| `devAudioManager.js` | Workbench editor for sounds: viewport sound table, envelope/waveform viz, CRUD, duplicate, randomize |
 | `electron-*.js`, `dev*.js/html/css`, `interactionEngine.js`, `menuBuilder.js`, `mapEditor.js` | Dev workbench (Electron) — see [`docs/dev-workbench.md`](docs/dev-workbench.md) |
 
 ## Script Load Order
@@ -66,7 +69,7 @@ Scripts load in this order in index.html (dependencies flow top-to-bottom):
 
 ```
 Three.js (CDN) → Socket.IO (CDN) →
-config.js → weapon.js → weaponModels.js → physics.js → crosshair.js →
+config.js → audio.js → weapon.js → weaponModels.js → physics.js → crosshair.js →
 hud.js → roundFlow.js → heroes.js → abilities.js → heroSelectUI.js →
 menuRenderer.js → menuNavigation.js → input.js → environment.js →
 player.js → arenaBuilder.js → arenaCompetitive.js → arenaTraining.js →
@@ -80,9 +83,9 @@ dev.html (Electron) loads the same shared scripts but replaces game.js with dev-
 
 ```
 Three.js (CDN) → electron-fetch-shim.js → interactionEngine.js →
-[same shared scripts as index.html: config.js through modeTraining.js, including menuRenderer.js] →
+[same shared scripts as index.html: config.js → audio.js → ... through modeTraining.js, including menuRenderer.js] →
 mapEditor.js →
-menuBuilder.js → devSplitScreen.js → devHeroEditor.js → devConsole.js → devApp.js
+menuBuilder.js → devAudioManager.js → devSplitScreen.js → devHeroEditor.js → devConsole.js → devApp.js
 ```
 
 ## Key Rules

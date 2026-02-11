@@ -1122,3 +1122,224 @@ body {
     z-index: 200;
     cursor: crosshair;
 }
+
+/* ===== Audio Manager Viewport ===== */
+
+#amViewportContainer {
+    display: none;
+    flex-direction: column;
+    background: #111;
+}
+
+#amViewportContainer.hidden {
+    display: none;
+}
+
+#amViewportContainer.viewport-mode {
+    display: flex;
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 5;
+}
+
+/* Sound Library Table */
+#amSoundTable {
+    flex: 0 0 auto;
+    max-height: 45%;
+    overflow-y: auto;
+    border-bottom: 1px solid #333;
+}
+
+.am-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+}
+
+.am-table thead {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+}
+
+.am-table th {
+    background: #1a1a1a;
+    color: #aaa;
+    font-size: 11px;
+    font-weight: bold;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    padding: 8px 10px;
+    text-align: left;
+    border-bottom: 1px solid #333;
+    white-space: nowrap;
+}
+
+.am-table td {
+    padding: 6px 10px;
+    color: #ccc;
+    border-bottom: 1px solid #1a1a1a;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 180px;
+}
+
+.am-table tr {
+    cursor: pointer;
+    transition: background 0.1s;
+}
+
+.am-table tbody tr:hover {
+    background: #1a1a1a;
+}
+
+.am-table tr.am-row-selected {
+    background: rgba(0, 255, 136, 0.08);
+}
+
+.am-table tr.am-row-selected td {
+    color: #fff;
+}
+
+/* Type badge */
+.am-type-badge {
+    display: inline-block;
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-size: 10px;
+    font-weight: bold;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.am-type-badge.noise_burst { background: #3a2010; color: #f0a040; }
+.am-type-badge.tone { background: #102030; color: #40a0f0; }
+.am-type-badge.sweep { background: #102a10; color: #40f080; }
+.am-type-badge.multi_tone { background: #2a1030; color: #c060f0; }
+
+/* Table action buttons */
+.am-table-btn {
+    background: transparent;
+    border: 1px solid #444;
+    color: #aaa;
+    border-radius: 3px;
+    padding: 2px 8px;
+    cursor: pointer;
+    font-size: 11px;
+    transition: background 0.1s, color 0.1s;
+}
+
+.am-table-btn:hover {
+    background: #333;
+    color: #fff;
+}
+
+.am-table-btn.am-play-btn:hover {
+    border-color: #00ff88;
+    color: #00ff88;
+}
+
+/* Filter pills in table */
+.am-filter-pill {
+    display: inline-block;
+    padding: 1px 5px;
+    background: #1a1a1a;
+    border: 1px solid #333;
+    border-radius: 3px;
+    font-size: 10px;
+    color: #888;
+    margin-right: 3px;
+}
+
+/* Visualizer Container */
+#amVisualizerContainer {
+    flex: 1;
+    display: flex;
+    gap: 0;
+    min-height: 0;
+    background: #0a0a0a;
+}
+
+#amEnvelopeCanvas,
+#amWaveformCanvas {
+    flex: 1;
+    min-width: 0;
+    min-height: 0;
+    border-right: 1px solid #222;
+}
+
+#amWaveformCanvas {
+    border-right: none;
+}
+
+/* Audio Manager editor scrollable */
+#amEditorForm {
+    max-height: none;
+    overflow-y: auto;
+    padding-right: 4px;
+}
+
+/* Audio Manager binding rows */
+.am-binding-row {
+    background: #1a1a1a;
+    border: 1px solid #333;
+    border-radius: 4px;
+    padding: 6px 8px;
+    margin: 4px 0;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+}
+
+.am-binding-event {
+    flex: 0 0 auto;
+    padding: 3px 6px;
+    background: #111;
+    color: #fff;
+    border: 1px solid #444;
+    border-radius: 3px;
+    font-size: 11px;
+}
+
+.am-binding-filters {
+    flex: 1;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    align-items: center;
+}
+
+.am-filter-label {
+    font-size: 10px;
+    color: #888;
+}
+
+.am-filter-input {
+    width: 60px;
+    padding: 2px 4px;
+    background: #111;
+    color: #fff;
+    border: 1px solid #444;
+    border-radius: 3px;
+    font-size: 10px;
+}
+
+.am-binding-remove {
+    background: transparent;
+    border: 1px solid #cc3333;
+    color: #ff6666;
+    border-radius: 3px;
+    padding: 1px 6px;
+    cursor: pointer;
+    font-size: 11px;
+    flex-shrink: 0;
+}
+
+.am-binding-remove:hover {
+    background: #331111;
+}

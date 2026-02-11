@@ -12,7 +12,7 @@
  *   setCrosshairStyle(style, color)          — switch crosshair style ('cross' or 'circle')
  *   sharedSetCrosshairBySprint(sprinting, baseSpreadRad, sprintSpreadRad) — set spread based on sprint state
  *
- * DEPENDENCIES: Three.js (THREE), game.js (camera global for FOV-based spread calculation)
+ * DEPENDENCIES: Three.js (THREE), camera global (for FOV-based spread calculation)
  *
  * DESIGN NOTES:
  *   - The crosshair is a pure CSS/DOM overlay (not rendered in 3D). It sits in the
@@ -29,6 +29,7 @@
 (function () {
 
   var _currentStyle = 'cross';
+  var _currentSpreadPx = 0;
 
   /**
    * Convert a spread angle (radians) to screen pixels using camera FOV.
@@ -109,6 +110,7 @@
    * Set crosshair spread distance in pixels.
    */
   function setCrosshairSpread(px) {
+    _currentSpreadPx = px;
     var el = document.getElementById('crosshair');
     if (el) {
       el.style.setProperty('--spread', px + 'px');
