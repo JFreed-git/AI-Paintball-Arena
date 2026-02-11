@@ -217,6 +217,8 @@ window._lobbyState = null;
 function lobbyCleanup() {
   if (window._lobbySocket) {
     try { window._lobbySocket.emit('leaveRoom'); } catch (e) {}
+    try { window._lobbySocket.disconnect(); } catch (e) {}
+    window._lobbySocket = null;
   }
   window._lobbyState = null;
 }
