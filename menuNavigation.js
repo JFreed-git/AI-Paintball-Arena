@@ -184,7 +184,316 @@ function bindUI() {
       setHUDVisible(false);
     });
   }
+
+  // Post-match results buttons
+  var postMatchToLobby = document.getElementById('postMatchToLobby');
+  var postMatchToMenu = document.getElementById('postMatchToMenu');
+  if (postMatchToLobby) {
+    postMatchToLobby.addEventListener('click', function () {
+      // Return to lobby if we have lobby state
+      if (window._lobbyState && window._lobbyState.roomId) {
+        showOnlyMenu('lobbyMenu');
+      } else {
+        showOnlyMenu('mainMenu');
+      }
+      setHUDVisible(false);
+    });
+  }
+  if (postMatchToMenu) {
+    postMatchToMenu.addEventListener('click', function () {
+      lobbyCleanup();
+      showOnlyMenu('mainMenu');
+      setHUDVisible(false);
+    });
+  }
+
+  // ── FFA Lobby ──
+  bindLobbyUI();
 }
+
+// Lobby module state
+window._lobbyState = null;
+
+function lobbyCleanup() {
+  if (window._lobbySocket) {
+    try { window._lobbySocket.emit('leaveRoom'); } catch (e) {}
+  }
+  window._lobbyState = null;
+}
+
+function bindLobbyUI() {
+  var lobbyReadyBtn = document.getElementById('lobbyReadyBtn');
+  var lobbyStartBtn = document.getElementById('lobbyStartBtn');
+  var lobbyBackBtn = document.getElementById('lobbyBackBtn');
+
+  // Add FFA button to main menu (if not already present)
+  var mainActions = document.querySelector('#mainMenu .actions');
+  if (mainActions && !document.getElementById('gotoFFA')) {
+    var ffaBtn = document.createElement('button');
+    ffaBtn.id = 'gotoFFA';
+    ffaBtn.textContent = 'Play FFA';
+    // Insert after the LAN button
+    var lanBtn = document.getElementById('gotoLAN');
+    if (lanBtn && lanBtn.nextSibling) {
+      mainActions.insertBefore(ffaBtn, lanBtn.nextSibling);
+    } else {
+      mainActions.appendChild(ffaBtn);
+    }
+    ffaBtn.addEventListener('click', function () {
+      showOnlyMenu('lobbyMenu');
+      populateMapDropdown('lobbyMapSelect');
+      lobbyShowAsHost();
+    });
+  }
+
+  // Ready button
+  if (lobbyReadyBtn) {
+    lobbyReadyBtn.addEventListener('click', function () {
+      if (!window._lobbyState || window._lobbyState.isHost) return;
+      window._lobbyState.ready = !window._lobbyState.ready;
+      lobbyReadyBtn.textContent = window._lobbyState.ready ? 'Unready' : 'Ready';
+      lobbyReadyBtn.classList.toggle('is-ready', window._lobbyState.ready);
+      if (window._lobbySocket) {
+        window._lobbySocket.emit('setReady', window._lobbyState.roomId, window._lobbyState.ready);
+      }
+    });
+  }
+
+  // Start button (host only)
+  if (lobbyStartBtn) {
+    lobbyStartBtn.addEventListener('click', function () {
+      if (!window._lobbyState || !window._lobbyState.isHost) return;
+      if (!window._lobbySocket) return;
+      window._lobbySocket.emit('startGame', window._lobbyState.roomId, function (res) {
+        if (!res || !res.ok) {
+          alert(res && res.error ? res.error : 'Cannot start game');
+          return;
+        }
+        // Start FFA mode
+        launchFFAFromLobby();
+      });
+    });
+  }
+
+  // Back button
+  if (lobbyBackBtn) {
+    lobbyBackBtn.addEventListener('click', function () {
+      lobbyCleanup();
+      showOnlyMenu('mainMenu');
+    });
+  }
+}
+
+function lobbyEnsureSocket() {
+  if (window._lobbySocket) return window._lobbySocket;
+  if (typeof io !== 'function') {
+    alert('Socket.IO client not found. Make sure the server is running.');
+    return null;
+  }
+  var sock = io();
+  window._lobbySocket = sock;
+
+  sock.on('playerList', function (list) {
+    if (!window._lobbyState) return;
+    window._lobbyState.playerList = list;
+    lobbyRenderPlayerList(list);
+    lobbyUpdateStartButton(list);
+  });
+
+  sock.on('roomClosed', function () {
+    alert('Host left. Room closed.');
+    lobbyCleanup();
+    showOnlyMenu('mainMenu');
+  });
+
+  sock.on('gameStarted', function (payload) {
+    if (!window._lobbyState) return;
+    if (!window._lobbyState.isHost) {
+      // Client: transition to FFA
+      launchFFAFromLobby();
+    }
+  });
+
+  return sock;
+}
+
+function lobbyShowAsHost() {
+  window._lobbyState = {
+    roomId: generateRoomId(),
+    isHost: true,
+    ready: true,
+    playerList: []
+  };
+  var roomIdEl = document.getElementById('lobbyRoomId');
+  if (roomIdEl) roomIdEl.textContent = window._lobbyState.roomId;
+
+  // Show host-only elements
+  var hostOnlyEls = document.querySelectorAll('#lobbyMenu .host-only');
+  hostOnlyEls.forEach(function (el) { el.style.display = ''; });
+
+  // Hide ready button for host, show start button
+  var readyBtn = document.getElementById('lobbyReadyBtn');
+  var startBtn = document.getElementById('lobbyStartBtn');
+  if (readyBtn) readyBtn.style.display = 'none';
+  if (startBtn) startBtn.style.display = '';
+
+  // Create room on server
+  var sock = lobbyEnsureSocket();
+  if (!sock) return;
+
+  var killLimitEl = document.getElementById('lobbyKillLimit');
+  var maxPlayersEl = document.getElementById('lobbyMaxPlayers');
+  var mapSelectEl = document.getElementById('lobbyMapSelect');
+
+  var settings = {
+    killLimit: killLimitEl ? parseInt(killLimitEl.value, 10) || 10 : 10,
+    maxPlayers: maxPlayersEl ? parseInt(maxPlayersEl.value, 10) || 8 : 8,
+    mapName: (mapSelectEl && mapSelectEl.value) ? mapSelectEl.value : '__default__'
+  };
+
+  sock.emit('createRoom', window._lobbyState.roomId, settings, function (res) {
+    if (!res || !res.ok) {
+      alert(res && res.error ? res.error : 'Failed to create room');
+      showOnlyMenu('mainMenu');
+      return;
+    }
+  });
+}
+
+// Expose for external use (e.g., joining from a URL or button)
+window.lobbyJoinRoom = function (roomId) {
+  if (!roomId) { alert('Please enter a Room ID'); return; }
+  window._lobbyState = {
+    roomId: roomId,
+    isHost: false,
+    ready: false,
+    playerList: []
+  };
+
+  showOnlyMenu('lobbyMenu');
+  var roomIdEl = document.getElementById('lobbyRoomId');
+  if (roomIdEl) roomIdEl.textContent = roomId;
+
+  // Hide host-only elements
+  var hostOnlyEls = document.querySelectorAll('#lobbyMenu .host-only');
+  hostOnlyEls.forEach(function (el) { el.style.display = 'none'; });
+
+  // Show ready button, hide start button
+  var readyBtn = document.getElementById('lobbyReadyBtn');
+  var startBtn = document.getElementById('lobbyStartBtn');
+  if (readyBtn) { readyBtn.style.display = ''; readyBtn.textContent = 'Ready'; readyBtn.classList.remove('is-ready'); }
+  if (startBtn) startBtn.style.display = 'none';
+
+  var sock = lobbyEnsureSocket();
+  if (!sock) return;
+
+  sock.emit('joinRoom', roomId, function (res) {
+    if (!res || !res.ok) {
+      alert(res && res.error ? res.error : 'Failed to join room');
+      showOnlyMenu('mainMenu');
+      return;
+    }
+  });
+};
+
+function lobbyRenderPlayerList(list) {
+  var container = document.getElementById('lobbyPlayerList');
+  if (!container) return;
+  var maxPlayers = 8;
+  if (window._lobbyState && window._lobbyState.playerList) {
+    var maxEl = document.getElementById('lobbyMaxPlayers');
+    maxPlayers = maxEl ? parseInt(maxEl.value, 10) || 8 : 8;
+  }
+
+  container.innerHTML = '';
+
+  for (var i = 0; i < maxPlayers; i++) {
+    var row = document.createElement('div');
+    row.className = 'player-row';
+
+    if (i < list.length) {
+      var p = list[i];
+      row.classList.toggle('is-ready', !!p.ready);
+      row.classList.toggle('is-host', !!p.isHost);
+
+      var nameSpan = document.createElement('span');
+      nameSpan.className = 'player-name';
+      nameSpan.textContent = p.name || 'Player';
+      row.appendChild(nameSpan);
+
+      var heroSpan = document.createElement('span');
+      heroSpan.className = 'player-hero';
+      heroSpan.textContent = ''; // Hero selection not yet chosen
+      row.appendChild(heroSpan);
+
+      var statusSpan = document.createElement('span');
+      statusSpan.className = 'player-ready';
+      if (p.isHost) {
+        statusSpan.textContent = 'HOST';
+        statusSpan.classList.add('host-badge');
+      } else {
+        statusSpan.textContent = p.ready ? 'READY' : '';
+      }
+      row.appendChild(statusSpan);
+    } else {
+      row.classList.add('empty-slot');
+      var openSpan = document.createElement('span');
+      openSpan.className = 'player-name';
+      openSpan.textContent = 'Open Slot';
+      row.appendChild(openSpan);
+    }
+
+    container.appendChild(row);
+  }
+}
+
+function lobbyUpdateStartButton(list) {
+  var startBtn = document.getElementById('lobbyStartBtn');
+  if (!startBtn || !window._lobbyState || !window._lobbyState.isHost) return;
+
+  var canStart = list.length >= 2;
+  for (var i = 0; i < list.length; i++) {
+    if (!list[i].isHost && !list[i].ready) {
+      canStart = false;
+      break;
+    }
+  }
+  startBtn.disabled = !canStart;
+  startBtn.style.opacity = canStart ? '1' : '0.5';
+}
+
+function launchFFAFromLobby() {
+  if (!window._lobbyState) return;
+  var ls = window._lobbyState;
+
+  if (ls.isHost) {
+    var killLimitEl = document.getElementById('lobbyKillLimit');
+    var mapSelectEl = document.getElementById('lobbyMapSelect');
+    var settings = {
+      killLimit: killLimitEl ? parseInt(killLimitEl.value, 10) || 10 : 10,
+      mapName: (mapSelectEl && mapSelectEl.value) ? mapSelectEl.value : '__default__'
+    };
+    if (typeof window.startFFAHost === 'function') {
+      window.startFFAHost(ls.roomId, settings);
+    }
+  } else {
+    // Client joining FFA — will be handled by joinFFAGame (Task 017)
+    if (typeof window.joinFFAGame === 'function') {
+      window.joinFFAGame(ls.roomId);
+    } else {
+      // Fallback: just hide menus and wait for host snapshot
+      showOnlyMenu(null);
+    }
+  }
+}
+
+function generateRoomId() {
+  var chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  var id = '';
+  for (var i = 0; i < 5; i++) {
+    id += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return id;
 
 function setHUDVisible(visible) {
   const ui = document.getElementById('ui');
@@ -210,7 +519,7 @@ function populateMapDropdown(selectId) {
 }
 
 function showOnlyMenu(idOrNull) {
-  const menus = document.querySelectorAll('.menu');
+  const menus = document.querySelectorAll('.menu, .menu-screen');
   menus.forEach(m => m.classList.add('hidden'));
   if (idOrNull) {
     const el = document.getElementById(idOrNull);
@@ -221,7 +530,7 @@ function showOnlyMenu(idOrNull) {
 // UI click sound — single delegated handler on all menu buttons
 (function () {
   document.addEventListener('click', function (e) {
-    if (e.target.tagName === 'BUTTON' && e.target.closest('.menu')) {
+    if (e.target.tagName === 'BUTTON' && (e.target.closest('.menu') || e.target.closest('.menu-screen'))) {
       if (typeof playGameSound === 'function') playGameSound('ui_click');
     }
   });

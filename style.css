@@ -246,6 +246,10 @@ body {
     color: #00ff88;
 }
 
+.player-row .player-ready.host-badge {
+    color: #ffcc00;
+}
+
 .player-row.empty-slot {
     border-style: dashed;
     border-color: rgba(255, 255, 255, 0.04);
