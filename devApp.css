@@ -262,6 +262,65 @@ body {
     border-color: rgba(0, 255, 136, 0.3);
 }
 
+/* Launch Game nav button — distinct color */
+.dev-nav-launch {
+    background: rgba(0, 170, 255, 0.15) !important;
+    color: #55bbff !important;
+    border-color: rgba(0, 170, 255, 0.3) !important;
+}
+
+.dev-nav-launch:hover {
+    background: rgba(0, 170, 255, 0.25) !important;
+}
+
+/* Launch Game panel — full screen */
+#launchGamePanel {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    z-index: 9999;
+    background: #000;
+    padding: 0;
+}
+
+#lgCloseBar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 36px;
+    background: rgba(0, 0, 0, 0.85);
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    padding: 0 12px;
+    z-index: 10000;
+}
+
+#lgCloseBtn {
+    background: rgba(255, 85, 85, 0.2);
+    color: #ff5555;
+    border: 1px solid rgba(255, 85, 85, 0.4);
+    border-radius: 4px;
+    padding: 4px 12px;
+    font-size: 12px;
+    font-weight: bold;
+    cursor: pointer;
+}
+
+#lgCloseBtn:hover {
+    background: rgba(255, 85, 85, 0.35);
+}
+
+#lgIframe {
+    width: 100%;
+    height: 100%;
+    border: none;
+    display: block;
+}
+
 /* Panels container */
 #devPanels {
     flex: 1;

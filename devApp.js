@@ -295,7 +295,8 @@ function getPanelElementId(panelId) {
     menuBuilder: 'panelMenuBuilder',
     audioManager: 'panelAudioManager',
     mapEditor: 'panelMapEditor',
-    quickTest: 'panelQuickTest'
+    quickTest: 'panelQuickTest',
+    launchGame: 'launchGamePanel'
   };
   return map[panelId] || '';
 }
@@ -866,6 +867,102 @@ window.registerCustomWeaponModel = registerCustomWeaponModel;
       if (typeof window.startTrainingRange === 'function') {
         window.startTrainingRange({ _heroId: heroId });
       }
+    });
+  }
+
+  // --- Launch Game (full game in iframe) ---
+  function launchGame() {
+    // Ensure server is running
+    if (window.devAPI) {
+      var info = window.devAPI.serverStatus();
+      if (info.status !== 'running') {
+        window.devAPI.serverStart();
+      }
+    }
+
+    // Hide sidebar and all panels
+    var sidebar = document.getElementById('devSidebar');
+    var expandTab = document.getElementById('devSidebarExpand');
+    if (sidebar) sidebar.classList.add('hidden');
+    if (expandTab) expandTab.classList.add('hidden');
+
+    var rightPanel = document.getElementById('devRightPanel');
+    var rightExpandTab = document.getElementById('devRightPanelExpand');
+    if (rightPanel) rightPanel.classList.add('hidden');
+    if (rightExpandTab) rightExpandTab.classList.add('hidden');
+
+    // Hide all dev panels
+    var panels = document.querySelectorAll('.dev-panel');
+    panels.forEach(function (p) { p.style.display = 'none'; });
+
+    // Hide Three.js canvas
+    var gc = document.getElementById('gameContainer');
+    var threeCanvas = gc && gc.querySelector('canvas');
+    if (threeCanvas) threeCanvas.style.display = 'none';
+
+    // Show the Launch Game panel full-screen
+    var lgPanel = document.getElementById('launchGamePanel');
+    if (lgPanel) lgPanel.style.display = 'block';
+
+    // Set iframe src
+    var lgIframe = document.getElementById('lgIframe');
+    if (lgIframe) lgIframe.src = 'http://localhost:3000';
+
+    // Add viewport mode class for full-screen styling
+    document.body.classList.add('viewport-mode');
+  }
+
+  function closeLaunchGame() {
+    // Hide Launch Game panel and reset iframe
+    var lgPanel = document.getElementById('launchGamePanel');
+    var lgIframe = document.getElementById('lgIframe');
+    if (lgPanel) lgPanel.style.display = 'none';
+    if (lgIframe) lgIframe.src = 'about:blank';
+
+    // Remove viewport mode
+    document.body.classList.remove('viewport-mode');
+
+    // Restore Three.js canvas
+    var gc = document.getElementById('gameContainer');
+    var threeCanvas = gc && gc.querySelector('canvas');
+    if (threeCanvas) threeCanvas.style.display = '';
+
+    // Restore sidebar (preserve collapsed state)
+    var sidebar = document.getElementById('devSidebar');
+    if (sidebar) {
+      sidebar.classList.remove('hidden');
+      var expandTab = document.getElementById('devSidebarExpand');
+      if (expandTab) expandTab.classList.toggle('hidden', !sidebar.classList.contains('collapsed'));
+    }
+
+    // Restore right panel if editor panel is active
+    if (_activePanel === 'heroEditor' || _activePanel === 'weaponModelBuilder' || _activePanel === 'menuBuilder') {
+      var rightPanel = document.getElementById('devRightPanel');
+      var rightExpandTab = document.getElementById('devRightPanelExpand');
+      if (rightPanel) {
+        rightPanel.classList.remove('hidden');
+        if (rightExpandTab) rightExpandTab.classList.toggle('hidden', !rightPanel.classList.contains('collapsed'));
+      }
+    }
+
+    if (typeof resizeRenderer === 'function') setTimeout(resizeRenderer, 50);
+  }
+
+  // Wire nav button
+  var lgNavBtn = document.querySelector('[data-panel="launchGame"]');
+  if (lgNavBtn) {
+    lgNavBtn.addEventListener('click', function (e) {
+      e.preventDefault();
+      e.stopPropagation();
+      launchGame();
+    });
+  }
+
+  // Wire close button
+  var lgCloseBtn = document.getElementById('lgCloseBtn');
+  if (lgCloseBtn) {
+    lgCloseBtn.addEventListener('click', function () {
+      closeLaunchGame();
     });
   }
 

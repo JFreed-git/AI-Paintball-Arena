@@ -22,6 +22,7 @@
             <button class="dev-nav-btn" data-panel="menuBuilder">Menu Builder</button>
             <button class="dev-nav-btn" data-panel="audioManager">Audio Manager</button>
             <button class="dev-nav-btn" data-panel="quickTest">Quick Test</button>
+            <button class="dev-nav-btn dev-nav-launch" data-panel="launchGame">Launch Game</button>
         </nav>
         <div id="devPanels">
             <!-- Split Screen Panel -->
@@ -218,6 +219,11 @@
                     <button id="qtAIMatch" class="dev-btn-primary">AI Match</button>
                     <button id="qtTraining" class="dev-btn-secondary">Training Range</button>
                 </div>
+            </div>
+            <!-- Launch Game Panel -->
+            <div id="launchGamePanel" class="dev-panel" style="display:none">
+                <div id="lgCloseBar"><button id="lgCloseBtn">&#10005; Close Game</button></div>
+                <iframe id="lgIframe" src="about:blank"></iframe>
             </div>
             <!-- Menu Builder Panel -->
             <div id="panelMenuBuilder" class="dev-panel">
