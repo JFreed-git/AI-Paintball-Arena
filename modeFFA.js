@@ -29,6 +29,11 @@
   var COUNTDOWN_SECONDS = GAME_CONFIG.COUNTDOWN_SECONDS;
   var SHOT_DELAY_AFTER_COUNTDOWN = GAME_CONFIG.SHOT_DELAY_AFTER_COUNTDOWN;
 
+  // ── Team constants ──
+  var NUM_TEAMS = 2;
+  var TEAM_COLORS_HEX = [0x55aaff, 0xff5555]; // Team 1: Blue, Team 2: Red
+  var TEAM_NAMES = ['Team 1', 'Team 2'];
+
   var socket = null;
   var _handlersAttached = false;
   var _usingLobbySocket = false;
@@ -129,6 +134,70 @@
     return div.innerHTML;
   }
   window.escapeHTML = escapeHTML;
+
+  // ── Team Assignment ──
+  // Returns the team number (1-based) with the fewest players
+  function assignTeam() {
+    if (!state) return 1;
+    var counts = {};
+    for (var t = 1; t <= NUM_TEAMS; t++) counts[t] = 0;
+    var ids = Object.keys(state.players);
+    for (var i = 0; i < ids.length; i++) {
+      var entry = state.players[ids[i]];
+      if (entry && entry.team) counts[entry.team] = (counts[entry.team] || 0) + 1;
+    }
+    var minTeam = 1;
+    var minCount = counts[1] || 0;
+    for (var t2 = 2; t2 <= NUM_TEAMS; t2++) {
+      if ((counts[t2] || 0) < minCount) {
+        minCount = counts[t2] || 0;
+        minTeam = t2;
+      }
+    }
+    return minTeam;
+  }
+
+  // Get spawn positions for a specific team
+  // Team spawns are interleaved: spawn 0→Team1, spawn 1→Team2, spawn 2→Team1, etc.
+  function getTeamSpawnPosition(team) {
+    if (!state || !state.spawnsFFA || state.spawnsFFA.length === 0) {
+      return new THREE.Vector3(0, 0, 0);
+    }
+    var teamSpawns = [];
+    for (var i = 0; i < state.spawnsFFA.length; i++) {
+      if ((i % NUM_TEAMS) + 1 === team) {
+        teamSpawns.push(state.spawnsFFA[i]);
+      }
+    }
+    if (teamSpawns.length === 0) return getSpawnPosition(state._spawnIndex++);
+    if (!state._teamSpawnIndex) state._teamSpawnIndex = {};
+    if (!state._teamSpawnIndex[team]) state._teamSpawnIndex[team] = 0;
+    var idx = state._teamSpawnIndex[team]++ % teamSpawns.length;
+    return teamSpawns[idx].clone();
+  }
+
+  function getTeamColor(team) {
+    return TEAM_COLORS_HEX[(team - 1) % TEAM_COLORS_HEX.length];
+  }
+
+  function getTeamName(team) {
+    return TEAM_NAMES[(team - 1) % TEAM_NAMES.length] || ('Team ' + team);
+  }
+
+  // Compute team total kills
+  function getTeamKills(team) {
+    if (!state || !state.match || !state.match.scores) return 0;
+    var total = 0;
+    var ids = Object.keys(state.players);
+    for (var i = 0; i < ids.length; i++) {
+      var entry = state.players[ids[i]];
+      var sc = state.match.scores[ids[i]];
+      if (entry && entry.team === team && sc) {
+        total += sc.kills || 0;
+      }
+    }
+    return total;
+  }
 
   function showRoundBanner(text, ms) {
     if (!state) return;
@@ -243,13 +312,14 @@
     for (var i = 0; i < _aiSlots.length; i++) {
       var slot = _aiSlots[i];
       var aiId = 'ai-' + i;
-      var spawnPos = getSpawnPosition(state._spawnIndex++);
+      var team = assignTeam();
+      var spawnPos = getTeamSpawnPosition(team);
 
       var ai = new AIOpponent({
         difficulty: slot.difficulty,
         arena: state.arena,
         spawn: { x: spawnPos.x, z: spawnPos.z },
-        color: randomPlayerColor()
+        color: getTeamColor(team)
       });
 
       // Apply selected hero
@@ -264,7 +334,8 @@
         isAI: true,
         aiInstance: ai,
         name: slot.name,
-        respawnAt: 0
+        respawnAt: 0,
+        team: team
       };
       state.match.scores[aiId] = { kills: 0, deaths: 0 };
       state._meleeSwingState[aiId] = { swinging: false, swingEnd: 0 };
@@ -432,7 +503,7 @@
 
   function newState(settings) {
     return {
-      players: {},        // { [socketId]: { entity: Player, heroId, alive, input: {}, isAI: false, respawnAt: 0 } }
+      players: {},        // { [socketId]: { entity: Player, heroId, alive, isAI, respawnAt, team } }
       arena: null,
       spawnsFFA: [],
       match: {
@@ -440,7 +511,7 @@
         killLimit: (settings && settings.killLimit) || 10,
         roundsToWin: (settings && settings.rounds) || 3,
         currentRound: 1,
-        roundWins: {},    // { [socketId]: numberOfRoundsWon }
+        roundWins: {},    // { team#: numberOfRoundsWon }
         roundActive: false
       },
       isHost: false,
@@ -453,6 +524,7 @@
       countdownTimerRef: { id: 0 },
       heroSelectTimerRef: { id: 0 },
       _spawnIndex: 0,     // rotating spawn index
+      _teamSpawnIndex: {}, // { [team]: rotatingIndex }
       _remoteInputs: {},  // { [socketId]: latestInputPayload }
       _remoteInputPending: {}, // { [socketId]: { jump, reload, melee } }
       _meleeSwingState: {} // { [socketId]: { swinging, swingEnd } }
@@ -464,11 +536,12 @@
     clearKillFeed();
     var ids = Object.keys(state.players);
     state._spawnIndex = 0;
+    state._teamSpawnIndex = {};
     for (var i = 0; i < ids.length; i++) {
       var id = ids[i];
       var entry = state.players[id];
       if (!entry || !entry.entity) continue;
-      var spawnPos = getSpawnPosition(state._spawnIndex++);
+      var spawnPos = entry.team ? getTeamSpawnPosition(entry.team) : getSpawnPosition(state._spawnIndex++);
       entry.entity.resetForRound(spawnPos);
       entry.alive = true;
       entry.respawnAt = 0;
@@ -487,7 +560,7 @@
   function respawnPlayer(id) {
     if (!state || !state.players[id]) return;
     var entry = state.players[id];
-    var spawnPos = getSpawnPosition(state._spawnIndex++);
+    var spawnPos = entry.team ? getTeamSpawnPosition(entry.team) : getSpawnPosition(state._spawnIndex++);
     entry.entity.resetForRound(spawnPos);
     entry.alive = true;
     entry.respawnAt = 0;
@@ -545,36 +618,48 @@
       window.updateFFAScoreboard();
     }
 
-    // Check win condition — end the round, not the match
+    // Check win condition — when a player hits killLimit, their TEAM wins the round
     if (state.match.scores[killerId].kills >= state.match.killLimit) {
-      endRound(killerId);
+      var killerEntry = state.players[killerId];
+      var winningTeam = killerEntry ? killerEntry.team : null;
+      endRound(killerId, winningTeam);
     }
   }
 
-  function endRound(winnerId) {
+  function endRound(winnerId, winningTeam) {
     if (!state) return;
     state.match.roundActive = false;
     if (typeof clearAllProjectiles === 'function') clearAllProjectiles();
     if (typeof playGameSound === 'function') playGameSound('elimination');
 
-    // Track round win
-    if (!state.match.roundWins[winnerId]) state.match.roundWins[winnerId] = 0;
-    state.match.roundWins[winnerId]++;
+    // Track round win by team
+    var teamKey = winningTeam || 0;
+    if (!state.match.roundWins[teamKey]) state.match.roundWins[teamKey] = 0;
+    state.match.roundWins[teamKey]++;
 
-    var winnerName = getPlayerName(winnerId);
     var roundNum = state.match.currentRound;
-    var roundsWon = state.match.roundWins[winnerId];
+    var roundsWon = state.match.roundWins[teamKey];
     var isMatchOver = roundsWon >= state.match.roundsToWin;
 
-    var bannerText = isMatchOver
-      ? winnerName + ' wins the match!'
-      : winnerName + ' wins round ' + roundNum + '!';
+    var bannerText;
+    if (winningTeam) {
+      var teamName = getTeamName(winningTeam);
+      bannerText = isMatchOver
+        ? teamName + ' wins the match!'
+        : teamName + ' wins round ' + roundNum + '!';
+    } else {
+      var winnerName = getPlayerName(winnerId);
+      bannerText = isMatchOver
+        ? winnerName + ' wins the match!'
+        : winnerName + ' wins round ' + roundNum + '!';
+    }
     showRoundBanner(bannerText, ROUND_BANNER_MS);
 
     // Emit round result to all clients
     if (socket) {
       socket.emit('roundResult', {
         winnerId: winnerId,
+        winningTeam: winningTeam,
         roundNum: roundNum,
         roundWins: state.match.roundWins,
         scores: state.match.scores,
@@ -585,12 +670,16 @@
     if (isMatchOver) {
       // Match is over — show post-match results
       if (socket) {
-        socket.emit('matchOver', { winnerId: winnerId, scores: state.match.scores });
+        socket.emit('matchOver', {
+          winnerId: winnerId,
+          winningTeam: winningTeam,
+          scores: state.match.scores
+        });
       }
       setTimeout(function () {
         if (!state) return;
         if (typeof window.showPostMatchResults === 'function') {
-          window.showPostMatchResults(winnerId);
+          window.showPostMatchResults(winnerId, winningTeam);
         }
         window.stopFFAInternal();
       }, ROUND_BANNER_MS + 500);
@@ -988,7 +1077,8 @@
         ammo: entry.entity.weapon.ammo,
         magSize: entry.entity.weapon.magSize,
         reloading: entry.entity.weapon.reloading,
-        reloadEnd: entry.entity.weapon.reloadEnd
+        reloadEnd: entry.entity.weapon.reloadEnd,
+        team: entry.team || 0
       };
     }
 
@@ -1177,8 +1267,9 @@
       var re = state.players[id];
       if (!re) {
         var pos = sp.pos ? new THREE.Vector3(sp.pos[0], sp.pos[1], sp.pos[2]) : new THREE.Vector3();
-        var rp = createPlayerInstance({ position: pos, color: randomPlayerColor(), cameraAttached: false });
-        state.players[id] = { entity: rp, heroId: 'marksman', alive: sp.alive, isAI: false, respawnAt: 0 };
+        var remoteTeam = sp.team || 0;
+        var rp = createPlayerInstance({ position: pos, color: remoteTeam ? getTeamColor(remoteTeam) : randomPlayerColor(), cameraAttached: false });
+        state.players[id] = { entity: rp, heroId: 'marksman', alive: sp.alive, isAI: false, respawnAt: 0, team: remoteTeam };
         state.match.scores[id] = state.match.scores[id] || { kills: 0, deaths: 0 };
         re = state.players[id];
       }
@@ -1392,12 +1483,21 @@
       if (typeof playGameSound === 'function') playGameSound('elimination');
       if (data && data.roundWins) state.match.roundWins = data.roundWins;
       if (data && data.scores) state.match.scores = data.scores;
-      var winnerName = (data && data.winnerId)
-        ? ((data.winnerId === state.localId) ? 'You' : getPlayerName(data.winnerId))
-        : 'Player';
-      var bannerText = data.isMatchOver
-        ? winnerName + ' wins the match!'
-        : winnerName + ' wins round ' + (data.roundNum || state.match.currentRound) + '!';
+
+      var bannerText;
+      if (data && data.winningTeam) {
+        var teamName = getTeamName(data.winningTeam);
+        bannerText = data.isMatchOver
+          ? teamName + ' wins the match!'
+          : teamName + ' wins round ' + (data.roundNum || state.match.currentRound) + '!';
+      } else {
+        var winnerName = (data && data.winnerId)
+          ? ((data.winnerId === state.localId) ? 'You' : getPlayerName(data.winnerId))
+          : 'Player';
+        bannerText = data.isMatchOver
+          ? winnerName + ' wins the match!'
+          : winnerName + ' wins round ' + (data.roundNum || state.match.currentRound) + '!';
+      }
       showRoundBanner(bannerText, ROUND_BANNER_MS);
       // If not match over, the host will send startRound for the next round
       if (!data.isMatchOver && data.roundNum) {
@@ -1410,17 +1510,24 @@
       state.match.roundActive = false;
       if (typeof clearAllProjectiles === 'function') clearAllProjectiles();
       if (typeof playGameSound === 'function') playGameSound('elimination');
-      var winnerName = 'Player';
-      if (data && data.winnerId) {
-        winnerName = (data.winnerId === state.localId) ? 'You' : getPlayerName(data.winnerId);
+
+      var bannerText;
+      if (data && data.winningTeam) {
+        bannerText = getTeamName(data.winningTeam) + ' wins!';
+      } else {
+        var winnerName = 'Player';
+        if (data && data.winnerId) {
+          winnerName = (data.winnerId === state.localId) ? 'You' : getPlayerName(data.winnerId);
+        }
+        bannerText = winnerName + ' wins!';
       }
       if (data && data.scores) state.match.scores = data.scores;
-      showRoundBanner(winnerName + ' wins!', ROUND_BANNER_MS);
+      showRoundBanner(bannerText, ROUND_BANNER_MS);
       setTimeout(function () {
         if (!state) return;
         // Populate post-match scoreboard BEFORE destroying state
         if (typeof window.showPostMatchResults === 'function') {
-          window.showPostMatchResults(data && data.winnerId);
+          window.showPostMatchResults(data && data.winnerId, data && data.winningTeam);
         }
         window.stopFFAInternal();
         // showPostMatchResults already calls showOnlyMenu + setHUDVisible
@@ -1440,10 +1547,11 @@
 
   function addRemotePlayer(clientId) {
     if (!state || state.players[clientId]) return;
-    var spawnPos = getSpawnPosition(state._spawnIndex++);
+    var team = assignTeam();
+    var spawnPos = getTeamSpawnPosition(team);
     var p = createPlayerInstance({
       position: spawnPos,
-      color: randomPlayerColor(),
+      color: getTeamColor(team),
       cameraAttached: false
     });
     state.players[clientId] = {
@@ -1451,7 +1559,8 @@
       heroId: 'marksman',
       alive: true,
       isAI: false,
-      respawnAt: 0
+      respawnAt: 0,
+      team: team
     };
     state.match.scores[clientId] = { kills: 0, deaths: 0 };
     state._meleeSwingState[clientId] = { swinging: false, swingEnd: 0 };
@@ -1490,17 +1599,26 @@
 
     state.spawnsFFA = state.arena.spawnsFFA || [];
 
+    // Fallback: use spawnsList from map-based arenas
+    if (state.spawnsFFA.length === 0 && state.arena.spawnsList && state.arena.spawnsList.length > 0) {
+      for (var si = 0; si < state.arena.spawnsList.length; si++) {
+        var sp = state.arena.spawnsList[si];
+        state.spawnsFFA.push(new THREE.Vector3(sp.position[0], sp.position[1] || 0, sp.position[2]));
+      }
+    }
+
     // Fallback: if no FFA spawns, use A/B spawns
     if (state.spawnsFFA.length === 0 && state.arena.spawns) {
       state.spawnsFFA = [state.arena.spawns.A.clone(), state.arena.spawns.B.clone()];
     }
 
-    // Create host player
+    // Create host player with team assignment
     _colorIdx = 0;
-    var hostSpawn = getSpawnPosition(state._spawnIndex++);
+    var hostTeam = assignTeam(); // Will be team 1 (first player)
+    var hostSpawn = getTeamSpawnPosition(hostTeam);
     var hostPlayer = createPlayerInstance({
       position: hostSpawn,
-      color: randomPlayerColor(),
+      color: getTeamColor(hostTeam),
       cameraAttached: true
     });
     state.players[state.localId] = {
@@ -1508,7 +1626,8 @@
       heroId: 'marksman',
       alive: true,
       isAI: false,
-      respawnAt: 0
+      respawnAt: 0,
+      team: hostTeam
     };
     state.match.scores[state.localId] = { kills: 0, deaths: 0 };
     state._meleeSwingState[state.localId] = { swinging: false, swingEnd: 0 };
@@ -1582,16 +1701,26 @@
         : (typeof buildArenaFromMap === 'function' ? buildArenaFromMap(getDefaultMapData()) : buildPaintballArenaSymmetric());
 
       state.spawnsFFA = state.arena.spawnsFFA || [];
+
+      // Fallback: use spawnsList from map-based arenas
+      if (state.spawnsFFA.length === 0 && state.arena.spawnsList && state.arena.spawnsList.length > 0) {
+        for (var si = 0; si < state.arena.spawnsList.length; si++) {
+          var sp = state.arena.spawnsList[si];
+          state.spawnsFFA.push(new THREE.Vector3(sp.position[0], sp.position[1] || 0, sp.position[2]));
+        }
+      }
+
       if (state.spawnsFFA.length === 0 && state.arena.spawns) {
         state.spawnsFFA = [state.arena.spawns.A.clone(), state.arena.spawns.B.clone()];
       }
 
-      // Create local player
+      // Create local player with team assignment
       _colorIdx = 0;
-      var spawnPos = getSpawnPosition(state._spawnIndex++);
+      var localTeam = assignTeam();
+      var spawnPos = getTeamSpawnPosition(localTeam);
       var localPlayer = createPlayerInstance({
         position: spawnPos,
-        color: randomPlayerColor(),
+        color: getTeamColor(localTeam),
         cameraAttached: true
       });
       state.players[state.localId] = {
@@ -1599,7 +1728,8 @@
         heroId: 'marksman',
         alive: true,
         isAI: false,
-        respawnAt: 0
+        respawnAt: 0,
+        team: localTeam
       };
       state.match.scores[state.localId] = { kills: 0, deaths: 0 };
 

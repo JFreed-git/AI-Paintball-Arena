@@ -26,6 +26,14 @@
     return prefix + 'Player ' + (id || '').substring(0, 4);
   }
 
+  var TEAM_NAMES = ['Team 1', 'Team 2'];
+  var TEAM_CSS_CLASSES = ['team-1', 'team-2'];
+
+  function getTeamDisplayName(team) {
+    if (!team) return '';
+    return TEAM_NAMES[(team - 1) % TEAM_NAMES.length] || ('Team ' + team);
+  }
+
   function buildSortedScoreList() {
     var state = (typeof window.getFFAState === 'function') ? window.getFFAState() : null;
     if (!state || !state.match || !state.match.scores) return [];
@@ -45,12 +53,14 @@
         deaths: s.deaths || 0,
         score: (s.kills || 0) * 100 - (s.deaths || 0) * 25,
         isLocal: (id === state.localId),
-        isAI: !!pEntry.isAI
+        isAI: !!pEntry.isAI,
+        team: pEntry.team || 0
       });
     }
 
-    // Sort: kills desc, then deaths asc
+    // Sort: team asc, then kills desc, then deaths asc
     entries.sort(function (a, b) {
+      if (a.team !== b.team) return (a.team || 99) - (b.team || 99);
       if (b.kills !== a.kills) return b.kills - a.kills;
       return a.deaths - b.deaths;
     });
@@ -62,13 +72,28 @@
     if (!container) return;
     container.innerHTML = '';
 
+    var lastTeam = -1;
+    var rankInTeam = 0;
     for (var i = 0; i < entries.length; i++) {
       var e = entries[i];
+
+      // Insert team divider header when team changes
+      if (e.team && e.team !== lastTeam) {
+        lastTeam = e.team;
+        rankInTeam = 0;
+        var divider = document.createElement('div');
+        divider.className = 'scoreboard-team-divider ' + (TEAM_CSS_CLASSES[(e.team - 1) % TEAM_CSS_CLASSES.length] || '');
+        divider.textContent = getTeamDisplayName(e.team);
+        container.appendChild(divider);
+      }
+      rankInTeam++;
+
       var row = document.createElement('div');
-      row.className = 'scoreboard-row' + (e.isLocal ? ' sb-local' : '');
+      var teamClass = e.team ? (' ' + (TEAM_CSS_CLASSES[(e.team - 1) % TEAM_CSS_CLASSES.length] || '')) : '';
+      row.className = 'scoreboard-row' + (e.isLocal ? ' sb-local' : '') + teamClass;
 
       row.innerHTML =
-        '<span class="sb-rank">' + (i + 1) + '</span>' +
+        '<span class="sb-rank">' + rankInTeam + '</span>' +
         '<span class="sb-player">' + escapeHTML(e.name) + '</span>' +
         '<span class="sb-hero">' + escapeHTML(getHeroName(e.heroId)) + '</span>' +
         '<span class="sb-kills">' + e.kills + '</span>' +
@@ -93,28 +118,39 @@
 
   // ── Public: show post-match results ──
 
-  window.showPostMatchResults = function (winnerId) {
+  window.showPostMatchResults = function (winnerId, winningTeam) {
     var state = (typeof window.getFFAState === 'function') ? window.getFFAState() : null;
     var entries = buildSortedScoreList();
 
-    // Winner name
+    // Header text
+    var headerEl = document.getElementById('postMatchHeader');
+    if (headerEl) headerEl.textContent = 'Match Over';
+
+    // Winner name — show team winner if available
     var winnerEl = document.getElementById('postMatchWinner');
     if (winnerEl) {
-      var winnerName = 'Unknown';
-      if (entries.length > 0) {
-        winnerName = entries[0].name; // top scorer
-      }
-      if (winnerId && state && winnerId === state.localId) {
-        winnerName = 'You';
-      } else if (winnerId) {
-        for (var i = 0; i < entries.length; i++) {
-          if (entries[i].id === winnerId) {
-            winnerName = entries[i].name;
-            break;
+      if (winningTeam) {
+        var teamName = getTeamDisplayName(winningTeam);
+        // Calculate team total kills for display
+        var teamKills = 0;
+        for (var k = 0; k < entries.length; k++) {
+          if (entries[k].team === winningTeam) teamKills += entries[k].kills;
+        }
+        winnerEl.textContent = teamName + ' wins!  (' + teamKills + ' total kills)';
+        winnerEl.className = 'post-match-winner ' + (TEAM_CSS_CLASSES[(winningTeam - 1) % TEAM_CSS_CLASSES.length] || '');
+      } else {
+        var winnerName = 'Unknown';
+        if (entries.length > 0) winnerName = entries[0].name;
+        if (winnerId && state && winnerId === state.localId) {
+          winnerName = 'You';
+        } else if (winnerId) {
+          for (var i = 0; i < entries.length; i++) {
+            if (entries[i].id === winnerId) { winnerName = entries[i].name; break; }
           }
         }
+        winnerEl.textContent = winnerName + ' wins!';
+        winnerEl.className = 'post-match-winner';
       }
-      winnerEl.textContent = winnerName + ' wins!';
     }
 
     // Populate final scoreboard

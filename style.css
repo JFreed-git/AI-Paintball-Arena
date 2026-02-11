@@ -1563,7 +1563,7 @@ body.split-view-mode .menu {
     top: 50%;
     left: 50%;
     transform: translate(-50%, -50%);
-    width: 550px;
+    width: 620px;
     max-width: 90vw;
     background: rgba(10, 10, 10, 0.92);
     padding: 28px 24px;
@@ -1633,6 +1633,37 @@ body.split-view-mode .menu {
 
 #postMatchResults .actions button.secondary:hover {
     background: rgba(255, 255, 255, 0.06);
+}
+
+/* ── Team Colors ── */
+.team-1 { --team-color: #55aaff; }
+.team-2 { --team-color: #ff5555; }
+
+.scoreboard-team-divider {
+    padding: 6px 12px;
+    margin-top: 8px;
+    font-size: 13px;
+    font-weight: bold;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    color: var(--team-color, #aaa);
+    border-bottom: 2px solid var(--team-color, #333);
+}
+
+.scoreboard-team-divider:first-child {
+    margin-top: 0;
+}
+
+.scoreboard-row.team-1 .sb-player { color: #88ccff; }
+.scoreboard-row.team-2 .sb-player { color: #ff8888; }
+
+.post-match-winner.team-1 {
+    color: #55aaff !important;
+    text-shadow: 0 0 8px rgba(85, 170, 255, 0.4) !important;
+}
+.post-match-winner.team-2 {
+    color: #ff5555 !important;
+    text-shadow: 0 0 8px rgba(255, 85, 85, 0.4) !important;
 }
 
 /* ── Game Setup Screen ── */
