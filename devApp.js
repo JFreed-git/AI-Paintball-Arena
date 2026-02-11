@@ -918,7 +918,7 @@ window.registerCustomWeaponModel = registerCustomWeaponModel;
 
     // Show the Launch Game panel full-screen
     var lgPanel = document.getElementById('launchGamePanel');
-    if (lgPanel) lgPanel.style.display = 'block';
+    if (lgPanel) lgPanel.style.display = 'flex';
 
     // Add viewport mode class for full-screen styling
     document.body.classList.add('viewport-mode');
