@@ -6,7 +6,7 @@
  * loading custom menu configs from the server to override defaults.
  *
  * EXPORTS (window):
- *   MENU_DEFAULTS            — all 5 menus as JSON config objects
+ *   MENU_DEFAULTS            — all 3 menus as JSON config objects
  *   renderMenuFromConfig(config) — returns a document fragment of rendered elements
  *   renderAllMenus(configMap)    — replaces existing menu DOM with rendered configs
  *   getDefaultMenuConfigs()      — returns a copy of MENU_DEFAULTS
@@ -71,63 +71,6 @@
       ]
     },
 
-    // ── Paintball (AI) Menu ──
-    paintballMenu: {
-      id: 'paintballMenu',
-      name: 'Paintball (AI)',
-      width: 420,
-      height: 270,
-      style: {},
-      elements: [
-        {
-          uid: 'pb_1', type: 'heading', tag: 'h2', text: 'Paintball (AI)',
-          x: 0, y: 20, width: 420, height: 36,
-          style: {}
-        },
-        {
-          uid: 'pb_2', type: 'select', label: 'Difficulty',
-          elementId: 'paintballDifficulty', defaultValue: 'Easy',
-          options: [
-            { value: 'Easy', text: 'Easy' },
-            { value: 'Medium', text: 'Medium' },
-            { value: 'Hard', text: 'Hard' }
-          ],
-          x: 24, y: 72, width: 372, height: 30,
-          style: {}
-        },
-        {
-          uid: 'pb_3', type: 'select', label: 'Map',
-          elementId: 'paintballMapSelect', defaultValue: '__default__',
-          options: [
-            { value: '__default__', text: 'Default Arena' }
-          ],
-          x: 24, y: 116, width: 372, height: 30,
-          style: {}
-        },
-        {
-          uid: 'pb_4', type: 'numberInput', label: 'Rounds to Win',
-          elementId: 'roundsToWinPaintball',
-          min: 1, max: 10, step: 1, defaultValue: 2,
-          x: 24, y: 160, width: 372, height: 30,
-          style: {}
-        },
-        {
-          uid: 'pb_5', type: 'button', text: 'Start',
-          elementId: 'startPaintball', variant: 'primary',
-          action: 'startPaintball',
-          x: 90, y: 212, width: 120, height: 40,
-          style: {}
-        },
-        {
-          uid: 'pb_6', type: 'button', text: 'Back',
-          elementId: 'backFromPaintball', variant: 'secondary',
-          action: 'showMenu:mainMenu',
-          x: 220, y: 212, width: 120, height: 40,
-          style: {}
-        }
-      ]
-    },
-
     // ── Training Range Menu ──
     trainingMenu: {
       id: 'trainingMenu',
@@ -153,65 +96,6 @@
           elementId: 'backFromTraining', variant: 'secondary',
           action: 'showMenu:mainMenu',
           x: 218, y: 84, width: 140, height: 40,
-          style: {}
-        }
-      ]
-    },
-
-    // ── LAN Multiplayer Menu ──
-    lanMenu: {
-      id: 'lanMenu',
-      name: 'LAN Multiplayer',
-      width: 420,
-      height: 280,
-      style: {},
-      elements: [
-        {
-          uid: 'ln_1', type: 'heading', tag: 'h2', text: 'LAN Multiplayer',
-          x: 0, y: 20, width: 420, height: 36,
-          style: {}
-        },
-        {
-          uid: 'ln_2', type: 'textInput', label: 'Room ID',
-          elementId: 'roomId', placeholder: 'e.g., room1',
-          x: 24, y: 72, width: 372, height: 30,
-          style: {}
-        },
-        {
-          uid: 'ln_3', type: 'select', label: 'Map',
-          elementId: 'lanMapSelect', defaultValue: '__default__',
-          options: [
-            { value: '__default__', text: 'Default Arena' }
-          ],
-          x: 24, y: 116, width: 372, height: 30,
-          style: {}
-        },
-        {
-          uid: 'ln_4', type: 'numberInput', label: 'Rounds to Win',
-          elementId: 'roundsToWin',
-          min: 1, max: 10, step: 1, defaultValue: 2,
-          x: 24, y: 160, width: 372, height: 30,
-          style: {}
-        },
-        {
-          uid: 'ln_5', type: 'button', text: 'Host LAN Game',
-          elementId: 'hostLanBtn', variant: 'primary',
-          action: 'hostLAN',
-          x: 16, y: 216, width: 128, height: 40,
-          style: {}
-        },
-        {
-          uid: 'ln_6', type: 'button', text: 'Join LAN Game',
-          elementId: 'joinLanBtn', variant: 'secondary',
-          action: 'joinLAN',
-          x: 154, y: 216, width: 120, height: 40,
-          style: {}
-        },
-        {
-          uid: 'ln_7', type: 'button', text: 'Back',
-          elementId: 'backFromLAN', variant: 'secondary',
-          action: 'showMenu:mainMenu',
-          x: 284, y: 216, width: 120, height: 40,
           style: {}
         }
       ]

@@ -82,82 +82,11 @@
             </div>
         </div>
 
-        <div id="paintballMenu" class="menu hidden">
-            <h2>Paintball (AI)</h2>
-            <div class="field">
-                <label>Difficulty
-                    <select id="paintballDifficulty">
-                        <option value="Easy" selected>Easy</option>
-                        <option value="Medium">Medium</option>
-                        <option value="Hard">Hard</option>
-                    </select>
-                </label>
-            </div>
-            <div class="field">
-                <label>Map
-                    <select id="paintballMapSelect">
-                        <option value="__default__" selected>Default Arena</option>
-                    </select>
-                </label>
-            </div>
-            <div class="field">
-                <label>Rounds to Win
-                    <input type="number" id="roundsToWinPaintball" min="1" max="10" step="1" value="2" />
-                </label>
-            </div>
-            <div class="actions">
-                <button id="startPaintball">Start</button>
-                <button class="secondary" id="backFromPaintball">Back</button>
-            </div>
-        </div>
-
         <div id="trainingMenu" class="menu hidden">
             <h2>Training Range</h2>
             <div class="actions">
                 <button id="startTraining">Start Training</button>
                 <button class="secondary" id="backFromTraining">Back</button>
-            </div>
-        </div>
-
-        <div id="lanMenu" class="menu hidden">
-            <h2>LAN Multiplayer</h2>
-            <div class="field">
-                <label>Room ID
-                    <input type="text" id="roomId" placeholder="e.g., room1" />
-                </label>
-            </div>
-
-            <div class="field">
-                <label>Map
-                    <select id="lanMapSelect">
-                        <option value="__default__" selected>Default Arena</option>
-                    </select>
-                </label>
-            </div>
-
-            <div class="field">
-                <label>Rounds to Win
-                    <input type="number" id="roundsToWin" min="1" max="10" step="1" value="2" />
-                </label>
-            </div>
-            <div class="actions">
-                <button id="hostLanBtn">Host LAN Game</button>
-                <button id="joinLanBtn" class="secondary">Join LAN Game</button>
-                <button id="backFromLAN" class="secondary">Back</button>
-            </div>
-        </div>
-
-        <div id="ffaMenu" class="menu hidden">
-            <h2>FFA Match</h2>
-            <div class="field">
-                <label>Room ID
-                    <input type="text" id="ffaRoomId" placeholder="Leave blank to create" />
-                </label>
-            </div>
-            <div class="actions">
-                <button id="ffaCreateBtn">Create Match</button>
-                <button id="ffaJoinBtn" class="secondary">Join Match</button>
-                <button id="backFromFFA" class="secondary">Back</button>
             </div>
         </div>
 
@@ -335,7 +264,6 @@
     <script src="menuRenderer.js"></script>
 
     <!-- Input, UI, environment -->
-    <script src="menuNavigation.js"></script>
     <script src="input.js"></script>
     <script src="environment.js"></script>
 
@@ -346,6 +274,9 @@
     <script src="arenaTraining.js"></script>
     <script src="mapFormat.js"></script>
     <script src="mapThumbnail.js"></script>
+
+    <!-- Menu navigation (after mapFormat/mapThumbnail which it depends on) -->
+    <script src="menuNavigation.js"></script>
 
     <!-- Combat and AI -->
     <script src="projectiles.js"></script>

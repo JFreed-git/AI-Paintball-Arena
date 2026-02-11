@@ -1,16 +1,17 @@
 /**
  * menuNavigation.js — Menu DOM management and settings
  *
- * PURPOSE: Handles menu toggling (main menu, settings, LAN lobby, result screen),
- * settings persistence (sensitivity, FOV), game mode launch buttons, and HUD
- * visibility toggling. Bridges the DOM menu system with game mode start functions.
+ * PURPOSE: Handles menu toggling, game setup, lobby, settings persistence
+ * (sensitivity, FOV), and HUD visibility toggling. Bridges the DOM menu system
+ * with game mode start functions.
  *
  * EXPORTS (window):
  *   bindUI()               — initialize menu event listeners (called by game.js)
  *   showOnlyMenu(id)       — show one menu, hide all others
  *   setHUDVisible(visible) — toggle all HUD elements
+ *   lobbyJoinRoom(id, cb)  — join a lobby room by code
  *
- * DEPENDENCIES: modeAI.js, modeLAN.js, modeTraining.js (start/stop functions)
+ * DEPENDENCIES: modeTraining.js, modeFFA.js (start/stop functions)
  *
  * TODO (future):
  *   - Hero stats preview in lobby
@@ -303,16 +304,6 @@ function bindUI() {
     lobbyShowAsHost();
   });
 
-  // Navigation (Paintball only — legacy)
-  const gotoPaintball = document.getElementById('gotoPaintball');
-  const backFromPaintball = document.getElementById('backFromPaintball');
-
-  if (gotoPaintball) gotoPaintball.addEventListener('click', () => {
-    showOnlyMenu('paintballMenu');
-    populateMapDropdown('paintballMapSelect');
-  });
-  if (backFromPaintball) backFromPaintball.addEventListener('click', () => showOnlyMenu('mainMenu'));
-
   // Training Range navigation
   const gotoTraining = document.getElementById('gotoTraining');
   const backFromTraining = document.getElementById('backFromTraining');
@@ -324,67 +315,6 @@ function bindUI() {
     startTraining.addEventListener('click', () => {
       if (typeof window.startTrainingRange === 'function') {
         window.startTrainingRange();
-      }
-    });
-  }
-
-  // LAN menu navigation
-  const gotoLAN = document.getElementById('gotoLAN');
-  const backFromLAN = document.getElementById('backFromLAN');
-  if (gotoLAN) gotoLAN.addEventListener('click', () => {
-    showOnlyMenu('lanMenu');
-    populateMapDropdown('lanMapSelect');
-  });
-  if (backFromLAN) backFromLAN.addEventListener('click', () => showOnlyMenu('mainMenu'));
-
-  // Paintball (AI) start
-  const startPaintball = document.getElementById('startPaintball');
-  if (startPaintball) {
-    startPaintball.addEventListener('click', () => {
-      const sel = document.getElementById('paintballDifficulty');
-      const difficulty = sel ? sel.value : 'Easy';
-      const mapSel = document.getElementById('paintballMapSelect');
-      const mapName = (mapSel && mapSel.value) ? mapSel.value : '__default__';
-      if (typeof startPaintballGame !== 'function') return;
-
-      if (mapName && mapName !== '__default__' && typeof fetchMapData === 'function') {
-        fetchMapData(mapName).then(function (mapData) {
-          startPaintballGame({ difficulty, _mapData: mapData });
-        }).catch(function () {
-          startPaintballGame({ difficulty });
-        });
-      } else {
-        startPaintballGame({ difficulty });
-      }
-    });
-  }
-
-  // LAN host/join
-  const hostLanBtn = document.getElementById('hostLanBtn');
-  const joinLanBtn = document.getElementById('joinLanBtn');
-  if (hostLanBtn) {
-    hostLanBtn.addEventListener('click', () => {
-      const roomIdEl = document.getElementById('roomId');
-      const roomId = roomIdEl ? String(roomIdEl.value || '').trim() : '';
-      const roundsToWin = parseInt((document.getElementById('roundsToWin') || {}).value, 10) || 2;
-      const settings = { roundsToWin };
-      const mapSel = document.getElementById('lanMapSelect');
-      const mapName = (mapSel && mapSel.value) ? mapSel.value : '__default__';
-      if (typeof hostLanGame === 'function') {
-        hostLanGame(roomId, settings, mapName);
-      } else {
-        alert('Multiplayer module not loaded.');
-      }
-    });
-  }
-  if (joinLanBtn) {
-    joinLanBtn.addEventListener('click', () => {
-      const roomIdEl = document.getElementById('roomId');
-      const roomId = roomIdEl ? String(roomIdEl.value || '').trim() : '';
-      if (typeof joinLanGame === 'function') {
-        joinLanGame(roomId);
-      } else {
-        alert('Multiplayer module not loaded.');
       }
     });
   }
@@ -444,29 +374,6 @@ function bindLobbyUI() {
   var lobbyReadyBtn = document.getElementById('lobbyReadyBtn');
   var lobbyStartBtn = document.getElementById('lobbyStartBtn');
   var lobbyBackBtn = document.getElementById('lobbyBackBtn');
-
-  // FFA sub-menu navigation (legacy — kept for backward compat)
-  var gotoFFA = document.getElementById('gotoFFA');
-  var backFromFFA = document.getElementById('backFromFFA');
-  var ffaCreateBtn = document.getElementById('ffaCreateBtn');
-  var ffaJoinBtn = document.getElementById('ffaJoinBtn');
-
-  if (gotoFFA) gotoFFA.addEventListener('click', function () {
-    showOnlyMenu('ffaMenu');
-  });
-  if (backFromFFA) backFromFFA.addEventListener('click', function () {
-    showOnlyMenu('mainMenu');
-  });
-  if (ffaCreateBtn) ffaCreateBtn.addEventListener('click', function () {
-    showOnlyMenu('lobbyMenu');
-    lobbyShowAsHost();
-  });
-  if (ffaJoinBtn) ffaJoinBtn.addEventListener('click', function () {
-    var roomIdEl = document.getElementById('ffaRoomId');
-    var roomId = roomIdEl ? String(roomIdEl.value || '').trim() : '';
-    if (!roomId) { alert('Please enter a Room ID to join'); return; }
-    window.lobbyJoinRoom(roomId);
-  });
 
   // Ready button (non-host only)
   if (lobbyReadyBtn) {
@@ -863,6 +770,10 @@ function launchFFAFromLobby() {
   var cfg = window.gameSetupConfig || {};
   var slotData = lobbyCollectSlotConfigs();
 
+  // Transfer lobby socket to FFA module to avoid duplicate connections
+  var lobbySock = window._lobbySocket;
+  window._lobbySocket = null;
+
   if (ls.isHost) {
     var settings = {
       killLimit: cfg.killLimit || 10,
@@ -871,11 +782,11 @@ function launchFFAFromLobby() {
       aiConfigs: slotData.aiConfigs
     };
     if (typeof window.startFFAHost === 'function') {
-      window.startFFAHost(ls.roomId, settings);
+      window.startFFAHost(ls.roomId, settings, lobbySock);
     }
   } else {
     if (typeof window.joinFFAGame === 'function') {
-      window.joinFFAGame(ls.roomId);
+      window.joinFFAGame(ls.roomId, lobbySock);
     } else {
       showOnlyMenu(null);
     }
