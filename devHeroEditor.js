@@ -131,6 +131,12 @@
   var _bodyInteractionCtrl = null;
   var _weaponPreviewGroup = null;
 
+  // Camera offset state — world-space delta from the default camera position.
+  // Default camera is at (playerX, feetY + EYE_HEIGHT, playerZ).
+  // cameraOffset adds to that: (playerX + co.x, feetY + EYE_HEIGHT + co.y, playerZ + co.z)
+  var _cameraOffset = { x: 0, y: 0, z: 0 }; // all zeros = default position
+  var _cameraMarkerMesh = null;
+
   // View mode state
   var _viewMode = 'hitbox';
   var _hideWeapon = false;
@@ -613,6 +619,10 @@
 
   var _selectedBodyPartIndex = -1;
 
+  function isCameraMarkerIndex(index) {
+    return index === _bodyParts.length;
+  }
+
   function selectBodyPart(index) {
     _selectedBodyPartIndex = index;
     updateBodyPartVisuals();
@@ -633,7 +643,10 @@
   function updateBodyPartVisuals() {
     for (var i = 0; i < _bodyPartPreviewMeshes.length; i++) {
       var mesh = _bodyPartPreviewMeshes[i];
-      if (!mesh || !mesh.material) continue;
+      if (!mesh) continue;
+      // Camera marker uses invisible wrap mesh — skip material opacity changes
+      if (mesh.userData && mesh.userData.isCameraMarker) continue;
+      if (!mesh.material) continue;
       if (i === _selectedBodyPartIndex) {
         mesh.material.transparent = true;
         mesh.material.opacity = 0.7;
@@ -645,6 +658,18 @@
   }
 
   function onBodyPartMove(index, newPos) {
+    // Camera marker move
+    if (isCameraMarkerIndex(index)) {
+      var feetY = getPreviewFeetY();
+      var eyeH = (typeof EYE_HEIGHT !== 'undefined') ? EYE_HEIGHT : 2.0;
+      _cameraOffset.x = Math.round(newPos.x * 100) / 100;
+      _cameraOffset.y = Math.round((newPos.y - feetY - eyeH) * 100) / 100;
+      _cameraOffset.z = Math.round(newPos.z * 100) / 100;
+      var mesh = _bodyPartPreviewMeshes[index];
+      if (mesh) mesh.position.set(newPos.x, newPos.y, newPos.z);
+      syncBodyPartFormFromData();
+      return;
+    }
     if (index < 0 || index >= _bodyParts.length) return;
     var part = _bodyParts[index];
     var feetY = getPreviewFeetY();
@@ -660,6 +685,7 @@
   }
 
   function onBodyPartResizeStart(index) {
+    if (isCameraMarkerIndex(index)) return; // Camera marker can't be resized
     pushBodyPartUndo();
     if (index >= 0 && index < _bodyParts.length) {
       _bpResizeStartPart = JSON.parse(JSON.stringify(_bodyParts[index]));
@@ -667,6 +693,7 @@
   }
 
   function onBodyPartResize(index, axis, sign, delta) {
+    if (isCameraMarkerIndex(index)) return; // Camera marker can't be resized
     if (index < 0 || index >= _bodyParts.length) return;
     var part = _bodyParts[index];
     var start = _bpResizeStartPart;
@@ -698,16 +725,19 @@
   }
 
   function getBodyPartHandleDefs(index) {
+    if (isCameraMarkerIndex(index)) return []; // Camera marker: move only, no resize handles
     if (index < 0 || index >= _bodyParts.length) return [];
     return getHandleDefsForShape(_bodyParts[index].shape || 'box');
   }
 
   function getBodyPartCenter(index) {
+    if (isCameraMarkerIndex(index)) return getCameraMarkerWorldPos();
     if (index < 0 || index >= _bodyParts.length) return null;
     return getBodyPartWorldPos(_bodyParts[index]);
   }
 
   function getBodyPartHalfDim(index, axis) {
+    if (isCameraMarkerIndex(index)) return 0.25; // Small fixed size for camera marker
     if (index < 0 || index >= _bodyParts.length) return 0;
     // Return half-dim in world coords (2x scale)
     return getHalfDimForHandle(_bodyParts[index], axis) * 2;
@@ -718,7 +748,7 @@
   }
 
   function pushBodyPartUndo() {
-    _bpUndoStack.push(JSON.stringify(_bodyParts));
+    _bpUndoStack.push(JSON.stringify({ parts: _bodyParts, cam: _cameraOffset }));
     if (_bpUndoStack.length > MAX_UNDO) _bpUndoStack.shift();
     _bpRedoStack = [];
     updateBodyPartUndoRedoButtons();
@@ -726,8 +756,10 @@
 
   function bodyPartUndo() {
     if (_bpUndoStack.length === 0) return;
-    _bpRedoStack.push(JSON.stringify(_bodyParts));
-    _bodyParts = JSON.parse(_bpUndoStack.pop());
+    _bpRedoStack.push(JSON.stringify({ parts: _bodyParts, cam: _cameraOffset }));
+    var state = JSON.parse(_bpUndoStack.pop());
+    _bodyParts = state.parts || state;
+    if (state.cam) _cameraOffset = state.cam;
     _selectedBodyPartIndex = -1;
     if (_bodyInteractionCtrl) _bodyInteractionCtrl.clearHandles();
     renderBodyPartList();
@@ -737,8 +769,10 @@
 
   function bodyPartRedo() {
     if (_bpRedoStack.length === 0) return;
-    _bpUndoStack.push(JSON.stringify(_bodyParts));
-    _bodyParts = JSON.parse(_bpRedoStack.pop());
+    _bpUndoStack.push(JSON.stringify({ parts: _bodyParts, cam: _cameraOffset }));
+    var state = JSON.parse(_bpRedoStack.pop());
+    _bodyParts = state.parts || state;
+    if (state.cam) _cameraOffset = state.cam;
     _selectedBodyPartIndex = -1;
     if (_bodyInteractionCtrl) _bodyInteractionCtrl.clearHandles();
     renderBodyPartList();
@@ -883,6 +917,59 @@
 
       container.appendChild(div);
     });
+
+    // Camera marker entry (always last)
+    var camDiv = document.createElement('div');
+    camDiv.className = 'wmb-part';
+    camDiv.style.borderLeft = '3px solid #ffaa00';
+    var camHeader = document.createElement('div');
+    camHeader.className = 'wmb-part-header';
+    camHeader.innerHTML = '<span style="color:#ffaa00">CAMERA EYE</span>';
+    var camResetBtn = document.createElement('button');
+    camResetBtn.className = 'wmb-part-remove';
+    camResetBtn.textContent = 'Reset';
+    camResetBtn.style.borderColor = '#666';
+    camResetBtn.style.color = '#aaa';
+    camResetBtn.addEventListener('click', function () {
+      _cameraOffset = { x: 0, y: 0, z: 0 };
+      renderBodyPartList();
+      updateBodyPartPreview();
+    });
+    camHeader.appendChild(camResetBtn);
+    camDiv.appendChild(camHeader);
+
+    // Camera offset fields — world-space deltas from default position
+    var camFields = [
+      { label: 'Offset X', key: 'x' },
+      { label: 'Offset Y', key: 'y' },
+      { label: 'Offset Z', key: 'z' }
+    ];
+    var eyeH = (typeof EYE_HEIGHT !== 'undefined') ? EYE_HEIGHT : 2.0;
+    camFields.forEach(function (f) {
+      var row = document.createElement('div');
+      row.className = 'dev-field';
+      var lbl = document.createElement('label');
+      lbl.textContent = f.label;
+      var inp = document.createElement('input');
+      inp.type = 'number';
+      inp.step = '0.1';
+      inp.value = String(Math.round((_cameraOffset[f.key] || 0) * 100) / 100);
+      inp.addEventListener('input', function () {
+        _cameraOffset[f.key] = Math.round((parseFloat(inp.value) || 0) * 100) / 100;
+        updateBodyPartPreview();
+      });
+      row.appendChild(lbl);
+      row.appendChild(inp);
+      camDiv.appendChild(row);
+    });
+
+    // Note about default
+    var noteDiv = document.createElement('div');
+    noteDiv.style.cssText = 'font-size:10px;color:#888;padding:2px 4px;';
+    noteDiv.textContent = 'Offset from default eye pos (Y=' + eyeH.toFixed(1) + ')';
+    camDiv.appendChild(noteDiv);
+
+    container.appendChild(camDiv);
   }
 
   // Body part fields display in world-space coordinates (matching hitbox units).
@@ -1013,7 +1100,51 @@
       _bodyPartPreviewMeshes.push(mesh);
     }
 
+    // Add camera marker mesh (always last in the meshes array)
+    _cameraMarkerMesh = buildCameraMarkerMesh();
+    var camWp = getCameraMarkerWorldPos();
+    _cameraMarkerMesh.position.copy(camWp);
+    _bodyPartGroup.add(_cameraMarkerMesh);
+    _bodyPartPreviewMeshes.push(_cameraMarkerMesh);
+
     updateBodyPartVisuals();
+  }
+
+  // Build a distinctive camera marker mesh — a small eye/lens shape
+  function buildCameraMarkerMesh() {
+    var group = new THREE.Group();
+    // Main body: small box
+    var bodyGeom = new THREE.BoxGeometry(0.3, 0.2, 0.25);
+    var bodyMat = new THREE.MeshLambertMaterial({ color: 0xffaa00 });
+    var bodyMesh = new THREE.Mesh(bodyGeom, bodyMat);
+    group.add(bodyMesh);
+    // Lens: cylinder pointing forward (-Z)
+    var lensGeom = new THREE.CylinderGeometry(0.08, 0.08, 0.15, 8);
+    var lensMat = new THREE.MeshLambertMaterial({ color: 0x2244ff });
+    var lensMesh = new THREE.Mesh(lensGeom, lensMat);
+    lensMesh.rotation.x = Math.PI / 2;
+    lensMesh.position.z = -0.2;
+    group.add(lensMesh);
+    // Make it a single selectable object by using the group trick:
+    // The interaction controller needs a .geometry for raycasting, so wrap in a transparent sphere
+    var wrapGeom = new THREE.SphereGeometry(0.25, 8, 8);
+    var wrapMat = new THREE.MeshBasicMaterial({ visible: false });
+    var wrapMesh = new THREE.Mesh(wrapGeom, wrapMat);
+    wrapMesh.add(group);
+    wrapMesh.userData.isCameraMarker = true;
+    return wrapMesh;
+  }
+
+  // Get camera marker world position in the editor scene.
+  // Default camera is at (0, feetY + EYE_HEIGHT, 0); offset is added in world-space.
+  function getCameraMarkerWorldPos() {
+    var feetY = getPreviewFeetY();
+    var eyeH = (typeof EYE_HEIGHT !== 'undefined') ? EYE_HEIGHT : 2.0;
+    return new THREE.Vector3(
+      _cameraOffset.x || 0,
+      feetY + eyeH + (_cameraOffset.y || 0),
+      _cameraOffset.z || 0
+    );
   }
 
   // --- FP View toggle ---
@@ -1323,6 +1454,15 @@
       });
     }
 
+    // Include camera offset if customized (non-zero)
+    if (_cameraOffset.x !== 0 || _cameraOffset.y !== 0 || _cameraOffset.z !== 0) {
+      config.cameraOffset = {
+        x: _cameraOffset.x,
+        y: _cameraOffset.y,
+        z: _cameraOffset.z
+      };
+    }
+
     return config;
   }
 
@@ -1398,6 +1538,18 @@
     }
     _selectedBodyPartIndex = -1;
     if (_bodyInteractionCtrl) _bodyInteractionCtrl.clearHandles();
+
+    // Load camera offset
+    if (hero.cameraOffset) {
+      _cameraOffset = {
+        x: hero.cameraOffset.x || 0,
+        y: hero.cameraOffset.y || 0,
+        z: hero.cameraOffset.z || 0
+      };
+    } else {
+      _cameraOffset = { x: 0, y: 0, z: 0 };
+    }
+
     renderBodyPartList();
 
     var w = hero.weapon || {};

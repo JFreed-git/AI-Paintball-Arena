@@ -91,6 +91,9 @@
     // --- Body parts (custom hero visual model) ---
     this._bodyParts = opts.bodyParts || null;
 
+    // --- Camera offset (custom first-person eye position from hero) ---
+    this._cameraOffset = null;
+
     // --- 3D Mesh ---
     this._color = opts.color || 0xff5555;
     this._meshGroup = new THREE.Group();
@@ -502,7 +505,17 @@
   Player.prototype.syncCameraFromPlayer = function () {
     if (!this.cameraAttached) return;
     if (typeof camera !== 'undefined' && camera) {
-      camera.position.set(this.position.x, this.feetY + EYE_HEIGHT, this.position.z);
+      var co = this._cameraOffset;
+      if (co && (co.x !== 0 || co.y !== 0 || co.z !== 0)) {
+        // Custom camera offset: world-space delta from default eye position
+        camera.position.set(
+          this.position.x + co.x,
+          this.feetY + EYE_HEIGHT + co.y,
+          this.position.z + co.z
+        );
+      } else {
+        camera.position.set(this.position.x, this.feetY + EYE_HEIGHT, this.position.z);
+      }
     }
   };
 
@@ -566,6 +579,14 @@
   // --- Eye Position ---
 
   Player.prototype.getEyePos = function () {
+    var co = this._cameraOffset;
+    if (co && (co.x !== 0 || co.y !== 0 || co.z !== 0)) {
+      return new THREE.Vector3(
+        this.position.x + co.x,
+        this.feetY + EYE_HEIGHT + co.y,
+        this.position.z + co.z
+      );
+    }
     return new THREE.Vector3(this.position.x, this.feetY + EYE_HEIGHT, this.position.z);
   };
 

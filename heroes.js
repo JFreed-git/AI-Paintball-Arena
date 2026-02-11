@@ -316,6 +316,17 @@
       player.setHitboxConfig(hero.hitbox);
     }
 
+    // Apply camera offset if defined (for first-person eye position)
+    if (hero.cameraOffset) {
+      player._cameraOffset = {
+        x: hero.cameraOffset.x || 0,
+        y: hero.cameraOffset.y || 0,
+        z: hero.cameraOffset.z || 0
+      };
+    } else {
+      player._cameraOffset = null;
+    }
+
     // Store hero id on player for reference
     player._heroId = heroId;
 
