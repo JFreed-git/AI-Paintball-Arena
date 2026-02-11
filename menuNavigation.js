@@ -101,11 +101,54 @@ function bindUI() {
   });
   if (gotoHostGame) gotoHostGame.addEventListener('click', function () {
     showOnlyMenu('gameSetupMenu');
+    initGameSetup();
   });
   if (gotoJoinGame) gotoJoinGame.addEventListener('click', function () {
     var joinSection = document.getElementById('joinRoomSection');
-    if (joinSection) joinSection.classList.toggle('hidden');
+    if (joinSection) {
+      joinSection.classList.toggle('hidden');
+      if (!joinSection.classList.contains('hidden')) {
+        var codeInput = document.getElementById('joinRoomCode');
+        if (codeInput) codeInput.focus();
+      }
+    }
+    // Clear any previous error
+    var errEl = document.getElementById('joinRoomError');
+    if (errEl) { errEl.textContent = ''; errEl.classList.add('hidden'); }
   });
+
+  // Join room submit
+  function submitJoinRoom() {
+    var codeInput = document.getElementById('joinRoomCode');
+    var errEl = document.getElementById('joinRoomError');
+    if (errEl) { errEl.textContent = ''; errEl.classList.add('hidden'); }
+
+    var code = codeInput ? codeInput.value.trim().toUpperCase() : '';
+    if (!code) {
+      if (errEl) { errEl.textContent = 'Please enter a room code'; errEl.classList.remove('hidden'); }
+      return;
+    }
+
+    window.lobbyJoinRoom(code, function (err) {
+      if (err && errEl) {
+        errEl.textContent = err;
+        errEl.classList.remove('hidden');
+      }
+    });
+  }
+
+  if (joinRoomSubmit) joinRoomSubmit.addEventListener('click', submitJoinRoom);
+
+  var joinRoomCodeInput = document.getElementById('joinRoomCode');
+  if (joinRoomCodeInput) {
+    joinRoomCodeInput.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        submitJoinRoom();
+      }
+    });
+  }
+
   if (backFromStartGame) backFromStartGame.addEventListener('click', function () {
     showOnlyMenu('mainMenu');
   });
@@ -305,11 +348,12 @@ function bindLobbyUI() {
     });
   }
 
-  // Back button
+  // Back button — return to where the user came from
   if (lobbyBackBtn) {
     lobbyBackBtn.addEventListener('click', function () {
+      var returnTo = (window._lobbyState && window._lobbyState.joinedFrom) || 'mainMenu';
       lobbyCleanup();
-      showOnlyMenu('mainMenu');
+      showOnlyMenu(returnTo);
     });
   }
 }
@@ -331,9 +375,10 @@ function lobbyEnsureSocket() {
   });
 
   sock.on('roomClosed', function () {
+    var returnTo = (window._lobbyState && window._lobbyState.joinedFrom) || 'mainMenu';
     alert('Host left. Room closed.');
     lobbyCleanup();
-    showOnlyMenu('mainMenu');
+    showOnlyMenu(returnTo);
   });
 
   sock.on('gameStarted', function (payload) {
@@ -352,7 +397,8 @@ function lobbyShowAsHost() {
     roomId: generateRoomId(),
     isHost: true,
     ready: true,
-    playerList: []
+    playerList: [],
+    joinedFrom: 'startGameMenu'
   };
   var roomIdEl = document.getElementById('lobbyRoomId');
   if (roomIdEl) roomIdEl.textContent = window._lobbyState.roomId;
@@ -391,38 +437,47 @@ function lobbyShowAsHost() {
 }
 
 // Expose for external use (e.g., joining from a URL or button)
-window.lobbyJoinRoom = function (roomId) {
-  if (!roomId) { alert('Please enter a Room ID'); return; }
+// onError: optional callback(errorMessage) for inline error display
+window.lobbyJoinRoom = function (roomId, onError) {
+  if (!roomId) {
+    if (onError) onError('Please enter a Room ID');
+    else alert('Please enter a Room ID');
+    return;
+  }
   window._lobbyState = {
     roomId: roomId,
     isHost: false,
     ready: false,
-    playerList: []
+    playerList: [],
+    joinedFrom: 'startGameMenu'
   };
-
-  showOnlyMenu('lobbyMenu');
-  var roomIdEl = document.getElementById('lobbyRoomId');
-  if (roomIdEl) roomIdEl.textContent = roomId;
-
-  // Hide host-only elements
-  var hostOnlyEls = document.querySelectorAll('#lobbyMenu .host-only');
-  hostOnlyEls.forEach(function (el) { el.style.display = 'none'; });
-
-  // Show ready button, hide start button
-  var readyBtn = document.getElementById('lobbyReadyBtn');
-  var startBtn = document.getElementById('lobbyStartBtn');
-  if (readyBtn) { readyBtn.style.display = ''; readyBtn.textContent = 'Ready'; readyBtn.classList.remove('is-ready'); }
-  if (startBtn) startBtn.style.display = 'none';
 
   var sock = lobbyEnsureSocket();
   if (!sock) return;
 
   sock.emit('joinRoom', roomId, function (res) {
     if (!res || !res.ok) {
-      alert(res && res.error ? res.error : 'Failed to join room');
-      showOnlyMenu('mainMenu');
+      var errMsg = (res && res.error) ? res.error : 'Failed to join room';
+      window._lobbyState = null;
+      if (onError) onError(errMsg);
+      else alert(errMsg);
       return;
     }
+
+    // Success — show lobby as non-host
+    showOnlyMenu('lobbyMenu');
+    var roomIdEl = document.getElementById('lobbyRoomId');
+    if (roomIdEl) roomIdEl.textContent = roomId;
+
+    // Hide host-only elements
+    var hostOnlyEls = document.querySelectorAll('#lobbyMenu .host-only');
+    hostOnlyEls.forEach(function (el) { el.style.display = 'none'; });
+
+    // Show ready button, hide start button
+    var readyBtn = document.getElementById('lobbyReadyBtn');
+    var startBtn = document.getElementById('lobbyStartBtn');
+    if (readyBtn) { readyBtn.style.display = ''; readyBtn.textContent = 'Ready'; readyBtn.classList.remove('is-ready'); }
+    if (startBtn) startBtn.style.display = 'none';
   });
 };
 

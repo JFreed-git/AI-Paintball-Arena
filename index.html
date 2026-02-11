@@ -69,9 +69,10 @@
             <div id="joinRoomSection" class="hidden">
                 <div class="field">
                     <label>Room Code
-                        <input type="text" id="joinRoomCode" placeholder="Enter room code" />
+                        <input type="text" id="joinRoomCode" placeholder="Enter room code" maxlength="10" />
                     </label>
                 </div>
+                <div id="joinRoomError" class="join-error hidden"></div>
                 <div class="actions">
                     <button id="joinRoomSubmit">Join</button>
                 </div>

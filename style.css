@@ -146,6 +146,19 @@ body {
     background: rgba(255, 255, 255, 0.06);
 }
 
+/* ── Join Error ── */
+.join-error {
+    color: #ff5555;
+    font-size: 12px;
+    text-align: center;
+    margin: 6px 0;
+    padding: 4px 8px;
+}
+
+.join-error.hidden {
+    display: none;
+}
+
 /* ── FFA Lobby ── */
 .menu-screen {
     position: absolute;
