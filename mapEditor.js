@@ -103,8 +103,10 @@
     ramp: 'Ramp', wedge: 'Wedge', lshape: 'L-Shape', arch: 'Arch'
   };
 
-  // Spawn team colors
-  var SPAWN_COLORS = { '': 0xffd700, A: 0xff4444, B: 0x4488ff, C: 0x44cc44, D: 0xff8800 };
+  // Spawn team colors (numeric: 0=none, 1-4=teams)
+  var SPAWN_COLORS = { 0: 0xffd700, 1: 0xff4444, 2: 0x4488ff, 3: 0x44cc44, 4: 0xff8800 };
+  var SPAWN_MODES = ['ffa', 'tdm', 'ctf'];
+  var _currentSpawnMode = 'ffa';
 
   // Snap settings
   var gridSnap = true;
@@ -227,13 +229,24 @@
     return 'qg_' + (_nextQuadGroupId++);
   }
 
+  // Get the spawn array for the currently selected mode
+  function getCurrentSpawns() {
+    if (!mapData.spawns || typeof mapData.spawns !== 'object') mapData.spawns = { ffa: [] };
+    if (!mapData.spawns[_currentSpawnMode]) mapData.spawns[_currentSpawnMode] = [];
+    return mapData.spawns[_currentSpawnMode];
+  }
+
   function recalcNextSpawnId() {
     var max = 0;
-    var spawns = mapData.spawns || [];
-    for (var i = 0; i < spawns.length; i++) {
-      var sid = spawns[i].id || '';
-      var num = parseInt(sid.replace('spawn_', ''), 10);
-      if (num > max) max = num;
+    // Scan all modes for highest spawn ID
+    var modes = Object.keys(mapData.spawns || {});
+    for (var m = 0; m < modes.length; m++) {
+      var spawns = mapData.spawns[modes[m]] || [];
+      for (var i = 0; i < spawns.length; i++) {
+        var sid = spawns[i].id || '';
+        var num = parseInt(sid.replace('spawn_', ''), 10);
+        if (num > max) max = num;
+      }
     }
     _nextSpawnId = max + 1;
   }
@@ -252,8 +265,9 @@
     window.editorActive = true;
     playerMode = false;
     mapData = getDefaultMapData();
-    // Normalize spawns to array format
+    // Normalize spawns to per-mode format
     mapData.spawns = normalizeSpawns(mapData.spawns);
+    _currentSpawnMode = 'ffa';
     recalcNextId();
     recalcNextMirrorPairId();
     recalcNextQuadGroupId();
@@ -279,7 +293,8 @@
     var aspect = window.innerWidth / window.innerHeight;
     editorCamera = new THREE.PerspectiveCamera(75, aspect, 0.1, 500);
     // Position above first spawn
-    var firstSpawn = mapData.spawns[0];
+    var currentSpawns = getCurrentSpawns();
+    var firstSpawn = currentSpawns[0];
     var camZ = firstSpawn ? firstSpawn.position[2] - 15 : -52;
     var camX = firstSpawn ? firstSpawn.position[0] : 0;
     editorCamera.position.set(camX, 25, camZ);
@@ -387,20 +402,51 @@
       }
     }
     spawnEntries = [];
+    selectedSpawnEntry = null;
 
-    var spawns = mapData.spawns || [];
+    var spawns = getCurrentSpawns();
     for (var si = 0; si < spawns.length; si++) {
       var sp = spawns[si];
-      var color = SPAWN_COLORS[sp.team] || SPAWN_COLORS[''];
+      var color = SPAWN_COLORS[sp.team] || SPAWN_COLORS[0];
       var ringMat = new THREE.MeshBasicMaterial({ color: color, side: THREE.DoubleSide });
       var ring = new THREE.Mesh(new THREE.RingGeometry(1.0, 1.8, 32), ringMat);
       ring.rotation.x = -Math.PI / 2;
       ring.position.set(sp.position[0], -0.94, sp.position[2]);
       ring.name = 'EditorGroup';
       editorScene.add(ring);
-      // Add team label
       spawnEntries.push({ mesh: ring, data: sp });
     }
+  }
+
+  function switchSpawnMode(mode) {
+    if (SPAWN_MODES.indexOf(mode) < 0) return;
+    deselectAll();
+    _currentSpawnMode = mode;
+    rebuildSpawnMeshes();
+    updateStatusBar();
+    // Update the mode dropdown if it exists
+    var modeDropdown = document.getElementById('editorSpawnMode');
+    if (modeDropdown) modeDropdown.value = mode;
+  }
+
+  function copySpawnsFrom(sourceMode) {
+    if (sourceMode === _currentSpawnMode) return;
+    var source = mapData.spawns[sourceMode];
+    if (!source || source.length === 0) { alert('No spawns in ' + sourceMode + ' to copy.'); return; }
+    pushUndo();
+    var dest = [];
+    for (var i = 0; i < source.length; i++) {
+      var sp = source[i];
+      dest.push({
+        id: 'spawn_' + (_nextSpawnId++),
+        position: sp.position.slice(),
+        team: sp.team
+      });
+    }
+    mapData.spawns[_currentSpawnMode] = dest;
+    rebuildSpawnMeshes();
+    updateStatusBar();
+    showEditorToast('Copied ' + dest.length + ' spawns from ' + sourceMode);
   }
 
   // ── Mirror axis lines ──
@@ -1130,7 +1176,7 @@
     document.getElementById('epropThicknessRow').style.display = 'none';
     document.getElementById('epropRotRow').style.display = 'none';
     document.getElementById('epropSpawnTeamRow').style.display = '';
-    document.getElementById('epropSpawnTeam').value = data.team || '';
+    document.getElementById('epropSpawnTeam').value = data.team || 0;
     document.getElementById('epropMirror').style.display = 'none';
   }
 
@@ -1141,7 +1187,7 @@
       sp.position[0] = parseFloat(document.getElementById('epropX').value) || 0;
       sp.position[2] = parseFloat(document.getElementById('epropZ').value) || 0;
       var teamSel = document.getElementById('epropSpawnTeam');
-      if (teamSel) sp.team = teamSel.value;
+      if (teamSel) sp.team = parseInt(teamSel.value, 10) || 0;
       rebuildSpawnMeshes();
       // Re-select the spawn after rebuild
       for (var si = 0; si < spawnEntries.length; si++) {
@@ -1330,21 +1376,27 @@
 
   function placeSpawnAt(worldX, worldZ) {
     pushUndo();
-    var team = '';
-    var hasA = false, hasB = false;
-    for (var i = 0; i < mapData.spawns.length; i++) {
-      if (mapData.spawns[i].team === 'A') hasA = true;
-      if (mapData.spawns[i].team === 'B') hasB = true;
+    var spawns = getCurrentSpawns();
+    var team = 0;
+    // Auto-assign team based on mode
+    if (_currentSpawnMode === 'ffa') {
+      team = 0; // FFA: no team
+    } else {
+      // TDM/CTF: alternate between team 1 and team 2
+      var count1 = 0, count2 = 0;
+      for (var i = 0; i < spawns.length; i++) {
+        if (spawns[i].team === 1) count1++;
+        if (spawns[i].team === 2) count2++;
+      }
+      team = (count1 <= count2) ? 1 : 2;
     }
-    if (!hasA) team = 'A';
-    else if (!hasB) team = 'B';
 
     var spawnData = {
       id: 'spawn_' + (_nextSpawnId++),
       position: [snapToGrid(worldX), 0, snapToGrid(worldZ)],
       team: team
     };
-    mapData.spawns.push(spawnData);
+    spawns.push(spawnData);
     rebuildSpawnMeshes();
     // Select the new spawn
     for (var si = 0; si < spawnEntries.length; si++) {
@@ -1356,8 +1408,9 @@
   function deleteSelected() {
     if (selectedSpawnEntry) {
       pushUndo();
-      var spIdx = mapData.spawns.indexOf(selectedSpawnEntry.data);
-      if (spIdx >= 0) mapData.spawns.splice(spIdx, 1);
+      var spawns = getCurrentSpawns();
+      var spIdx = spawns.indexOf(selectedSpawnEntry.data);
+      if (spIdx >= 0) spawns.splice(spIdx, 1);
       rebuildSpawnMeshes();
       deselectAll();
       updateStatusBar();
@@ -1791,6 +1844,31 @@
     addUI('editorLoadConfirm', 'click', onLoadConfirm);
     addUI('editorDeleteMap', 'click', onDeleteMap);
     addUI('editorLoadCancel', 'click', function () { loadPanel.classList.add('hidden'); });
+
+    // Spawn mode dropdown
+    addUI('editorSpawnMode', 'change', function () {
+      var sel = document.getElementById('editorSpawnMode');
+      if (sel) switchSpawnMode(sel.value);
+    });
+
+    // Copy spawns dropdown toggle
+    addUI('editorCopySpawnsBtn', 'click', function () {
+      var dd = document.getElementById('editorCopySpawnsDropdown');
+      if (dd) dd.classList.toggle('open');
+    });
+
+    // Copy spawns option buttons
+    var copyOpts = document.querySelectorAll('.editor-copy-spawn-opt');
+    for (var co = 0; co < copyOpts.length; co++) {
+      (function (btn) {
+        addUI(btn, 'click', function () {
+          var srcMode = btn.getAttribute('data-mode');
+          copySpawnsFrom(srcMode);
+          var dd = document.getElementById('editorCopySpawnsDropdown');
+          if (dd) dd.classList.remove('open');
+        });
+      })(copyOpts[co]);
+    }
   }
 
   function unbindEditorEvents() {
@@ -2191,12 +2269,15 @@
       name: 'new-map',
       version: 2,
       arena: { width: 60, length: 90, wallHeight: 3.5 },
-      spawns: [
-        { id: 'spawn_1', position: [0, 0, -37], team: 'A' },
-        { id: 'spawn_2', position: [0, 0, 37], team: 'B' }
-      ],
+      spawns: {
+        ffa: [
+          { id: 'spawn_1', position: [0, 0, -37], team: 0 },
+          { id: 'spawn_2', position: [0, 0, 37], team: 0 }
+        ]
+      },
       objects: []
     };
+    _currentSpawnMode = 'ffa';
     _nextId = 1;
     _nextMirrorPairId = 1;
     _nextQuadGroupId = 1;
@@ -2242,7 +2323,8 @@
     var snapLabel = gridSnap && edgeSnap ? 'Grid+Edge' : gridSnap ? 'Grid' : edgeSnap ? 'Edge' : 'Off';
     toolText += '  |  Snap: ' + snapLabel;
     if (toolLabel) toolLabel.textContent = toolText;
-    if (objCount) objCount.textContent = 'Objects: ' + (mapData ? mapData.objects.length : 0);
+    var spawnCount = mapData ? getCurrentSpawns().length : 0;
+    if (objCount) objCount.textContent = 'Objects: ' + (mapData ? mapData.objects.length : 0) + '  |  Spawns (' + _currentSpawnMode + '): ' + spawnCount;
   }
 
   function showEditorToast(msg) {

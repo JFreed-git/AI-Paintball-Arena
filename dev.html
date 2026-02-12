@@ -454,6 +454,19 @@
                         </div>
                     </div>
                     <button class="editor-tool" data-tool="spawn">Spawn</button>
+                    <select id="editorSpawnMode" class="editor-btn" style="padding:2px 4px;font-size:11px;" title="Spawn mode">
+                        <option value="ffa">FFA</option>
+                        <option value="tdm">TDM</option>
+                        <option value="ctf">CTF</option>
+                    </select>
+                    <div class="editor-dropdown" id="editorCopySpawnsDropdown">
+                        <button class="editor-btn" id="editorCopySpawnsBtn" style="font-size:11px;" title="Copy spawns from another mode">Copy From &#9662;</button>
+                        <div class="editor-dropdown-menu" id="editorCopySpawnsMenu">
+                            <button class="editor-copy-spawn-opt" data-mode="ffa">FFA</button>
+                            <button class="editor-copy-spawn-opt" data-mode="tdm">TDM</button>
+                            <button class="editor-copy-spawn-opt" data-mode="ctf">CTF</button>
+                        </div>
+                    </div>
                     <span class="editor-sep"></span>
                     <button class="editor-btn" id="editorMirrorToggle">Mirror: Off</button>
                     <button class="editor-btn" id="editorSnapToggle">Snap: Grid+Edge</button>
@@ -484,7 +497,7 @@
                     <div class="eprop" id="epropThicknessRow"><label>Thick</label><input type="number" id="epropThickness" step="0.25" min="0.25" /></div>
                     <div class="eprop" id="epropRotRow"><label>Rotation</label><input type="number" id="epropRot" step="90" /></div>
                     <div class="eprop"><label>Color</label><input type="color" id="epropColor" value="#6B5B4F" /></div>
-                    <div class="eprop" id="epropSpawnTeamRow" style="display:none"><label>Team</label><select id="epropSpawnTeam"><option value="">None</option><option value="A">A</option><option value="B">B</option><option value="C">C</option><option value="D">D</option></select></div>
+                    <div class="eprop" id="epropSpawnTeamRow" style="display:none"><label>Team</label><select id="epropSpawnTeam"><option value="0">None</option><option value="1">Team 1</option><option value="2">Team 2</option><option value="3">Team 3</option><option value="4">Team 4</option></select></div>
                     <button class="editor-btn" id="epropMirror">Mirror Copy</button>
                     <button class="editor-btn editor-danger" id="epropDelete">Delete</button>
                 </div>
