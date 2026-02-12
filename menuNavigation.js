@@ -171,7 +171,7 @@ function bindUI() {
       name: 'Default Arena',
       mapData: defaultMapData,
       maxPlayers: defaultMapData ? (typeof getMapMaxPlayers === 'function' ? getMapMaxPlayers(defaultMapData) : 2) : 6,
-      supportedModes: (defaultMapData && defaultMapData.supportedModes) || ['ffa']
+      supportedModes: (defaultMapData && defaultMapData.spawns && typeof normalizeSpawns === 'function') ? Object.keys(normalizeSpawns(defaultMapData.spawns)) : ['ffa']
     };
 
     _fetchServerMaps(function (serverMaps) {
@@ -192,7 +192,7 @@ function bindUI() {
             name: mapData.name || name,
             mapData: mapData,
             maxPlayers: typeof getMapMaxPlayers === 'function' ? getMapMaxPlayers(mapData) : 2,
-            supportedModes: mapData.supportedModes || ['ffa']
+            supportedModes: (mapData.spawns && typeof normalizeSpawns === 'function') ? Object.keys(normalizeSpawns(mapData.spawns)) : ['ffa']
           });
           if (--pending === 0) callback(entries);
         }).catch(function () {
@@ -260,6 +260,20 @@ function bindUI() {
     _selectMapCard(0);
   }
 
+  function _updateSelectedBadgeForMode(mode) {
+    if (!_gameSetupSelected || !_gameSetupSelected.mapData) return;
+    var mapGrid = document.getElementById('mapGrid');
+    if (!mapGrid) return;
+    var selectedCard = mapGrid.querySelector('.map-card.selected');
+    if (!selectedCard) return;
+    var badge = selectedCard.querySelector('.map-card-badge');
+    if (!badge) return;
+    var count = (typeof getMapMaxPlayers === 'function')
+      ? getMapMaxPlayers(_gameSetupSelected.mapData, mode)
+      : _gameSetupSelected.maxPlayers;
+    badge.textContent = count + 'P';
+  }
+
   function _selectMapCard(idx) {
     _gameSetupSelected = _gameSetupMaps[idx] || null;
     var mapGrid = document.getElementById('mapGrid');
@@ -278,6 +292,12 @@ function bindUI() {
         opt.textContent = modeLabels[mode] || mode.toUpperCase();
         modeSelect.appendChild(opt);
       });
+      // Update badge for the first mode
+      _updateSelectedBadgeForMode(modeSelect.value);
+      // Wire change event to update badge on mode switch
+      modeSelect.onchange = function () {
+        _updateSelectedBadgeForMode(modeSelect.value);
+      };
     }
   }
 
@@ -292,13 +312,17 @@ function bindUI() {
     var modeSelect = document.getElementById('setupMode');
     var roundsInput = document.getElementById('setupRounds');
     var killLimitInput = document.getElementById('setupKillLimit');
+    var selectedMode = modeSelect ? modeSelect.value : 'ffa';
+    var maxPlayers = (typeof getMapMaxPlayers === 'function' && _gameSetupSelected.mapData)
+      ? getMapMaxPlayers(_gameSetupSelected.mapData, selectedMode)
+      : _gameSetupSelected.maxPlayers;
     window.gameSetupConfig = {
       mapName: _gameSetupSelected.name,
       mapData: _gameSetupSelected.mapData,
-      mode: modeSelect ? modeSelect.value : 'ffa',
+      mode: selectedMode,
       rounds: roundsInput ? parseInt(roundsInput.value, 10) || 3 : 3,
       killLimit: killLimitInput ? parseInt(killLimitInput.value, 10) || 10 : 10,
-      maxPlayers: _gameSetupSelected.maxPlayers
+      maxPlayers: maxPlayers
     };
     showOnlyMenu('lobbyMenu');
     lobbyShowAsHost();
@@ -779,6 +803,7 @@ function launchFFAFromLobby() {
     var settings = {
       killLimit: cfg.killLimit || 10,
       mapName: cfg.mapName || '__default__',
+      mode: cfg.mode || 'ffa',
       rounds: cfg.rounds || 3,
       aiConfigs: slotData.aiConfigs
     };
