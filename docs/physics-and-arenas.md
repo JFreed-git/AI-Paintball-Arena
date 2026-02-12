@@ -4,13 +4,12 @@ Consult this doc when working on: movement, gravity, jumping, collision, ground 
 
 ## Physics Engine
 
-Movement is full 3D — horizontal XZ walking plus vertical gravity, jumping, and ramp traversal. `updateFullPhysics` handles the complete cycle: horizontal movement → ceiling clearance check → ground detection via `getGroundHeight` (downward raycast against `arena.solids`) → jump/gravity → ground snapping → ceiling collision resolution → 2D collision resolution → recheck.
+Movement is full 3D — horizontal XZ walking plus vertical gravity, jumping, and ramp traversal. `updateFullPhysics` handles the complete cycle: horizontal movement → ground detection via `getGroundHeight` (downward raycast against `arena.solids`) → jump/gravity → ground snapping → unified 3D collision resolution → ground recheck.
 
 - Gravity constant is in `physics.js` (`GRAVITY = 20`), NOT in config.js.
 - Per-hero jump velocity is supported via `state._jumpVelocity` (defaults to `JUMP_VELOCITY` from physics.js).
-- Collision uses Y-aware AABB push-out against `arena.colliders` (Box3 array); colliders are skipped when the player stands on top of them (`feetY + 0.1 >= box.max.y`).
-- **Horizontal ceiling clearance** (step 2b in `updateFullPhysics`): after applying horizontal movement, checks if the new XZ position puts the player's head inside an overhead block (block bottom above feet but below head, XZ center inside the block's actual footprint). If so, reverts the XZ movement — the player stops at the edge instead of being pushed sideways by the XZ resolver.
-- **Ceiling collisions** (`resolveCeilingCollisions`) run before XZ push-out when the player has upward velocity (jumping). Any overhead block (bottom above feet, head has reached it, XZ overlap within radius-expanded zone) triggers a ceiling hit — pushes player down so head clears the block. Wall blocks that extend to ground level are filtered by the `box.min.y <= feetY` check, so only truly overhead blocks (floating platforms, ceilings, overhangs) are resolved here.
+- **Unified 3D collision** (`resolveCollisions3D`): single resolver handles walls, ceilings, and block-tops. Treats each collider as a solid volume — if the player overlaps it, pushes out along the axis of minimum penetration (6 directions: ±X, ±Z, up, down). Ceiling hits push the player down and zero upward velocity. Wall hits push sideways. Block-top hits push up and ground the player. Multi-pass (up to 3) handles being wedged between blocks.
+- Colliders are skipped when the player stands on top of them (`feetY + 0.1 >= box.max.y`), enabling ramp traversal.
 - Ramp and wedge colliders use a staircase approximation (5 progressively shorter AABBs + back wall) so the Y-skip logic lets players ascend slopes while still blocking side entry.
 - L-shape colliders decompose into 2 AABBs (horizontal leg + vertical leg) to avoid blocking the empty inner corner.
 - Arch colliders decompose into 3 AABBs (2 full-height pillars + top lintel above the opening).

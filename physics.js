@@ -8,7 +8,8 @@
  * EXPORTS (window):
  *   GROUND_Y, GRAVITY, JUMP_VELOCITY, EYE_HEIGHT, MAX_STEP_HEIGHT — physics constants
  *   getGroundHeight(pos, solids, feetY, grounded) — raycast ground detection
- *   resolveCollisions2D(position, radius, aabbs, feetY) — AABB collision push-out
+ *   resolveCollisions3D(state, colliders) — unified 3D AABB collision (walls+ceiling+block-tops)
+ *   resolveCollisions2D(position, radius, aabbs, feetY) — legacy XZ-only push-out (used by mapEditor)
  *   updateFullPhysics(state, input, arena, dt) — full physics update cycle
  *   hasBlockingBetween(origin, target, solids) — LOS test
  *
@@ -108,36 +109,6 @@ function getGroundHeight(pos, solids, feetY, grounded) {
   return bestY;
 }
 
-// Resolve ceiling collisions: when jumping upward, prevent head from entering blocks above.
-// Must run BEFORE resolveCollisions2D so the body band no longer overlaps ceiling blocks.
-// Wall blocks (extending to ground) are filtered by the feetY check, so only truly overhead
-// blocks (floating platforms, ceilings, overhangs) are resolved here.
-function resolveCeilingCollisions(state, colliders) {
-  if (!colliders || colliders.length === 0) return;
-  if (state.verticalVelocity <= 0) return; // Only when moving upward
-
-  var radius = state.radius || 0.3;
-  var headY = state.feetY + EYE_HEIGHT;
-
-  for (var i = 0; i < colliders.length; i++) {
-    var box = colliders[i];
-
-    // Block bottom must be above player's feet (block is above us)
-    if (box.min.y <= state.feetY) continue;
-    // Head must have reached or passed the block's bottom face
-    if (headY < box.min.y) continue;
-
-    // Check XZ overlap (same expansion as resolveCollisions2D)
-    if (state.position.x < box.min.x - radius || state.position.x > box.max.x + radius) continue;
-    if (state.position.z < box.min.z - radius || state.position.z > box.max.z + radius) continue;
-
-    // Ceiling hit: push player down so head clears block bottom
-    state.feetY = box.min.y - EYE_HEIGHT - 1e-3;
-    state.verticalVelocity = 0;
-    headY = state.feetY + EYE_HEIGHT; // Update for remaining colliders
-  }
-}
-
 // Resolve collisions against an array of AABBs (THREE.Box3) in XZ plane with sliding.
 // position: THREE.Vector3 (modified in-place)
 // radius: number (capsule radius approximation)
@@ -187,6 +158,72 @@ function resolveCollisions2D(position, radius, aabbs, feetY) {
   }
 }
 
+// Unified 3D AABB collision resolver: handles walls, ceilings, and block-tops using
+// minimum-penetration-axis resolution. Replaces the separate ceiling and XZ resolvers.
+// Blocks are solid volumes — if the player is inside one, push out along whichever
+// axis has the smallest penetration. Multi-pass handles being wedged between blocks.
+function resolveCollisions3D(state, colliders) {
+  if (!colliders || colliders.length === 0) return;
+  var radius = state.radius || 0.3;
+
+  for (var pass = 0; pass < 3; pass++) {
+    var resolved = false;
+
+    for (var i = 0; i < colliders.length; i++) {
+      var box = colliders[i];
+      var feetY = state.feetY;
+      var headY = feetY + EYE_HEIGHT;
+
+      // Skip blocks player is standing on top of (let ground detection handle this)
+      if (feetY + 0.1 >= box.max.y) continue;
+
+      // Expand block by player radius in XZ for capsule approximation
+      var bMinX = box.min.x - radius;
+      var bMaxX = box.max.x + radius;
+      var bMinZ = box.min.z - radius;
+      var bMaxZ = box.max.z + radius;
+
+      // Check full 3D overlap: player XZ point inside expanded box AND vertical overlap
+      if (state.position.x <= bMinX || state.position.x >= bMaxX) continue;
+      if (state.position.z <= bMinZ || state.position.z >= bMaxZ) continue;
+      if (headY <= box.min.y || feetY >= box.max.y) continue;
+
+      // Compute penetration depth along each of 6 directions
+      var penPosX = bMaxX - state.position.x;  // push +X (right)
+      var penNegX = state.position.x - bMinX;  // push -X (left)
+      var penPosZ = bMaxZ - state.position.z;  // push +Z
+      var penNegZ = state.position.z - bMinZ;  // push -Z
+      var penDown = headY - box.min.y;          // push down (ceiling hit)
+      var penUp = box.max.y - feetY;            // push up (land on top)
+
+      // Find minimum penetration
+      var minPen = Math.min(penPosX, penNegX, penPosZ, penNegZ, penDown, penUp);
+
+      if (minPen === penDown) {
+        // Ceiling: push player down so head clears block bottom
+        state.feetY = box.min.y - EYE_HEIGHT - 1e-3;
+        if (state.verticalVelocity > 0) state.verticalVelocity = 0;
+      } else if (minPen === penUp) {
+        // Landing on block top: push player up
+        state.feetY = box.max.y;
+        state.verticalVelocity = 0;
+        state.grounded = true;
+      } else if (minPen === penPosX) {
+        state.position.x = bMaxX + 1e-6;
+      } else if (minPen === penNegX) {
+        state.position.x = bMinX - 1e-6;
+      } else if (minPen === penPosZ) {
+        state.position.z = bMaxZ + 1e-6;
+      } else {
+        state.position.z = bMinZ - 1e-6;
+      }
+      resolved = true;
+    }
+
+    if (!resolved) break; // No more overlaps
+  }
+}
+
 // Full 3D physics update: horizontal movement + gravity + jumping + ground detection.
 // state: { position: THREE.Vector3, feetY: number, verticalVelocity: number, grounded: boolean,
 //          walkSpeed: number, sprintSpeed?: number, radius: number }
@@ -208,28 +245,8 @@ function updateFullPhysics(state, input, arena, dt) {
   // 2. Apply horizontal movement
   var speed = input.sprint && state.sprintSpeed ? state.sprintSpeed : state.walkSpeed;
   if (dir.lengthSq() > 0) {
-    var prevX = state.position.x;
-    var prevZ = state.position.z;
     state.position.x += dir.x * speed * dt;
     state.position.z += dir.z * speed * dt;
-
-    // 2b. Ceiling clearance check: revert XZ if horizontal movement puts head inside an overhead block.
-    // Without this, the XZ resolver sees head overlap and pushes sideways (teleport feeling).
-    if (arena && Array.isArray(arena.colliders)) {
-      var headY = state.feetY + EYE_HEIGHT;
-      for (var ci = 0; ci < arena.colliders.length; ci++) {
-        var cbox = arena.colliders[ci];
-        // Block bottom must be above feet (overhead block) and below head (head enters it)
-        if (cbox.min.y <= state.feetY || cbox.min.y >= headY) continue;
-        // Player XZ center must be inside the block's actual footprint
-        if (state.position.x <= cbox.min.x || state.position.x >= cbox.max.x) continue;
-        if (state.position.z <= cbox.min.z || state.position.z >= cbox.max.z) continue;
-        // Head would enter this block — revert horizontal movement
-        state.position.x = prevX;
-        state.position.z = prevZ;
-        break;
-      }
-    }
   }
 
   // 3. Detect ground height at new XZ
@@ -265,17 +282,12 @@ function updateFullPhysics(state, input, arena, dt) {
     }
   }
 
-  // 7. Ceiling collision check (prevent head from entering blocks when jumping)
+  // 7. Resolve ALL collisions (walls + ceiling + block-tops) in one pass
   if (arena && Array.isArray(arena.colliders)) {
-    resolveCeilingCollisions(state, arena.colliders);
+    resolveCollisions3D(state, arena.colliders);
   }
 
-  // 8. Resolve 2D collisions with dynamic feetY
-  if (arena && Array.isArray(arena.colliders)) {
-    resolveCollisions2D(state.position, state.radius || 0.3, arena.colliders, state.feetY);
-  }
-
-  // 9. Recheck ground after collision push-out (may have been pushed to different XZ)
+  // 8. Recheck ground after collision push-out (may have been pushed to different XZ)
   var groundH2 = getGroundHeight(state.position, solids, state.feetY, state.grounded);
   if (state.grounded) {
     if (groundH2 < state.feetY - MAX_STEP_HEIGHT) {
@@ -286,7 +298,7 @@ function updateFullPhysics(state, input, arena, dt) {
     }
   }
 
-  // 10. Set eye-height position
+  // 9. Set eye-height position
   state.position.y = state.feetY + EYE_HEIGHT;
 }
 
@@ -315,5 +327,6 @@ window.EYE_HEIGHT = EYE_HEIGHT;
 window.MAX_STEP_HEIGHT = MAX_STEP_HEIGHT;
 window.getGroundHeight = getGroundHeight;
 window.resolveCollisions2D = resolveCollisions2D;
+window.resolveCollisions3D = resolveCollisions3D;
 window.updateFullPhysics = updateFullPhysics;
 window.hasBlockingBetween = hasBlockingBetween;
