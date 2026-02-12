@@ -155,7 +155,9 @@
     if (!state) return;
     var p = state.player;
     sharedUpdateHealthBar(state.hud.healthFill, p.health, PLAYER_HEALTH);
-    sharedUpdateAmmoDisplay(state.hud.ammoDisplay, p.weapon.ammo, p.weapon.magSize);
+    if (!p.weapon.meleeOnly) {
+      sharedUpdateAmmoDisplay(state.hud.ammoDisplay, p.weapon.ammo, p.weapon.magSize);
+    }
     sharedUpdateMeleeCooldown(state.hud.meleeCooldown, p.weapon, performance.now());
 
     // Stats
@@ -182,6 +184,7 @@
       state.player.weapon = new Weapon(hero.weapon);
     }
     updateWeaponNameDisplay();
+    sharedSetMeleeOnlyHUD(!!state.player.weapon.meleeOnly, state.hud.ammoDisplay, state.hud.reloadIndicator, state.hud.meleeCooldown);
     updateHUD();
   };
 
@@ -255,6 +258,7 @@
 
   function handlePlayerShooting(input, now) {
     var w = state.player.weapon;
+    if (w.meleeOnly) return; // No gun shooting for melee-only weapons
 
     if (input.reloadPressed) {
       if (sharedStartReload(w, now)) {
@@ -326,6 +330,7 @@
   }
 
   function updateReload(now) {
+    if (state.player.weapon.meleeOnly) return;
     if (sharedHandleReload(state.player.weapon, now)) {
       sharedSetReloadingUI(false, state.hud.reloadIndicator);
       updateHUD();

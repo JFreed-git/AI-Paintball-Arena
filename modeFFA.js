@@ -1818,6 +1818,7 @@
             if (localEntry) {
               applyHeroWeapon(localEntry.entity, heroId);
               localEntry.heroId = heroId;
+              sharedSetMeleeOnlyHUD(!!localEntry.entity.weapon.meleeOnly, state.hud.ammoDisplay, state.hud.reloadIndicator, state.hud.meleeCooldown);
             }
             if (socket) socket.emit('heroSelect', { heroId: heroId, clientId: state.localId });
             if (typeof window.closePreRoundHeroSelect === 'function') window.closePreRoundHeroSelect();
@@ -1828,6 +1829,7 @@
             if (localEntry) {
               applyHeroWeapon(localEntry.entity, heroId);
               localEntry.heroId = heroId;
+              sharedSetMeleeOnlyHUD(!!localEntry.entity.weapon.meleeOnly, state.hud.ammoDisplay, state.hud.reloadIndicator, state.hud.meleeCooldown);
             }
             if (socket) socket.emit('heroSelect', { heroId: heroId, clientId: state.localId });
             if (typeof window.closePreRoundHeroSelect === 'function') window.closePreRoundHeroSelect();

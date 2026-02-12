@@ -13,6 +13,7 @@
  *   sharedHandleReload(weapon, now)
  *   sharedStartReload(weapon, now)
  *   sharedCanShoot(weapon, now, cooldownMs)
+ *   sharedSetMeleeOnlyHUD(isMeleeOnly, ammoEl, reloadEl, meleeCdEl)
  *
  * DEPENDENCIES: crosshair.js (setCrosshairDimmed)
  *
@@ -109,6 +110,17 @@
   window.sharedUpdateAmmoDisplay = function (ammoEl, current, magSize) {
     if (!ammoEl) return;
     ammoEl.textContent = current + '/' + magSize;
+  };
+
+  /**
+   * Toggle HUD elements for meleeOnly weapons vs gun weapons.
+   * meleeOnly: hide ammo + reload, keep melee cooldown visible.
+   * gun: show ammo + reload as normal, melee cooldown managed elsewhere.
+   */
+  window.sharedSetMeleeOnlyHUD = function (isMeleeOnly, ammoEl, reloadEl, meleeCdEl) {
+    if (ammoEl) ammoEl.style.display = isMeleeOnly ? 'none' : '';
+    if (reloadEl) reloadEl.classList.add('hidden'); // always hide reload on switch
+    if (meleeCdEl) meleeCdEl.classList.toggle('hidden', !isMeleeOnly);
   };
 
   /**
