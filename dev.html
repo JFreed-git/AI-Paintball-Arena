@@ -67,19 +67,21 @@
 
                     <h4 class="dev-section-header">Weapon</h4>
                     <div class="dev-section-content">
-                        <div class="dev-field"><label>Cooldown (ms)</label><input type="number" id="heCooldownMs" value="166" min="1" /></div>
-                        <div class="dev-field"><label>Mag Size</label><input type="number" id="heMagSize" value="6" min="1" /></div>
-                        <div class="dev-field"><label>Reload (sec)</label><input type="number" id="heReloadTime" value="2.5" step="0.1" /></div>
-                        <div class="dev-field"><label>Damage</label><input type="number" id="heDamage" value="20" min="1" /></div>
-                        <div class="dev-field"><label>Spread (rad)</label><input type="number" id="heSpreadRad" value="0" step="0.005" min="0" /></div>
-                        <div class="dev-field"><label>Sprint Spread</label><input type="number" id="heSprintSpreadRad" value="0.012" step="0.005" min="0" /></div>
-                        <div class="dev-field"><label>Max Range</label><input type="number" id="heMaxRange" value="200" min="1" /></div>
-                        <div class="dev-field"><label>Pellets</label><input type="number" id="hePellets" value="1" min="1" /></div>
-                        <div class="dev-field"><label>Projectile Speed</label><input type="number" id="heProjectileSpeed" value="120" step="10" min="0" /></div>
-                        <div class="dev-field"><label>Proj. Gravity</label><input type="number" id="heProjectileGravity" value="0" step="1" min="0" /></div>
+                        <div id="heGunFields">
+                            <div class="dev-field"><label>Cooldown (ms)</label><input type="number" id="heCooldownMs" value="166" min="1" /></div>
+                            <div class="dev-field"><label>Mag Size</label><input type="number" id="heMagSize" value="6" min="1" /></div>
+                            <div class="dev-field"><label>Reload (sec)</label><input type="number" id="heReloadTime" value="2.5" step="0.1" /></div>
+                            <div class="dev-field"><label>Damage</label><input type="number" id="heDamage" value="20" min="1" /></div>
+                            <div class="dev-field"><label>Spread (rad)</label><input type="number" id="heSpreadRad" value="0" step="0.005" min="0" /></div>
+                            <div class="dev-field"><label>Sprint Spread</label><input type="number" id="heSprintSpreadRad" value="0.012" step="0.005" min="0" /></div>
+                            <div class="dev-field"><label>Max Range</label><input type="number" id="heMaxRange" value="200" min="1" /></div>
+                            <div class="dev-field"><label>Pellets</label><input type="number" id="hePellets" value="1" min="1" /></div>
+                            <div class="dev-field"><label>Projectile Speed</label><input type="number" id="heProjectileSpeed" value="120" step="10" min="0" /></div>
+                            <div class="dev-field"><label>Proj. Gravity</label><input type="number" id="heProjectileGravity" value="0" step="1" min="0" /></div>
+                        </div>
                     </div>
 
-                    <h4 class="dev-section-header">Melee</h4>
+                    <h4 class="dev-section-header" id="heMeleeHeader">Melee</h4>
                     <div class="dev-section-content">
                         <div class="dev-field"><label>Melee-Only (Sword)</label><input type="checkbox" id="heMeleeOnly" /></div>
                         <div class="dev-field"><label>Damage</label><input type="number" id="heMeleeDamage" value="30" min="0" /></div>
@@ -89,18 +91,20 @@
                         <div class="dev-field"><label>Use Hit Multiplier</label><input type="checkbox" id="heMeleeUseHitMult" checked /></div>
                     </div>
 
-                    <h4 class="dev-section-header">Scope</h4>
-                    <div class="dev-section-content">
-                        <div class="dev-field">
-                            <label>Type</label>
-                            <select id="heScopeType">
-                                <option value="none">None</option>
-                                <option value="scope">Scope</option>
-                                <option value="ironsights">Iron Sights</option>
-                            </select>
+                    <div id="heScopeSection">
+                        <h4 class="dev-section-header">Scope</h4>
+                        <div class="dev-section-content">
+                            <div class="dev-field">
+                                <label>Type</label>
+                                <select id="heScopeType">
+                                    <option value="none">None</option>
+                                    <option value="scope">Scope</option>
+                                    <option value="ironsights">Iron Sights</option>
+                                </select>
+                            </div>
+                            <div class="dev-field"><label>Zoom FOV</label><input type="number" id="heScopeFOV" value="35" min="10" max="90" /></div>
+                            <div class="dev-field"><label>Spread Mult</label><input type="number" id="heScopeSpreadMult" value="0.15" step="0.05" min="0" /></div>
                         </div>
-                        <div class="dev-field"><label>Zoom FOV</label><input type="number" id="heScopeFOV" value="35" min="10" max="90" /></div>
-                        <div class="dev-field"><label>Spread Mult</label><input type="number" id="heScopeSpreadMult" value="0.15" step="0.05" min="0" /></div>
                     </div>
 
                     <h4 class="dev-section-header">Crosshair</h4>
@@ -121,7 +125,9 @@
                             <label>Model Type</label>
                             <select id="heModelType"></select>
                         </div>
-                        <div class="dev-field"><label>Tracer Color</label><input type="color" id="heTracerColor" value="#66ffcc" /></div>
+                        <div id="heTracerField">
+                            <div class="dev-field"><label>Tracer Color</label><input type="color" id="heTracerColor" value="#66ffcc" /></div>
+                        </div>
                     </div>
 
                     <h4 class="dev-section-header">FP Weapon</h4>

@@ -27,6 +27,19 @@
   // Stash crosshair spread values that have no form fields, so they round-trip on save
   var _stashedCrosshair = { baseSpreadPx: 8, sprintSpreadPx: 20 };
 
+  // Toggle gun/scope/tracer fields based on meleeOnly checkbox
+  function toggleMeleeOnlyFields() {
+    var isMeleeOnly = document.getElementById('heMeleeOnly').checked;
+    var gunFields = document.getElementById('heGunFields');
+    var scopeSection = document.getElementById('heScopeSection');
+    var tracerField = document.getElementById('heTracerField');
+    var meleeHeader = document.getElementById('heMeleeHeader');
+    if (gunFields) gunFields.style.display = isMeleeOnly ? 'none' : '';
+    if (scopeSection) scopeSection.style.display = isMeleeOnly ? 'none' : '';
+    if (tracerField) tracerField.style.display = isMeleeOnly ? 'none' : '';
+    if (meleeHeader) meleeHeader.textContent = isMeleeOnly ? 'Weapon (Melee)' : 'Melee';
+  }
+
   // Hitbox segment state (now includes offsetX, offsetZ, shape, radius)
   // shape: 'box' (default), 'sphere', 'cylinder', 'capsule'
   var _hitboxSegments = [
@@ -1566,6 +1579,7 @@
     document.getElementById('heProjectileGravity').value = (typeof w.projectileGravity === 'number') ? w.projectileGravity : 0;
 
     document.getElementById('heMeleeOnly').checked = !!w.meleeOnly;
+    toggleMeleeOnlyFields();
     document.getElementById('heMeleeDamage').value = (typeof w.meleeDamage === 'number') ? w.meleeDamage : 30;
     document.getElementById('heMeleeRange').value = (typeof w.meleeRange === 'number') ? w.meleeRange : 2.5;
     document.getElementById('heMeleeCooldownMs').value = (typeof w.meleeCooldownMs === 'number') ? w.meleeCooldownMs : 600;
@@ -1927,6 +1941,12 @@
         content.classList.toggle('collapsed');
       });
     });
+
+    // Toggle gun/scope/tracer fields when meleeOnly checkbox changes
+    var meleeOnlyCb = document.getElementById('heMeleeOnly');
+    if (meleeOnlyCb) {
+      meleeOnlyCb.addEventListener('change', function () { toggleMeleeOnlyFields(); });
+    }
 
     // Live preview on any input change
     var inputIds = ['heColor', 'heModelType', 'heTracerColor'];
