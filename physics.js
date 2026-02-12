@@ -216,8 +216,28 @@ function updateFullPhysics(state, input, arena, dt) {
   // 2. Apply horizontal movement
   var speed = input.sprint && state.sprintSpeed ? state.sprintSpeed : state.walkSpeed;
   if (dir.lengthSq() > 0) {
+    var prevX = state.position.x;
+    var prevZ = state.position.z;
     state.position.x += dir.x * speed * dt;
     state.position.z += dir.z * speed * dt;
+
+    // 2b. Ceiling clearance check: revert XZ if horizontal movement puts head inside an overhead block.
+    // Without this, the XZ resolver sees head overlap and pushes sideways (teleport feeling).
+    if (arena && Array.isArray(arena.colliders)) {
+      var headY = state.feetY + EYE_HEIGHT;
+      for (var ci = 0; ci < arena.colliders.length; ci++) {
+        var cbox = arena.colliders[ci];
+        // Block bottom must be above feet (overhead block) and below head (head enters it)
+        if (cbox.min.y <= state.feetY || cbox.min.y >= headY) continue;
+        // Player XZ center must be inside the block's actual footprint
+        if (state.position.x <= cbox.min.x || state.position.x >= cbox.max.x) continue;
+        if (state.position.z <= cbox.min.z || state.position.z >= cbox.max.z) continue;
+        // Head would enter this block — revert horizontal movement
+        state.position.x = prevX;
+        state.position.z = prevZ;
+        break;
+      }
+    }
   }
 
   // 3. Detect ground height at new XZ
