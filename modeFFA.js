@@ -30,9 +30,8 @@
   var SHOT_DELAY_AFTER_COUNTDOWN = GAME_CONFIG.SHOT_DELAY_AFTER_COUNTDOWN;
 
   // ── Team constants ──
-  var NUM_TEAMS = 2;
-  var TEAM_COLORS_HEX = [0x55aaff, 0xff5555]; // Team 1: Blue, Team 2: Red
-  var TEAM_NAMES = ['Team 1', 'Team 2'];
+  var TEAM_COLORS_HEX = [0x55aaff, 0xff5555, 0x44ff44, 0xff8844]; // Team 1: Blue, Team 2: Red, Team 3: Green, Team 4: Orange
+  var TEAM_NAMES = ['Team 1', 'Team 2', 'Team 3', 'Team 4'];
 
   var socket = null;
   var _handlersAttached = false;
@@ -136,36 +135,51 @@
   window.escapeHTML = escapeHTML;
 
   // ── Team Assignment ──
-  // Returns the team number (1-based) with the fewest players
+  // Derives available teams from spawn data. Returns 0 if all spawns are teamless.
   function assignTeam() {
-    if (!state) return 1;
-    var counts = {};
-    for (var t = 1; t <= NUM_TEAMS; t++) counts[t] = 0;
-    var ids = Object.keys(state.players);
-    for (var i = 0; i < ids.length; i++) {
-      var entry = state.players[ids[i]];
-      if (entry && entry.team) counts[entry.team] = (counts[entry.team] || 0) + 1;
+    if (!state) return 0;
+    // Derive available teams from spawn data
+    var teamSet = {};
+    if (state.spawnsFFA) {
+      for (var s = 0; s < state.spawnsFFA.length; s++) {
+        var t = state.spawnsFFA[s].team;
+        if (t > 0) teamSet[t] = true;
+      }
     }
-    var minTeam = 1;
-    var minCount = counts[1] || 0;
-    for (var t2 = 2; t2 <= NUM_TEAMS; t2++) {
-      if ((counts[t2] || 0) < minCount) {
-        minCount = counts[t2] || 0;
-        minTeam = t2;
+    var teamIds = Object.keys(teamSet);
+    // If no team spawns (all team 0), don't assign teams
+    if (teamIds.length === 0) return 0;
+
+    // Count players per team, assign to team with fewest players
+    var counts = {};
+    for (var i = 0; i < teamIds.length; i++) counts[teamIds[i]] = 0;
+    var ids = Object.keys(state.players);
+    for (var j = 0; j < ids.length; j++) {
+      var entry = state.players[ids[j]];
+      if (entry && entry.team && counts[entry.team] !== undefined) {
+        counts[entry.team]++;
+      }
+    }
+    var minTeam = parseInt(teamIds[0], 10);
+    var minCount = counts[teamIds[0]] || 0;
+    for (var k = 1; k < teamIds.length; k++) {
+      if ((counts[teamIds[k]] || 0) < minCount) {
+        minCount = counts[teamIds[k]] || 0;
+        minTeam = parseInt(teamIds[k], 10);
       }
     }
     return minTeam;
   }
 
-  // Get spawn positions for a specific team
-  // Team spawns are interleaved: spawn 0→Team1, spawn 1→Team2, spawn 2→Team1, etc.
+  // Get spawn position for a specific team
+  // Filters spawns where spawn.team matches or spawn.team === 0 (any team)
   function getTeamSpawnPosition(team) {
     if (!state || !state.spawnsFFA || state.spawnsFFA.length === 0) {
       return new THREE.Vector3(0, 0, 0);
     }
     var teamSpawns = [];
     for (var i = 0; i < state.spawnsFFA.length; i++) {
-      if ((i % NUM_TEAMS) + 1 === team) {
+      if (state.spawnsFFA[i].team === team || state.spawnsFFA[i].team === 0) {
         teamSpawns.push(state.spawnsFFA[i]);
       }
     }
@@ -173,10 +187,11 @@
     if (!state._teamSpawnIndex) state._teamSpawnIndex = {};
     if (!state._teamSpawnIndex[team]) state._teamSpawnIndex[team] = 0;
     var idx = state._teamSpawnIndex[team]++ % teamSpawns.length;
-    return teamSpawns[idx].clone();
+    return teamSpawns[idx].position.clone();
   }
 
   function getTeamColor(team) {
+    if (!team) return randomPlayerColor();
     return TEAM_COLORS_HEX[(team - 1) % TEAM_COLORS_HEX.length];
   }
 
@@ -281,7 +296,7 @@
     if (!state || !state.spawnsFFA || state.spawnsFFA.length === 0) {
       return new THREE.Vector3(0, 0, 0);
     }
-    return state.spawnsFFA[index % state.spawnsFFA.length].clone();
+    return state.spawnsFFA[index % state.spawnsFFA.length].position.clone();
   }
 
   // ── AI Bot Management ──
@@ -1621,24 +1636,30 @@
     state.isHost = true;
     state.localId = socket.id;
 
-    // Build arena
+    // Build arena with mode-specific spawns
+    var gameMode = (settings && settings.mode) || 'ffa';
     state.arena = (mapData && typeof buildArenaFromMap === 'function')
-      ? buildArenaFromMap(mapData)
-      : (typeof buildArenaFromMap === 'function' ? buildArenaFromMap(getDefaultMapData()) : buildPaintballArenaSymmetric());
+      ? buildArenaFromMap(mapData, gameMode)
+      : (typeof buildArenaFromMap === 'function' ? buildArenaFromMap(getDefaultMapData(), gameMode) : buildPaintballArenaSymmetric());
 
-    state.spawnsFFA = state.arena.spawnsFFA || [];
-
-    // Fallback: use spawnsList from map-based arenas
-    if (state.spawnsFFA.length === 0 && state.arena.spawnsList && state.arena.spawnsList.length > 0) {
+    // Populate spawnsFFA with team info from arena spawnsList
+    state.spawnsFFA = [];
+    if (state.arena.spawnsList && state.arena.spawnsList.length > 0) {
       for (var si = 0; si < state.arena.spawnsList.length; si++) {
         var sp = state.arena.spawnsList[si];
-        state.spawnsFFA.push(new THREE.Vector3(sp.position[0], sp.position[1] || 0, sp.position[2]));
+        state.spawnsFFA.push({
+          position: new THREE.Vector3(sp.position[0], sp.position[1] || 0, sp.position[2]),
+          team: sp.team || 0
+        });
       }
     }
 
-    // Fallback: if no FFA spawns, use A/B spawns
+    // Fallback: if no spawns from spawnsList, use A/B spawns
     if (state.spawnsFFA.length === 0 && state.arena.spawns) {
-      state.spawnsFFA = [state.arena.spawns.A.clone(), state.arena.spawns.B.clone()];
+      state.spawnsFFA = [
+        { position: state.arena.spawns.A.clone(), team: 1 },
+        { position: state.arena.spawns.B.clone(), team: 2 }
+      ];
     }
 
     // Create host player with team assignment
@@ -1743,22 +1764,29 @@
     var mapName = clientSettings && clientSettings.mapName;
 
     function setupClient(mapData) {
+      // Build arena with mode-specific spawns
+      var gameMode = (clientSettings && clientSettings.mode) || 'ffa';
       state.arena = (mapData && typeof buildArenaFromMap === 'function')
-        ? buildArenaFromMap(mapData)
-        : (typeof buildArenaFromMap === 'function' ? buildArenaFromMap(getDefaultMapData()) : buildPaintballArenaSymmetric());
+        ? buildArenaFromMap(mapData, gameMode)
+        : (typeof buildArenaFromMap === 'function' ? buildArenaFromMap(getDefaultMapData(), gameMode) : buildPaintballArenaSymmetric());
 
-      state.spawnsFFA = state.arena.spawnsFFA || [];
-
-      // Fallback: use spawnsList from map-based arenas
-      if (state.spawnsFFA.length === 0 && state.arena.spawnsList && state.arena.spawnsList.length > 0) {
+      // Populate spawnsFFA with team info from arena spawnsList
+      state.spawnsFFA = [];
+      if (state.arena.spawnsList && state.arena.spawnsList.length > 0) {
         for (var si = 0; si < state.arena.spawnsList.length; si++) {
           var sp = state.arena.spawnsList[si];
-          state.spawnsFFA.push(new THREE.Vector3(sp.position[0], sp.position[1] || 0, sp.position[2]));
+          state.spawnsFFA.push({
+            position: new THREE.Vector3(sp.position[0], sp.position[1] || 0, sp.position[2]),
+            team: sp.team || 0
+          });
         }
       }
 
       if (state.spawnsFFA.length === 0 && state.arena.spawns) {
-        state.spawnsFFA = [state.arena.spawns.A.clone(), state.arena.spawns.B.clone()];
+        state.spawnsFFA = [
+          { position: state.arena.spawns.A.clone(), team: 1 },
+          { position: state.arena.spawns.B.clone(), team: 2 }
+        ];
       }
 
       // Create local player with team assignment

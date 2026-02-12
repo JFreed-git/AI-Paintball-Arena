@@ -381,7 +381,8 @@
 
   // ── Build arena from map data ──
 
-  window.buildArenaFromMap = function (mapData) {
+  window.buildArenaFromMap = function (mapData, mode) {
+    mode = mode || 'ffa';
     var group = new THREE.Group();
     group.name = 'PaintballArena';
     var solids = [];
@@ -513,9 +514,9 @@
       }
     }
 
-    // Spawns — normalize to per-mode object, get FFA spawns for arena rendering
+    // Spawns — normalize to per-mode object, get spawns for the active mode
     var spawnsByMode = window.normalizeSpawns(mapData.spawns);
-    var spawnsList = window.getMapSpawnsForMode(mapData, 'ffa');
+    var spawnsList = window.getMapSpawnsForMode(mapData, mode);
 
     // Find first two spawns for backward compatibility (spawnA/spawnB used by game modes)
     var spawnA = new THREE.Vector3(0, 0, -10);
@@ -651,7 +652,8 @@
       waypoints: waypoints,
       spawns: { A: spawnA, B: spawnB },
       spawnsList: spawnsList,
-      spawnsByMode: spawnsByMode
+      spawnsByMode: spawnsByMode,
+      spawnMode: mode
     };
   };
 
