@@ -6,44 +6,20 @@
     "length": 90,
     "wallHeight": 3.5
   },
-  "spawns": [
-    {
-      "id": "spawn_4",
-      "position": [
-        -40,
-        0,
-        40
-      ],
-      "team": "A"
-    },
-    {
-      "id": "spawn_5",
-      "position": [
-        40,
-        0,
-        40
-      ],
-      "team": "B"
-    },
-    {
-      "id": "spawn_6",
-      "position": [
-        40,
-        0,
-        -40
-      ],
-      "team": "C"
-    },
-    {
-      "id": "spawn_7",
-      "position": [
-        -40,
-        0,
-        -40
-      ],
-      "team": "D"
-    }
-  ],
+  "spawns": {
+    "ffa": [
+      { "id": "spawn_1", "position": [-40, 0, 40], "team": 0 },
+      { "id": "spawn_2", "position": [40, 0, 40], "team": 0 },
+      { "id": "spawn_3", "position": [40, 0, -40], "team": 0 },
+      { "id": "spawn_4", "position": [-40, 0, -40], "team": 0 }
+    ],
+    "tdm": [
+      { "id": "spawn_1", "position": [-40, 0, 40], "team": 1 },
+      { "id": "spawn_2", "position": [-40, 0, -40], "team": 1 },
+      { "id": "spawn_3", "position": [40, 0, 40], "team": 2 },
+      { "id": "spawn_4", "position": [40, 0, -40], "team": 2 }
+    ]
+  },
   "objects": [
     {
       "id": "obj_6",
