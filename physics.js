@@ -110,8 +110,8 @@ function getGroundHeight(pos, solids, feetY, grounded) {
 
 // Resolve ceiling collisions: when jumping upward, prevent head from entering blocks above.
 // Must run BEFORE resolveCollisions2D so the body band no longer overlaps ceiling blocks.
-// Only resolves as ceiling when the player's XZ center is inside the block's actual footprint.
-// Edge/corner clips (center only in the radius-expansion zone) are side collisions.
+// Wall blocks (extending to ground) are filtered by the feetY check, so only truly overhead
+// blocks (floating platforms, ceilings, overhangs) are resolved here.
 function resolveCeilingCollisions(state, colliders) {
   if (!colliders || colliders.length === 0) return;
   if (state.verticalVelocity <= 0) return; // Only when moving upward
@@ -130,14 +130,6 @@ function resolveCeilingCollisions(state, colliders) {
     // Check XZ overlap (same expansion as resolveCollisions2D)
     if (state.position.x < box.min.x - radius || state.position.x > box.max.x + radius) continue;
     if (state.position.z < box.min.z - radius || state.position.z > box.max.z + radius) continue;
-
-    // Ceiling vs side collision: check if the player's XZ center is inside the
-    // block's actual footprint. If the center is outside the block on either axis
-    // (only in the radius-expansion zone), it's a side/edge collision — the XZ
-    // resolver should push them out horizontally, not the ceiling resolver downward.
-    var insideX = state.position.x > box.min.x && state.position.x < box.max.x;
-    var insideZ = state.position.z > box.min.z && state.position.z < box.max.z;
-    if (!insideX || !insideZ) continue; // Not fully inside block footprint — side collision
 
     // Ceiling hit: push player down so head clears block bottom
     state.feetY = box.min.y - EYE_HEIGHT - 1e-3;
