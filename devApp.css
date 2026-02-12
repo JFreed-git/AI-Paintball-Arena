@@ -584,173 +584,52 @@ body {
     padding: 3px 6px;
 }
 
-/* Split-Screen HUD */
-.ss-hud {
+/* Split-screen control bar (always visible, top-center) */
+.ss-control-bar {
     position: absolute;
-    bottom: 16px;
-    z-index: 160;
-    background: rgba(0, 0, 0, 0.6);
-    border: 1px solid rgba(255,255,255,0.08);
-    border-radius: 8px;
-    padding: 8px 10px;
-    min-width: 160px;
-    backdrop-filter: blur(4px);
-}
-
-.ss-hud.hidden {
-    display: none;
-}
-
-#ssHudP1 {
-    left: 5%;
-}
-
-#ssHudP2 {
-    right: 5%;
-}
-
-.ss-hud-label {
-    font-size: 11px;
-    color: #00ff88;
-    font-weight: bold;
-    letter-spacing: 1px;
-    margin-bottom: 4px;
-}
-
-.ss-health-bar {
-    width: 100%;
-    height: 10px;
-    background: #1b1b1b;
-    border: 1px solid #333;
-    border-radius: 5px;
-    overflow: hidden;
-}
-
-.ss-health-fill {
-    height: 100%;
-    width: 100%;
-    background: linear-gradient(90deg, #24e66a, #0fb85a);
-    transition: width 0.15s ease;
-}
-
-.ss-ammo {
-    margin-top: 4px;
-    font-family: Consolas, 'Courier New', monospace;
-    font-size: 12px;
-    color: #fff;
-    display: flex;
-    justify-content: space-between;
-}
-
-.ss-ammo .hidden {
-    display: none;
-}
-
-/* Split-screen crosshairs */
-.ss-crosshair {
-    position: absolute;
-    pointer-events: none;
-    z-index: 160;
-    --spread: 10px;
-    --ch-color: #00ff88;
-}
-
-.ss-crosshair.hidden {
-    display: none;
-}
-
-#ssCrosshairP1 {
-    top: 50%;
-    left: 25%;
-    transform: translate(-50%, -50%);
-}
-
-#ssCrosshairP2 {
-    top: 50%;
-    left: 75%;
-    transform: translate(-50%, -50%);
-}
-
-.ss-crosshair .ch-bar {
-    position: absolute;
-    background: var(--ch-color, #00ff88);
-    filter: drop-shadow(0 0 6px var(--ch-color, #00ff88));
-    border-radius: 1px;
-}
-
-.ss-crosshair .ch-left,
-.ss-crosshair .ch-right {
-    top: 0;
-    height: 2px;
-    width: 14px;
-}
-
-.ss-crosshair .ch-left { left: calc(var(--spread) * -1 - 14px); }
-.ss-crosshair .ch-right { left: var(--spread); }
-
-.ss-crosshair .ch-top,
-.ss-crosshair .ch-bottom {
-    left: 0;
-    width: 2px;
-    height: 14px;
-}
-
-.ss-crosshair .ch-top { top: calc(var(--spread) * -1 - 14px); }
-.ss-crosshair .ch-bottom { top: var(--spread); }
-
-.ss-crosshair.dimmed .ch-bar {
-    opacity: 0.4;
-}
-
-.ss-crosshair .ch-ring {
-    position: absolute;
-    top: calc(var(--spread) * -1);
-    left: calc(var(--spread) * -1);
-    width: calc(var(--spread) * 2);
-    height: calc(var(--spread) * 2);
-    border: 2px solid var(--ch-color, #00ff88);
-    border-radius: 50%;
-    filter: drop-shadow(0 0 4px var(--ch-color, #00ff88));
-    min-width: 6px;
-    min-height: 6px;
-}
-
-.ss-crosshair .ch-dot {
-    position: absolute;
-    top: -2px;
-    left: -2px;
-    width: 4px;
-    height: 4px;
-    background: var(--ch-color, #00ff88);
-    border-radius: 50%;
-    filter: drop-shadow(0 0 3px var(--ch-color, #00ff88));
-}
-
-.ss-crosshair.dimmed .ch-ring,
-.ss-crosshair.dimmed .ch-dot {
-    opacity: 0.4;
-}
-
-/* Control indicator */
-#ssControlIndicator {
-    position: absolute;
-    top: 12px;
+    top: 8px;
     left: 50%;
     transform: translateX(-50%);
-    z-index: 170;
-    background: rgba(0, 255, 136, 0.15);
+    z-index: 300;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: rgba(0, 0, 0, 0.75);
     border: 1px solid #00ff88;
-    border-radius: 6px;
-    padding: 6px 16px;
+    border-radius: 8px;
+    padding: 6px 14px;
+    backdrop-filter: blur(4px);
+    font-family: Consolas, 'Courier New', monospace;
+}
+
+.ss-control-bar-text {
     font-size: 13px;
     font-weight: bold;
     color: #00ff88;
-    letter-spacing: 1px;
-    pointer-events: none;
+    letter-spacing: 0.5px;
+    cursor: pointer;
+    user-select: none;
+    white-space: nowrap;
 }
 
-#ssControlIndicator.hidden {
-    display: none;
+.ss-control-bar-text:hover {
+    color: #44ffaa;
+}
+
+.ss-control-bar-close {
+    background: none;
+    border: 1px solid rgba(255,255,255,0.2);
+    border-radius: 4px;
+    color: #aaa;
+    font-size: 16px;
+    line-height: 1;
+    padding: 2px 6px;
+    cursor: pointer;
+}
+
+.ss-control-bar-close:hover {
+    color: #ff6666;
+    border-color: #ff6666;
 }
 
 /* Split-screen viewport divider */
@@ -763,11 +642,6 @@ body {
     background: rgba(255, 255, 255, 0.2);
     z-index: 155;
     pointer-events: none;
-}
-
-/* Dimmed HUD for inactive player */
-.ss-hud.dimmed {
-    opacity: 0.4;
 }
 
 /* Collapsible sections */
@@ -1178,7 +1052,6 @@ body {
     width: 100%;
     height: 100%;
     z-index: 200;
-    cursor: crosshair;
 }
 
 /* ===== Audio Manager Viewport ===== */

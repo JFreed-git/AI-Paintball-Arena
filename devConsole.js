@@ -8,7 +8,7 @@
  * EXPORTS (window):
  *   devAuthenticated, devGodMode, devShowHitboxes, devConsoleOpen, devSpectatorMode
  *
- * DEPENDENCIES: Three.js, modeAI.js (getPaintballState, AI state),
+ * DEPENDENCIES: Three.js, modeFFA.js (getFFAState, AI state),
  *   player.js (Player), mapEditor.js (editor functions),
  *   game.js (scene, camera, renderer globals)
  *
@@ -34,10 +34,9 @@
   window.devShowHitboxes = false;
   window.updateHitboxVisuals = updateHitboxVisuals;
 
-  // Helper: get the active game state (works for both AI and LAN modes)
+  // Helper: get the active game state
   function getActiveState() {
-    if (window.aiModeActive && window.getPaintballState) return window.getPaintballState();
-    if (window.lanModeActive && window.getMultiplayerState) return window.getMultiplayerState();
+    if (window.ffaActive && window.getFFAState) return window.getFFAState();
     if (window.trainingRangeActive && window.getTrainingRangeState) return window.getTrainingRangeState();
     if (window._splitScreenActive && window.getSplitScreenState) return window.getSplitScreenState();
     return null;
@@ -47,12 +46,9 @@
   function getLocalPlayer() {
     var state = getActiveState();
     if (!state) return null;
-    // AI mode: state.player is the local Player
-    if (state.player) return state.player;
-    // LAN mode: state.players.host or .client depending on which is local (cameraAttached)
-    if (state.players) {
-      if (state.players.host && state.players.host.cameraAttached) return state.players.host;
-      if (state.players.client && state.players.client.cameraAttached) return state.players.client;
+    // FFA mode: state.players[state.localId].entity
+    if (state.players && state.localId && state.players[state.localId]) {
+      return state.players[state.localId].entity;
     }
     return null;
   }
@@ -113,7 +109,7 @@
     window.devConsoleOpen = false;
     consoleEl.classList.add('hidden');
     // Re-engage pointer lock if in game
-    if ((window.aiModeActive || window.lanModeActive || window.trainingRangeActive || window._splitScreenActive) && renderer && renderer.domElement) {
+    if ((window.ffaActive || window.trainingRangeActive || window._splitScreenActive) && renderer && renderer.domElement) {
       try { renderer.domElement.requestPointerLock(); } catch (e) { console.warn('devConsole: requestPointerLock failed', e); }
     }
   }
@@ -434,25 +430,41 @@
 
   function updateAIStateDisplay() {
     if (!cheats.showAIState) return;
-    if (!window.aiModeActive) {
+    if (!window.ffaActive) {
       hideAIStateLabel();
       return;
     }
 
-    var state = window.getPaintballState ? window.getPaintballState() : null;
-    if (!state || !state.ai || !state.ai.alive) {
+    var state = window.getFFAState ? window.getFFAState() : null;
+    if (!state || !state.players) {
+      hideAIStateLabel();
+      return;
+    }
+
+    // Find first alive AI player in FFA
+    var aiEntry = null;
+    var ids = Object.keys(state.players);
+    for (var i = 0; i < ids.length; i++) {
+      var entry = state.players[ids[i]];
+      if (entry && entry.isAI && entry.aiInstance && entry.alive) {
+        aiEntry = entry;
+        break;
+      }
+    }
+
+    if (!aiEntry) {
       hideAIStateLabel();
       return;
     }
 
     var label = ensureAIStateLabel();
-    var behavior = state.ai.getCurrentBehavior ? state.ai.getCurrentBehavior() : '?';
+    var behavior = aiEntry.aiInstance.getCurrentBehavior ? aiEntry.aiInstance.getCurrentBehavior() : '?';
     label.textContent = behavior;
     label.style.display = 'block';
 
     // Project AI head position to screen coordinates
     if (typeof camera !== 'undefined' && camera && typeof renderer !== 'undefined' && renderer) {
-      var headWorldPos = state.ai.player.getEyePos();
+      var headWorldPos = aiEntry.entity.getEyePos();
       headWorldPos.y += 1.0; // above head
       var projected = headWorldPos.clone().project(camera);
 

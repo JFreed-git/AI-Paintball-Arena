@@ -3,7 +3,7 @@
  *
  * PURPOSE: Single source of truth for timing and game-flow constants that are
  * referenced by multiple systems/modes. Constants that belong to a specific
- * system (e.g. GRAVITY in physics.js, SNAPSHOT_RATE in modeLAN.js) stay in
+ * system (e.g. GRAVITY in physics.js, SNAPSHOT_RATE in modeFFA.js) stay in
  * that system's file.
  *
  * EXPORTS (window):

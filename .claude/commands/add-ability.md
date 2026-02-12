@@ -16,7 +16,7 @@ First, read these files to understand the current system:
 - `projectiles.js` — `sharedFireWeapon` for combat abilities
 - `hud.js` — HUD management (needs cooldown indicator support)
 - `player.js` — Player class (may need new state for ability effects)
-- `modeAI.js`, `modeLAN.js`, `modeTraining.js` — Game loops that call `update(dt)`
+- `modeFFA.js`, `modeTraining.js` — Game loops that call `update(dt)`
 
 ## Ability Architecture
 
@@ -118,5 +118,4 @@ This is a reference for how a movement ability would work:
 - Follow existing code style (var declarations, no ES6 classes except AIOpponent).
 - The ability system is being built incrementally — only implement what's needed for this specific ability. Don't over-architect for hypothetical future abilities.
 - If this is the FIRST ability being implemented, you'll need to wire up the foundational infrastructure (AbilityManager on Player, input capture, game mode integration). Document what you added.
-- Test that the ability works in single-player mode (modeAI.js) at minimum.
-- For LAN mode, at minimum ensure the ability doesn't crash — full networking support can come later.
+- Test that the ability works in FFA mode (modeFFA.js) at minimum.

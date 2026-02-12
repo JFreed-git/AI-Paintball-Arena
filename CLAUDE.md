@@ -14,11 +14,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Architecture
 
-Browser-based 3D first-person paintball game using **Three.js** (r128, loaded via CDN) with three modes: single-player vs AI, 2-player LAN multiplayer via **Socket.IO**, and a Training Range for target practice.
+Browser-based 3D first-person paintball game using **Three.js** (r128, loaded via CDN) with two modes: FFA multiplayer (supports AI bots and human players) via **Socket.IO**, and a Training Range for target practice.
 
 ### Module System
 
-All JS files use IIFEs `(function() { ... })()` for scope isolation. Public APIs are exposed on `window.*` (e.g., `window.startPaintballGame`, `window.hostLanGame`, `window.getInputState`). Cross-module communication happens entirely through these window globals. Script load order in index.html matters — `game.js` loads last and bootstraps everything.
+All JS files use IIFEs `(function() { ... })()` for scope isolation. Public APIs are exposed on `window.*` (e.g., `window.startFFAHost`, `window.joinFFAGame`, `window.getInputState`). Cross-module communication happens entirely through these window globals. Script load order in index.html matters — `game.js` loads last and bootstraps everything.
 
 ### Shared Globals
 
@@ -52,8 +52,6 @@ All JS files use IIFEs `(function() { ... })()` for scope isolation. Public APIs
 | `projectiles.js` | `sharedFireWeapon()`, `sharedMeleeAttack()`, projectile/hitscan, ray intersection per shape |
 | `aiOpponent.js` | 7-state AI with A* pathfinding and 3 playstyles |
 | `trainingBot.js` | Simple patrol bots for training range |
-| `modeAI.js` | Single-player vs AI game mode |
-| `modeLAN.js` | LAN multiplayer — host-authoritative with client-side prediction |
 | `modeTraining.js` | Training range mode — free practice, no rounds |
 | `game.js` | Bootstrap: creates `scene`/`camera`/`renderer`, master render loop |
 | `devConsole.js` | Dev console: god mode, hitbox viz, spectator cam (toggle with 'C') |
@@ -75,7 +73,7 @@ menuRenderer.js → menuNavigation.js → input.js → environment.js →
 player.js → arenaBuilder.js → arenaCompetitive.js → arenaTraining.js →
 mapFormat.js →
 projectiles.js → aiOpponent.js → trainingBot.js →
-modeAI.js → modeLAN.js → modeTraining.js →
+modeTraining.js → modeFFA.js → ffaScoreboard.js →
 game.js → devConsole.js
 ```
 
@@ -83,7 +81,7 @@ dev.html (Electron) loads the same shared scripts but replaces game.js with dev-
 
 ```
 Three.js (CDN) → electron-fetch-shim.js → interactionEngine.js →
-[same shared scripts as index.html: config.js → audio.js → ... through modeTraining.js, including menuRenderer.js] →
+[same shared scripts as index.html: config.js → audio.js → ... through modeTraining.js] →
 mapEditor.js →
 menuBuilder.js → devAudioManager.js → devSplitScreen.js → devHeroEditor.js → devConsole.js → devApp.js
 ```

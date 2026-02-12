@@ -323,10 +323,10 @@ function bindUI() {
   const backToMenu = document.getElementById('backToMenu');
   if (backToMenu) {
     backToMenu.addEventListener('click', () => {
-      // If paintball is running, stop it
+      // If FFA is running, stop it
       try {
-        if (typeof stopPaintballInternal === 'function') stopPaintballInternal();
-      } catch (e) { console.warn('menuNavigation: failed to stop paintball game', e); }
+        if (typeof stopFFAInternal === 'function') stopFFAInternal();
+      } catch (e) { console.warn('menuNavigation: failed to stop FFA game', e); }
       showOnlyMenu('mainMenu');
       setHUDVisible(false);
     });
@@ -550,8 +550,9 @@ window.lobbyJoinRoom = function (roomId, onError) {
       return;
     }
 
-    if (res.settings && res.settings.maxPlayers) {
-      window._lobbyState.maxPlayers = res.settings.maxPlayers;
+    if (res.settings) {
+      if (res.settings.maxPlayers) window._lobbyState.maxPlayers = res.settings.maxPlayers;
+      window._lobbyState.serverSettings = res.settings;
     }
 
     showOnlyMenu('lobbyMenu');
@@ -786,7 +787,7 @@ function launchFFAFromLobby() {
     }
   } else {
     if (typeof window.joinFFAGame === 'function') {
-      window.joinFFAGame(ls.roomId, lobbySock);
+      window.joinFFAGame(ls.roomId, lobbySock, ls.serverSettings || {});
     } else {
       showOnlyMenu(null);
     }

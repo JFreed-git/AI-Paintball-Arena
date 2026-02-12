@@ -1,15 +1,22 @@
 /**
- * devSplitScreen.js — Split-screen two-player mode via real LAN networking
+ * devSplitScreen.js — Split-screen mode: two independent browser windows
  *
- * PURPOSE: Two iframes side by side, each loading localhost:3000 as a fully
- * independent game client. One hosts and one joins a real LAN game via
- * Socket.IO. A transparent overlay captures pointer lock and forwards
- * input to the active iframe via postMessage. Tab switches control.
+ * PURPOSE: Two iframes side by side, each loading localhost:3000/?splitView=1
+ * as a fully independent game client starting at the main menu. The user hosts
+ * a lobby from one window and joins from the other. A transparent overlay
+ * captures pointer lock and forwards input to the active iframe via postMessage.
+ * Tab switches control between windows.
+ *
+ * Two states:
+ *   Menu mode (no pointer lock): overlay is pointer-events:none so clicks
+ *     reach iframes directly. Control bar shows "Click to lock cursor".
+ *   Play mode (pointer lock active): overlay captures all input and forwards
+ *     to active iframe. Tab switches. ESC releases lock → back to menu mode.
  *
  * EXPORTS (window):
- *   startSplitScreen(opts) — start split-screen with {mapName}
- *   stopSplitScreen()      — tear down split-screen
- *   _splitScreenActive     — boolean flag checked by devApp.js render loop
+ *   startSplitScreen()    — start split-screen
+ *   stopSplitScreen()     — tear down split-screen
+ *   _splitScreenActive    — boolean flag checked by devApp.js render loop
  *
  * DEPENDENCIES: devAPI (electron-preload.js) for server auto-start
  */
@@ -22,22 +29,18 @@
   var _state = null;
 
   // ------- Start -------
-  window.startSplitScreen = function (opts) {
-    opts = opts || {};
+  window.startSplitScreen = function () {
     if (window._splitScreenActive) {
       window.stopSplitScreen();
     }
 
-    var mapName = opts.mapName || '__default__';
-    var roomId = 'ss_' + Date.now();
-
     _state = {
-      activeIndex: 0,  // 0 = left (host), 1 = right (client)
+      activeIndex: 0,  // 0 = left, 1 = right
       iframes: [],
       overlay: null,
       divider: null,
-      indicator: null,
-      roomId: roomId
+      controlBar: null,
+      locked: false
     };
 
     // Ensure server is running, then create iframes
@@ -57,34 +60,18 @@
       var threeCanvas = gc && gc.querySelector('canvas');
       if (threeCanvas) threeCanvas.style.display = 'none';
 
-      // Build host URL
-      var heroP1 = opts.heroP1 || '';
-      var heroP2 = opts.heroP2 || '';
-      var hostUrl = 'http://localhost:3000/?splitView=1&autoHost=' +
-        encodeURIComponent(roomId) +
-        '&map=' + encodeURIComponent(mapName) +
-        '&hero=' + encodeURIComponent(heroP1) +
-        '&rounds=2';
+      // Both iframes load the same URL — each starts at the main menu
+      var iframeUrl = 'http://localhost:3000/?splitView=1';
 
-      // Build client URL (include map so client builds same arena)
-      var clientUrl = 'http://localhost:3000/?splitView=1&autoJoin=' +
-        encodeURIComponent(roomId) +
-        '&map=' + encodeURIComponent(mapName) +
-        '&hero=' + encodeURIComponent(heroP2);
-
-      // Create left iframe (host) immediately
-      var leftIframe = createIframe(hostUrl, false);
+      // Create left iframe
+      var leftIframe = createIframe(iframeUrl, false);
       _state.iframes.push(leftIframe);
 
-      // Create right iframe (client) after delay so host can create room
-      setTimeout(function () {
-        if (!_state) return;
-        var rightIframe = createIframe(clientUrl, true);
-        _state.iframes.push(rightIframe);
-        updateDimming();
-      }, 2000);
+      // Create right iframe
+      var rightIframe = createIframe(iframeUrl, true);
+      _state.iframes.push(rightIframe);
 
-      // Create overlay for input capture
+      // Create overlay (starts as pass-through, blocks clicks when locked)
       createOverlay();
 
       // Create viewport divider
@@ -93,13 +80,22 @@
       if (gc) gc.appendChild(divider);
       _state.divider = divider;
 
-      // Create control indicator
-      var indicator = document.getElementById('ssControlIndicator');
-      if (indicator) {
-        indicator.textContent = 'CONTROLLING P1';
-        indicator.classList.remove('hidden');
-      }
-      _state.indicator = indicator;
+      // Create control bar
+      createControlBar();
+
+      // Listen for iframe messages
+      window.addEventListener('message', onIframeMessage);
+
+      // Document-level input listeners (pointer lock dispatches events to document)
+      document.addEventListener('keydown', onOverlayKeyDown);
+      document.addEventListener('keyup', onOverlayKeyUp);
+      document.addEventListener('mousemove', onDocMouseMove);
+      document.addEventListener('mousedown', onDocMouseDown);
+      document.addEventListener('mouseup', onDocMouseUp);
+
+      // Pointer lock change + error handlers
+      document.addEventListener('pointerlockchange', onPointerLockChange);
+      document.addEventListener('pointerlockerror', onPointerLockError);
 
       window._splitScreenActive = true;
       if (typeof window.resizeRenderer === 'function') window.resizeRenderer();
@@ -126,9 +122,10 @@
         _state.divider.parentNode.removeChild(_state.divider);
       }
 
-      // Hide control indicator
-      var indicator = document.getElementById('ssControlIndicator');
-      if (indicator) indicator.classList.add('hidden');
+      // Remove control bar
+      if (_state.controlBar && _state.controlBar.parentNode) {
+        _state.controlBar.parentNode.removeChild(_state.controlBar);
+      }
 
       _state = null;
     }
@@ -136,6 +133,11 @@
     // Remove listeners
     document.removeEventListener('keydown', onOverlayKeyDown);
     document.removeEventListener('keyup', onOverlayKeyUp);
+    document.removeEventListener('mousemove', onDocMouseMove);
+    document.removeEventListener('mousedown', onDocMouseDown);
+    document.removeEventListener('mouseup', onDocMouseUp);
+    document.removeEventListener('pointerlockchange', onPointerLockChange);
+    document.removeEventListener('pointerlockerror', onPointerLockError);
     window.removeEventListener('message', onIframeMessage);
 
     // Exit pointer lock
@@ -167,6 +169,14 @@
     if (typeof window.resizeRenderer === 'function') {
       setTimeout(window.resizeRenderer, 50);
     }
+
+    // Update button states in panel
+    var startBtn = document.getElementById('ssStart');
+    var stopBtn = document.getElementById('ssStop');
+    var status = document.getElementById('ssStatus');
+    if (startBtn) startBtn.disabled = false;
+    if (stopBtn) stopBtn.disabled = true;
+    if (status) status.textContent = 'Stopped.';
   };
 
   // ------- Server auto-start -------
@@ -213,97 +223,197 @@
     return iframe;
   }
 
-  // ------- Hero select passthrough -------
-  // When an iframe shows hero select, disable overlay so clicks reach the iframe
-  function onIframeMessage(evt) {
-    if (!_state || !window._splitScreenActive) return;
-    var d = evt.data;
-    if (!d || !d.type) return;
+  // ------- Control bar -------
+  function createControlBar() {
+    var gc = document.getElementById('gameContainer');
+    if (!gc) return;
 
-    if (d.type === 'svHeroSelectOpen') {
-      setOverlayPassthrough(true);
-    } else if (d.type === 'svHeroSelectClosed') {
-      setOverlayPassthrough(false);
+    var bar = document.createElement('div');
+    bar.className = 'ss-control-bar';
+
+    var textSpan = document.createElement('span');
+    textSpan.className = 'ss-control-bar-text';
+    textSpan.textContent = 'Click to lock cursor';
+    bar.appendChild(textSpan);
+
+    var closeBtn = document.createElement('button');
+    closeBtn.className = 'ss-control-bar-close';
+    closeBtn.innerHTML = '&times;';
+    closeBtn.title = 'Stop split screen';
+    closeBtn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      window.stopSplitScreen();
+    });
+    bar.appendChild(closeBtn);
+
+    // Clicking the bar text acquires pointer lock
+    bar.addEventListener('click', function (e) {
+      if (e.target === closeBtn) return;
+      requestLock();
+    });
+
+    gc.appendChild(bar);
+    _state.controlBar = bar;
+  }
+
+  function updateControlBarText(text) {
+    if (!_state || !_state.controlBar) return;
+    var textSpan = _state.controlBar.querySelector('.ss-control-bar-text');
+    if (textSpan) textSpan.textContent = text;
+  }
+
+  // ------- Pointer lock request -------
+  function requestLock() {
+    // Try the overlay first (mouse events dispatch to locked element)
+    var target = _state && _state.overlay;
+    if (!target) target = document.getElementById('gameContainer');
+    if (!target) return;
+
+    try {
+      var result = target.requestPointerLock();
+      // Modern browsers return a Promise
+      if (result && typeof result.catch === 'function') {
+        result.catch(function (err) {
+          console.warn('devSplitScreen: pointer lock denied on overlay, trying body:', err);
+          // Fallback: try document.body
+          try {
+            document.body.requestPointerLock();
+          } catch (e2) {
+            console.warn('devSplitScreen: pointer lock failed on body:', e2);
+          }
+        });
+      }
+    } catch (e) {
+      console.warn('devSplitScreen: requestPointerLock error:', e);
     }
   }
 
-  function setOverlayPassthrough(passthrough) {
-    if (!_state || !_state.overlay) return;
-    if (passthrough) {
-      // Let clicks through to iframe, release pointer lock so cursor is visible
-      _state.overlay.style.pointerEvents = 'none';
-      try { document.exitPointerLock(); } catch (e) {}
-    } else {
-      // Re-capture input on overlay
-      _state.overlay.style.pointerEvents = '';
-      // User will click overlay to re-lock (automatic via click handler)
-    }
-  }
-
-  // ------- Overlay for input capture -------
+  // ------- Overlay -------
   function createOverlay() {
     var gc = document.getElementById('gameContainer');
     if (!gc) return;
 
     var overlay = document.createElement('div');
     overlay.id = 'ssInputOverlay';
+    // Start in menu mode — clicks pass through to iframes
+    overlay.style.pointerEvents = 'none';
     gc.appendChild(overlay);
     _state.overlay = overlay;
 
-    // Listen for messages from iframes (hero select open/close)
-    window.addEventListener('message', onIframeMessage);
-
-    // Click to acquire pointer lock
+    // Click overlay to re-lock (when it has pointer-events in play mode)
     overlay.addEventListener('click', function () {
-      overlay.requestPointerLock();
+      requestLock();
     });
-
-    // Mouse move → forward to active iframe
-    overlay.addEventListener('mousemove', function (e) {
-      forwardToActive({ type: 'svMouseMove', movementX: e.movementX || 0, movementY: e.movementY || 0 });
-    });
-
-    // Mouse buttons
-    overlay.addEventListener('mousedown', function (e) {
-      if (e.button === 0) forwardToActive({ type: 'svMouseDown' });
-    });
-    overlay.addEventListener('mouseup', function (e) {
-      if (e.button === 0) forwardToActive({ type: 'svMouseUp' });
-    });
-
-    // Keyboard — document-level only (pointer lock sends keys to document)
-    document.addEventListener('keydown', onOverlayKeyDown);
-    document.addEventListener('keyup', onOverlayKeyUp);
   }
 
+  // ------- Document-level mouse handlers -------
+  function onDocMouseMove(e) {
+    if (!_state || !_state.locked) return;
+    forwardToActive({ type: 'svMouseMove', movementX: e.movementX || 0, movementY: e.movementY || 0 });
+  }
+
+  function onDocMouseDown(e) {
+    if (!_state || !_state.locked) return;
+    if (e.button === 0) forwardToActive({ type: 'svMouseDown' });
+  }
+
+  function onDocMouseUp(e) {
+    if (!_state || !_state.locked) return;
+    if (e.button === 0) forwardToActive({ type: 'svMouseUp' });
+  }
+
+  // ------- Pointer lock change -------
+  function onPointerLockChange() {
+    if (!_state) return;
+
+    var locked = !!document.pointerLockElement;
+    _state.locked = locked;
+
+    var overlay = _state.overlay;
+
+    if (locked) {
+      // Play mode: overlay blocks clicks to iframes
+      if (overlay) {
+        overlay.style.pointerEvents = '';
+        overlay.style.cursor = 'none';
+      }
+      updateControlBarText('CONTROLLING P' + (_state.activeIndex + 1) + ' \u2014 Tab to switch');
+      updateDimming();
+    } else {
+      // Menu mode: overlay is pass-through, user clicks directly in iframes
+      if (overlay) {
+        overlay.style.pointerEvents = 'none';
+        overlay.style.cursor = '';
+      }
+      updateControlBarText('Click to lock cursor');
+      // Clear dimming — both iframes fully visible in menu mode
+      clearDimming();
+      // Reset keys on the active iframe so nothing sticks
+      var activeIframe = _state.iframes[_state.activeIndex];
+      if (activeIframe && activeIframe.contentWindow) {
+        activeIframe.contentWindow.postMessage({ type: 'svResetKeys' }, '*');
+      }
+    }
+  }
+
+  function onPointerLockError() {
+    console.warn('devSplitScreen: pointerlockerror — lock request was denied');
+    if (_state) updateControlBarText('Lock failed — click to retry');
+  }
+
+  // ------- Iframe messages (hero select passthrough) -------
+  function onIframeMessage(evt) {
+    if (!_state || !window._splitScreenActive) return;
+    var d = evt.data;
+    if (!d || !d.type) return;
+
+    if (d.type === 'svHeroSelectOpen') {
+      // Release pointer lock so user can click hero cards in the iframe
+      try { document.exitPointerLock(); } catch (e) {}
+      updateControlBarText('Click to resume');
+    } else if (d.type === 'svHeroSelectClosed') {
+      updateControlBarText('Click to resume');
+    } else if (d.type === 'svEscape') {
+      // ESC pressed inside an iframe while cursor not locked — stop split screen
+      if (!_state.locked) {
+        window.stopSplitScreen();
+      }
+    }
+  }
+
+  // ------- Keyboard handlers -------
   function onOverlayKeyDown(e) {
     if (!window._splitScreenActive || !_state) return;
 
-    if (e.code === 'Tab') {
-      e.preventDefault();
-      switchActiveIframe();
+    // Only handle keys when pointer is locked (play mode)
+    if (_state.locked) {
+      if (e.code === 'Tab') {
+        e.preventDefault();
+        switchActiveIframe();
+        return;
+      }
+
+      if (e.key === 'Escape') {
+        // ESC while locked → browser releases pointer lock automatically
+        e.preventDefault();
+        return;
+      }
+
+      // Forward game keys to active iframe
+      forwardToActive({ type: 'svKeyDown', code: e.code, key: e.key });
       return;
     }
 
+    // Menu mode (not locked): ESC stops split screen
     if (e.key === 'Escape') {
       e.preventDefault();
       window.stopSplitScreen();
-      // Update button states in panel
-      var startBtn = document.getElementById('ssStart');
-      var stopBtn = document.getElementById('ssStop');
-      var status = document.getElementById('ssStatus');
-      if (startBtn) startBtn.disabled = false;
-      if (stopBtn) stopBtn.disabled = true;
-      if (status) status.textContent = 'Stopped.';
-      return;
     }
-
-    // Forward game keys to active iframe
-    forwardToActive({ type: 'svKeyDown', code: e.code, key: e.key });
   }
 
   function onOverlayKeyUp(e) {
     if (!window._splitScreenActive || !_state) return;
+    if (!_state.locked) return;
     forwardToActive({ type: 'svKeyUp', code: e.code, key: e.key });
   }
 
@@ -320,11 +430,8 @@
     // Switch
     _state.activeIndex = _state.activeIndex === 0 ? 1 : 0;
 
-    // Update indicator
-    var indicator = document.getElementById('ssControlIndicator');
-    if (indicator) {
-      indicator.textContent = 'CONTROLLING P' + (_state.activeIndex + 1);
-    }
+    // Update control bar
+    updateControlBarText('CONTROLLING P' + (_state.activeIndex + 1) + ' \u2014 Tab to switch');
 
     updateDimming();
   }
@@ -334,6 +441,14 @@
     _state.iframes.forEach(function (iframe, i) {
       if (!iframe) return;
       iframe.classList.toggle('ss-iframe-inactive', i !== _state.activeIndex);
+    });
+  }
+
+  function clearDimming() {
+    if (!_state) return;
+    _state.iframes.forEach(function (iframe) {
+      if (!iframe) return;
+      iframe.classList.remove('ss-iframe-inactive');
     });
   }
 

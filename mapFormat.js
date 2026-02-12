@@ -3,7 +3,7 @@
  *
  * PURPOSE: Defines the JSON map format, builds arenas from map data objects,
  * provides the default map, and handles server API calls for saving/loading maps.
- * Shared by game modes (modeAI, modeLAN) and the map editor.
+ * Shared by game modes (modeFFA, modeTraining) and the map editor.
  *
  * EXPORTS (window):
  *   buildArenaFromMap(mapData) — construct a playable arena from map JSON

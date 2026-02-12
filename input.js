@@ -65,7 +65,7 @@ function bindPlayerControls(renderer) {
     // Click canvas to acquire pointer lock when a game mode is active
     renderer.domElement.addEventListener('click', function () {
       if (window._splitViewMode) return; // parent overlay handles lock
-      var anyActive = window.aiModeActive || window.lanModeActive || window.trainingRangeActive || window.ffaActive || window._splitScreenActive;
+      var anyActive = window.trainingRangeActive || window.ffaActive || window._splitScreenActive;
       if (!anyActive) return;
       if (window._heroSelectOpen || window.devConsoleOpen) return;
       if (document.pointerLockElement === renderer.domElement) return; // already locked
@@ -81,7 +81,7 @@ function bindPlayerControls(renderer) {
 
 function onMouseMove(event) {
   if (window._splitScreenActive) return; // iframes handle their own mouse via postMessage
-  if (!window.aiModeActive && !window.lanModeActive && !window.trainingRangeActive && !window.ffaActive) return;
+  if (!window.trainingRangeActive && !window.ffaActive) return;
   if (window._heroSelectOpen) return;
 
   // Raycasting mouse coords (kept for completeness)
@@ -131,14 +131,6 @@ function onPointerLockChange() {
     if (focused && visible && !window.devConsoleOpen) {
       if (window._splitScreenActive) {
         try { if (typeof stopSplitScreen === 'function') stopSplitScreen(); } catch {}
-      } else if (window.aiModeActive) {
-        try { if (typeof stopPaintballInternal === 'function') stopPaintballInternal(); } catch {}
-        showOnlyMenu('mainMenu');
-        setHUDVisible(false);
-      } else if (window.lanModeActive) {
-        try { if (typeof stopMultiplayerInternal === 'function') stopMultiplayerInternal(); } catch {}
-        showOnlyMenu('mainMenu');
-        setHUDVisible(false);
       } else if (window.ffaActive) {
         try { if (typeof stopFFAInternal === 'function') stopFFAInternal(); } catch {}
         showOnlyMenu('mainMenu');
@@ -154,15 +146,17 @@ function onPointerLockChange() {
 
 function onGlobalKeyDown(e) {
   if (window.editorActive) return;
-  if (window._splitViewMode) return; // iframe: parent forwards input via postMessage
+  if (window._splitViewMode) {
+    // Forward ESC to parent so it can stop split screen when cursor not locked
+    if (e.key === 'Escape') {
+      window.parent.postMessage({ type: 'svEscape' }, '*');
+    }
+    return; // iframe: parent forwards all other input via postMessage
+  }
   if (window._splitScreenActive) return; // parent: devSplitScreen.js handles all input
   if (e.key === 'Escape') {
     if (window._splitScreenActive) {
       try { if (typeof stopSplitScreen === 'function') stopSplitScreen(); } catch {}
-    } else if (window.aiModeActive) {
-      try { if (typeof stopPaintballInternal === 'function') stopPaintballInternal(); } catch {}
-    } else if (window.lanModeActive) {
-      try { if (typeof stopMultiplayerInternal === 'function') stopMultiplayerInternal(); } catch {}
     } else if (window.ffaActive) {
       try { if (typeof stopFFAInternal === 'function') stopFFAInternal(); } catch {}
     } else if (window.trainingRangeActive) {

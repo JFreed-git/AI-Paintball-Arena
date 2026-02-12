@@ -23,7 +23,7 @@
  *   - The camera position doubles as the local player's world position in
  *     single-player mode (no separate player entity for the local camera view).
  *   - The main animate() loop only calls renderer.render(). Game mode logic
- *     runs in separate RAF loops (modeAI.js, modeLAN.js, modeTraining.js).
+ *     runs in separate RAF loops (modeFFA.js, modeTraining.js).
  *   - The first-person viewmodel is a child of the camera, positioned in the
  *     lower-right of the view. Materials use depthTest:false so the weapon
  *     always renders on top of the scene.
@@ -202,114 +202,15 @@ function init() {
     bindUI();
   }
 
-  // ── SplitView auto-start (iframe clients from dev workbench) ──
+  // ── SplitView mode (iframe clients from dev workbench) ──
   var urlParams = new URLSearchParams(window.location.search);
   if (urlParams.get('splitView') === '1') {
     window._splitViewMode = true;
     document.body.classList.add('split-view-mode');
-    // Suppress alert() so join failures don't block retry loop
+    // Suppress alert() so join failures don't block
     window.alert = function () {};
-
-    var autoHost = urlParams.get('autoHost');
-    var autoJoin = urlParams.get('autoJoin');
-    var mapName = urlParams.get('map') || '__default__';
-    var rounds = parseInt(urlParams.get('rounds'), 10) || 2;
-    var heroId = urlParams.get('hero') || '';
-
-    if (autoHost) {
-      setTimeout(function () {
-        if (typeof io !== 'function' || typeof startFFAHost !== 'function') return;
-        var sock = io();
-        var settings = { killLimit: 10, maxPlayers: 8, mapName: mapName, rounds: rounds };
-        sock.emit('createRoom', autoHost, settings, function (res) {
-          if (!res || !res.ok) { console.warn('splitView: createRoom failed', res); return; }
-          startFFAHost(autoHost, settings, sock);
-          // Apply hero selection to host player
-          if (heroId && typeof applyHeroToPlayer === 'function' && typeof getFFAState === 'function') {
-            var st = getFFAState();
-            if (st && st.localId && st.players[st.localId]) {
-              applyHeroToPlayer(st.players[st.localId].entity, heroId);
-              st.players[st.localId].heroId = heroId;
-            }
-          }
-          // Auto-start round when first client joins
-          sock.once('clientJoined', function () {
-            setTimeout(function () {
-              if (typeof startFFARound === 'function') startFFARound();
-            }, 500);
-          });
-        });
-      }, 500);
-    } else if (autoJoin) {
-      setTimeout(function () {
-        if (typeof io !== 'function' || typeof joinFFAGame !== 'function') return;
-        var sock = io();
-        sock.emit('joinRoom', autoJoin, function (res) {
-          if (!res || !res.ok) {
-            // Retry — host room may not exist yet
-            var retries = 0;
-            var retryTimer = setInterval(function () {
-              if (window.ffaActive) { clearInterval(retryTimer); return; }
-              retries++;
-              if (retries >= 10) { clearInterval(retryTimer); return; }
-              sock.emit('joinRoom', autoJoin, function (r) {
-                if (r && r.ok) {
-                  clearInterval(retryTimer);
-                  finishJoin(r);
-                }
-              });
-            }, 1000);
-            return;
-          }
-          finishJoin(res);
-        });
-        function finishJoin(res) {
-          var clientSettings = res.settings || {};
-          if (!clientSettings.mapName) clientSettings.mapName = mapName;
-          joinFFAGame(autoJoin, sock, clientSettings);
-          // Apply hero selection to client player
-          if (heroId) {
-            setTimeout(function () {
-              if (typeof applyHeroToPlayer === 'function' && typeof getFFAState === 'function') {
-                var st = getFFAState();
-                if (st && st.localId && st.players[st.localId]) {
-                  applyHeroToPlayer(st.players[st.localId].entity, heroId);
-                  st.players[st.localId].heroId = heroId;
-                }
-              }
-              // Tell host about hero choice (include clientId for server relay)
-              sock.emit('heroSelect', { heroId: heroId, clientId: sock.id });
-            }, 100);
-          }
-        }
-      }, 2000);
-    }
   }
 
-  // ── AutoAI auto-start (iframe from dev workbench Quick Test) ──
-  if (urlParams.get('autoAI') === '1') {
-    window._splitViewMode = true;
-    document.body.classList.add('split-view-mode');
-    window.alert = function () {};
-
-    setTimeout(function () {
-      var heroId = urlParams.get('hero') || '';
-      var difficulty = urlParams.get('difficulty') || 'medium';
-      var mapName = urlParams.get('map') || '__default__';
-
-      var launchGame = function (mapData) {
-        if (typeof startPaintballGame === 'function') {
-          startPaintballGame({ difficulty: difficulty, _mapData: mapData || null, _heroId: heroId });
-        }
-      };
-
-      if (mapName && mapName !== '__default__' && typeof fetchMapData === 'function') {
-        fetchMapData(mapName).then(launchGame).catch(function () { launchGame(null); });
-      } else {
-        launchGame(null);
-      }
-    }, 500);
-  }
 }
 
 // ------- Main loop -------

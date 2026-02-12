@@ -1083,7 +1083,8 @@
         magSize: entry.entity.weapon.magSize,
         reloading: entry.entity.weapon.reloading,
         reloadEnd: entry.entity.weapon.reloadEnd,
-        team: entry.team || 0
+        team: entry.team || 0,
+        heroId: entry.heroId || 'marksman'
       };
     }
 
@@ -1273,10 +1274,23 @@
       if (!re) {
         var pos = sp.pos ? new THREE.Vector3(sp.pos[0], sp.pos[1], sp.pos[2]) : new THREE.Vector3();
         var remoteTeam = sp.team || 0;
+        var remoteHeroId = sp.heroId || 'marksman';
         var rp = createPlayerInstance({ position: pos, color: remoteTeam ? getTeamColor(remoteTeam) : randomPlayerColor(), cameraAttached: false });
-        state.players[id] = { entity: rp, heroId: 'marksman', alive: sp.alive, isAI: false, respawnAt: 0, team: remoteTeam };
+        state.players[id] = { entity: rp, heroId: remoteHeroId, alive: sp.alive, isAI: false, respawnAt: 0, team: remoteTeam };
         state.match.scores[id] = state.match.scores[id] || { kills: 0, deaths: 0 };
         re = state.players[id];
+        // Apply hero visuals, hitbox, and stats
+        if (remoteHeroId !== 'marksman' && typeof window.applyHeroToPlayer === 'function') {
+          window.applyHeroToPlayer(rp, remoteHeroId);
+        }
+      }
+
+      // Sync hero if it changed (e.g. between rounds)
+      if (sp.heroId && sp.heroId !== re.heroId) {
+        re.heroId = sp.heroId;
+        if (typeof window.applyHeroToPlayer === 'function') {
+          window.applyHeroToPlayer(re.entity, sp.heroId);
+        }
       }
 
       if (sp.pos) {
@@ -1291,6 +1305,10 @@
         }
       }
 
+      // Detect damage to trigger 3D health bar display
+      if (sp.health < re.entity.health) {
+        re.entity.lastDamagedAt = performance.now();
+      }
       re.entity.health = sp.health;
       if (sp.alive && !re.alive) {
         re.alive = true; re.entity.alive = true; re.entity._meshGroup.visible = true;
@@ -1342,8 +1360,6 @@
 
   window.startFFAHost = function (roomId, settings, existingSocket) {
     if (!roomId || typeof roomId !== 'string') { alert('Please enter a Room ID'); return; }
-    if (window.aiModeActive) { try { stopPaintballInternal(); } catch (e) {} }
-    if (window.lanModeActive) { try { stopMultiplayerInternal(); } catch (e) {} }
     if (window.ffaActive) { try { stopFFAInternal(); } catch (e) {} }
 
     var mapName = settings && settings.mapName;
@@ -1656,6 +1672,18 @@
     // Spawn AI bots from lobby slots
     spawnAIPlayers();
 
+    // Add remote human players already in the lobby (clientJoined fires during
+    // lobby phase before FFA handlers are attached, so those events are missed)
+    var lobbyPlayers = window._lobbyState && window._lobbyState.playerList;
+    if (lobbyPlayers) {
+      for (var lp = 0; lp < lobbyPlayers.length; lp++) {
+        var lpId = lobbyPlayers[lp].id;
+        if (lpId && lpId !== state.localId && !state.players[lpId]) {
+          addRemotePlayer(lpId);
+        }
+      }
+    }
+
     // Setup HUD
     setHUDVisible(true);
     showOnlyMenu(null);
@@ -1684,13 +1712,19 @@
         seconds: 15,
         onConfirmed: function (heroId) {
           var localEntry = state && state.players[state.localId];
-          if (localEntry) applyHeroWeapon(localEntry.entity, heroId);
+          if (localEntry) {
+            applyHeroWeapon(localEntry.entity, heroId);
+            localEntry.heroId = heroId;
+          }
           if (typeof window.closePreRoundHeroSelect === 'function') window.closePreRoundHeroSelect();
           startRoundCountdown(3);
         },
         onTimeout: function (heroId) {
           var localEntry = state && state.players[state.localId];
-          if (localEntry) applyHeroWeapon(localEntry.entity, heroId);
+          if (localEntry) {
+            applyHeroWeapon(localEntry.entity, heroId);
+            localEntry.heroId = heroId;
+          }
           if (typeof window.closePreRoundHeroSelect === 'function') window.closePreRoundHeroSelect();
           startRoundCountdown(3);
         }
@@ -1781,13 +1815,21 @@
           seconds: 15,
           onConfirmed: function (heroId) {
             var localEntry = state && state.players[state.localId];
-            if (localEntry) applyHeroWeapon(localEntry.entity, heroId);
+            if (localEntry) {
+              applyHeroWeapon(localEntry.entity, heroId);
+              localEntry.heroId = heroId;
+            }
+            if (socket) socket.emit('heroSelect', { heroId: heroId, clientId: state.localId });
             if (typeof window.closePreRoundHeroSelect === 'function') window.closePreRoundHeroSelect();
             startRoundCountdown(3);
           },
           onTimeout: function (heroId) {
             var localEntry = state && state.players[state.localId];
-            if (localEntry) applyHeroWeapon(localEntry.entity, heroId);
+            if (localEntry) {
+              applyHeroWeapon(localEntry.entity, heroId);
+              localEntry.heroId = heroId;
+            }
+            if (socket) socket.emit('heroSelect', { heroId: heroId, clientId: state.localId });
             if (typeof window.closePreRoundHeroSelect === 'function') window.closePreRoundHeroSelect();
             startRoundCountdown(3);
           }
@@ -1806,8 +1848,6 @@
 
   window.joinFFAGame = function (roomId, existingSocket, lobbySettings) {
     if (!roomId || typeof roomId !== 'string') { alert('Please enter a Room ID'); return; }
-    if (window.aiModeActive) { try { stopPaintballInternal(); } catch (e) {} }
-    if (window.lanModeActive) { try { stopMultiplayerInternal(); } catch (e) {} }
     if (window.ffaActive) { try { stopFFAInternal(); } catch (e) {} }
 
     if (existingSocket) {

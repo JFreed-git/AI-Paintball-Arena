@@ -1440,11 +1440,7 @@ body {
     color: #fff;
 }
 
-/* Split-view mode (iframe clients) — hide menus so auto-start is seamless */
-body.split-view-mode #mainMenu,
-body.split-view-mode .menu {
-    display: none !important;
-}
+/* Split-view mode (iframe clients) — menus are visible so user can host/join */
 
 /* AI State Label (dev console overlay) */
 #aiStateLabel {

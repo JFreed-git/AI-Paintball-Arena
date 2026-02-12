@@ -21,27 +21,13 @@
             <button class="dev-nav-btn" data-panel="mapEditor">Map Editor</button>
             <button class="dev-nav-btn" data-panel="menuBuilder">Menu Builder</button>
             <button class="dev-nav-btn" data-panel="audioManager">Audio Manager</button>
-            <button class="dev-nav-btn" data-panel="quickTest">Quick Test</button>
             <button class="dev-nav-btn dev-nav-launch" data-panel="launchGame">Launch Game</button>
         </nav>
         <div id="devPanels">
             <!-- Split Screen Panel -->
             <div id="panelSplitScreen" class="dev-panel active">
                 <h3>Split-Screen Test</h3>
-                <div class="dev-field">
-                    <label>P1 Hero</label>
-                    <select id="ssHeroP1"></select>
-                </div>
-                <div class="dev-field">
-                    <label>P2 Hero</label>
-                    <select id="ssHeroP2"></select>
-                </div>
-                <div class="dev-field">
-                    <label>Map</label>
-                    <select id="ssMapSelect">
-                        <option value="__default__">Default Arena</option>
-                    </select>
-                </div>
+                <p class="dev-hint">Two independent game windows side by side. Host from one, join from the other.</p>
                 <div class="dev-actions">
                     <button id="ssStart" class="dev-btn-primary">Start</button>
                     <button id="ssStop" class="dev-btn-secondary" disabled>Stop</button>
@@ -195,32 +181,6 @@
                 <button id="meOpen" class="dev-btn-primary" style="display:none">Open Map Editor</button>
             </div>
 
-            <!-- Quick Test Panel -->
-            <div id="panelQuickTest" class="dev-panel">
-                <h3>Quick Test</h3>
-                <div class="dev-field">
-                    <label>Hero</label>
-                    <select id="qtHero"></select>
-                </div>
-                <div class="dev-field">
-                    <label>Difficulty</label>
-                    <select id="qtDifficulty">
-                        <option value="Easy">Easy</option>
-                        <option value="Medium">Medium</option>
-                        <option value="Hard">Hard</option>
-                    </select>
-                </div>
-                <div class="dev-field">
-                    <label>Map</label>
-                    <select id="qtMapSelect">
-                        <option value="__default__">Default Arena</option>
-                    </select>
-                </div>
-                <div class="dev-actions">
-                    <button id="qtAIMatch" class="dev-btn-primary">AI Match</button>
-                    <button id="qtTraining" class="dev-btn-secondary">Training Range</button>
-                </div>
-            </div>
             <!-- Menu Builder Panel -->
             <div id="panelMenuBuilder" class="dev-panel">
                 <h3>Menu Builder</h3>
@@ -427,23 +387,6 @@
                     </div>
                 </div>
             </div>
-
-            <!-- Split-Screen HUD overlays -->
-            <div id="ssHudP1" class="ss-hud hidden">
-                <div class="ss-hud-label">P1</div>
-                <div class="ss-health-bar"><div class="ss-health-fill" id="ssHealthFillP1"></div></div>
-                <div class="ss-ammo"><span id="ssAmmoP1">6/6</span><span id="ssReloadP1" class="hidden">Reloading...</span></div>
-            </div>
-            <div id="ssHudP2" class="ss-hud hidden">
-                <div class="ss-hud-label">P2</div>
-                <div class="ss-health-bar"><div class="ss-health-fill" id="ssHealthFillP2"></div></div>
-                <div class="ss-ammo"><span id="ssAmmoP2">6/6</span><span id="ssReloadP2" class="hidden">Reloading...</span></div>
-            </div>
-            <div id="ssControlIndicator" class="hidden">CONTROLLING P1</div>
-
-            <!-- Crosshairs for split-screen -->
-            <div id="ssCrosshairP1" class="ss-crosshair hidden"><div class="ch-bar ch-left"></div><div class="ch-bar ch-right"></div><div class="ch-bar ch-top"></div><div class="ch-bar ch-bottom"></div></div>
-            <div id="ssCrosshairP2" class="ss-crosshair hidden"><div class="ch-bar ch-left"></div><div class="ch-bar ch-right"></div><div class="ch-bar ch-top"></div><div class="ch-bar ch-bottom"></div></div>
 
             <!-- Menus (hidden, stubs for game mode compat) -->
             <div id="mainMenu" class="menu hidden"></div>
@@ -705,9 +648,7 @@
     <script src="aiOpponent.js"></script>
     <script src="trainingBot.js"></script>
 
-    <!-- Game modes (needed for Quick Test) -->
-    <script src="modeAI.js"></script>
-    <script src="modeLAN.js"></script>
+    <!-- Game modes -->
     <script src="modeTraining.js"></script>
 
     <!-- Dev workbench -->

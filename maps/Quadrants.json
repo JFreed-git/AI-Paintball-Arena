@@ -111,85 +111,6 @@
       "mirrorFlip": false
     },
     {
-      "id": "obj_10",
-      "type": "arch",
-      "position": [
-        -22,
-        0,
-        -18
-      ],
-      "rotation": 180,
-      "color": "#7A6A55",
-      "size": [
-        17.25,
-        9.75,
-        4.5
-      ],
-      "quadGroupId": "qg_3",
-      "quadRole": "original",
-      "mirrorFlip": false
-    },
-    {
-      "id": "obj_11",
-      "type": "arch",
-      "position": [
-        -22,
-        0,
-        18
-      ],
-      "rotation": 180,
-      "color": "#7A6A55",
-      "size": [
-        17.25,
-        9.75,
-        4.5
-      ],
-      "quadGroupId": "qg_3",
-      "quadRole": "mirZ",
-      "mirrorFlip": true,
-      "mirrorAxis": "z"
-    },
-    {
-      "id": "obj_12",
-      "type": "arch",
-      "position": [
-        22,
-        0,
-        -18
-      ],
-      "rotation": 0,
-      "color": "#7A6A55",
-      "size": [
-        17.25,
-        9.75,
-        4.5
-      ],
-      "quadGroupId": "qg_3",
-      "quadRole": "mirX",
-      "mirrorFlip": true,
-      "mirrorAxis": "x"
-    },
-    {
-      "id": "obj_13",
-      "type": "arch",
-      "position": [
-        22,
-        0,
-        18
-      ],
-      "rotation": 0,
-      "color": "#7A6A55",
-      "size": [
-        17.25,
-        9.75,
-        4.5
-      ],
-      "quadGroupId": "qg_3",
-      "quadRole": "mirXZ",
-      "mirrorFlip": true,
-      "mirrorAxis": "x"
-    },
-    {
       "id": "obj_14",
       "type": "box",
       "position": [
@@ -342,84 +263,6 @@
       "quadGroupId": "qg_5",
       "quadRole": "mirXZ",
       "mirrorFlip": false
-    },
-    {
-      "id": "obj_22",
-      "type": "box",
-      "position": [
-        -19.5,
-        0,
-        -21.5
-      ],
-      "rotation": 0,
-      "color": "#6B5B4F",
-      "size": [
-        2.5,
-        3,
-        2
-      ],
-      "quadGroupId": "qg_6",
-      "quadRole": "original"
-    },
-    {
-      "id": "obj_23",
-      "type": "box",
-      "position": [
-        -19.5,
-        0,
-        21.5
-      ],
-      "rotation": 0,
-      "color": "#6B5B4F",
-      "size": [
-        2.5,
-        3,
-        2
-      ],
-      "quadGroupId": "qg_6",
-      "quadRole": "mirZ",
-      "mirrorFlip": true,
-      "mirrorAxis": "z"
-    },
-    {
-      "id": "obj_24",
-      "type": "box",
-      "position": [
-        19.5,
-        0,
-        -21.5
-      ],
-      "rotation": 180,
-      "color": "#6B5B4F",
-      "size": [
-        2.5,
-        3,
-        2
-      ],
-      "quadGroupId": "qg_6",
-      "quadRole": "mirX",
-      "mirrorFlip": true,
-      "mirrorAxis": "x"
-    },
-    {
-      "id": "obj_25",
-      "type": "box",
-      "position": [
-        19.5,
-        0,
-        21.5
-      ],
-      "rotation": 180,
-      "color": "#6B5B4F",
-      "size": [
-        2.5,
-        3,
-        2
-      ],
-      "quadGroupId": "qg_6",
-      "quadRole": "mirXZ",
-      "mirrorFlip": true,
-      "mirrorAxis": "x"
     },
     {
       "id": "obj_26",
@@ -1246,7 +1089,7 @@
       "id": "obj_73",
       "type": "box",
       "position": [
-        1.875,
+        1.625,
         0,
         10.75
       ],
@@ -1264,9 +1107,9 @@
       "id": "obj_74",
       "type": "box",
       "position": [
-        -2.25,
+        -10.75,
         0,
-        80.375
+        1.625
       ],
       "rotation": 270,
       "color": "#6B5B4F",
@@ -1282,9 +1125,9 @@
       "id": "obj_75",
       "type": "box",
       "position": [
-        -71.875,
+        -1.625,
         0,
-        76.25
+        -10.75
       ],
       "rotation": 180,
       "color": "#6B5B4F",
@@ -1300,9 +1143,9 @@
       "id": "obj_76",
       "type": "box",
       "position": [
-        -67.75,
+        10.75,
         0,
-        6.625
+        -1.625
       ],
       "rotation": 90,
       "color": "#6B5B4F",
@@ -1312,6 +1155,150 @@
         1
       ],
       "quadGroupId": "qg_18",
+      "quadRole": "rot270"
+    },
+    {
+      "id": "obj_78",
+      "type": "box",
+      "position": [
+        -3,
+        0,
+        -2.9999999999999845
+      ],
+      "rotation": 0,
+      "color": "#6B5B4F",
+      "size": [
+        3.75,
+        3,
+        7
+      ],
+      "quadGroupId": "qg_19",
+      "quadRole": "original"
+    },
+    {
+      "id": "obj_79",
+      "type": "box",
+      "position": [
+        2.9999999999999845,
+        0,
+        -3
+      ],
+      "rotation": 270,
+      "color": "#6B5B4F",
+      "size": [
+        3.75,
+        3,
+        7
+      ],
+      "quadGroupId": "qg_19",
+      "quadRole": "rot90"
+    },
+    {
+      "id": "obj_80",
+      "type": "box",
+      "position": [
+        3,
+        0,
+        2.9999999999999845
+      ],
+      "rotation": 180,
+      "color": "#6B5B4F",
+      "size": [
+        3.75,
+        3,
+        7
+      ],
+      "quadGroupId": "qg_19",
+      "quadRole": "rot180"
+    },
+    {
+      "id": "obj_81",
+      "type": "box",
+      "position": [
+        -2.9999999999999845,
+        0,
+        3
+      ],
+      "rotation": 90,
+      "color": "#6B5B4F",
+      "size": [
+        3.75,
+        3,
+        7
+      ],
+      "quadGroupId": "qg_19",
+      "quadRole": "rot270"
+    },
+    {
+      "id": "obj_82",
+      "type": "arch",
+      "position": [
+        -25.25,
+        0,
+        -17.75
+      ],
+      "rotation": 0,
+      "color": "#7A6A55",
+      "size": [
+        17.25,
+        16.5,
+        6
+      ],
+      "quadGroupId": "qg_20",
+      "quadRole": "original"
+    },
+    {
+      "id": "obj_83",
+      "type": "arch",
+      "position": [
+        17.75,
+        0,
+        -25.25
+      ],
+      "rotation": 270,
+      "color": "#7A6A55",
+      "size": [
+        17.25,
+        16.5,
+        6
+      ],
+      "quadGroupId": "qg_20",
+      "quadRole": "rot90"
+    },
+    {
+      "id": "obj_84",
+      "type": "arch",
+      "position": [
+        25.25,
+        0,
+        17.75
+      ],
+      "rotation": 180,
+      "color": "#7A6A55",
+      "size": [
+        17.25,
+        16.5,
+        6
+      ],
+      "quadGroupId": "qg_20",
+      "quadRole": "rot180"
+    },
+    {
+      "id": "obj_85",
+      "type": "arch",
+      "position": [
+        -17.75,
+        0,
+        25.25
+      ],
+      "rotation": 90,
+      "color": "#7A6A55",
+      "size": [
+        17.25,
+        16.5,
+        6
+      ],
+      "quadGroupId": "qg_20",
       "quadRole": "rot270"
     }
   ]
