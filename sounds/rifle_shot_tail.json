@@ -1,0 +1,18 @@
+{
+  "id": "rifle_shot_tail",
+  "name": "Rifle Shot Tail",
+  "synthesis": {
+    "type": "sweep",
+    "waveform": "sawtooth",
+    "startFreq": 1200,
+    "endFreq": 200,
+    "duration": 0.12,
+    "volume": 0.35,
+    "attack": 0.002,
+    "decay": 0.118,
+    "noiseAmount": 0.5
+  },
+  "bindings": [
+    { "event": "weapon_fire", "filter": { "weaponModelType": "rifle" } }
+  ]
+}

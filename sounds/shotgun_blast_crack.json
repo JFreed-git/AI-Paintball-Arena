@@ -1,0 +1,17 @@
+{
+  "id": "shotgun_blast_crack",
+  "name": "Shotgun Blast Crack",
+  "synthesis": {
+    "type": "noise_burst",
+    "frequency": 6000,
+    "filterType": "highpass",
+    "filterQ": 1.5,
+    "duration": 0.025,
+    "volume": 0.45,
+    "attack": 0.001,
+    "decay": 0.024
+  },
+  "bindings": [
+    { "event": "weapon_fire", "filter": { "weaponModelType": "shotgun" } }
+  ]
+}

@@ -1,0 +1,17 @@
+{
+  "id": "hit_marker_tick",
+  "name": "Hit Marker Tick",
+  "synthesis": {
+    "type": "noise_burst",
+    "frequency": 8000,
+    "filterType": "highpass",
+    "filterQ": 3,
+    "duration": 0.015,
+    "volume": 0.2,
+    "attack": 0.001,
+    "decay": 0.014
+  },
+  "bindings": [
+    { "event": "hit_marker", "filter": {} }
+  ]
+}

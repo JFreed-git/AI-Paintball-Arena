@@ -1,0 +1,18 @@
+{
+  "id": "elimination_shimmer",
+  "name": "Elimination Shimmer",
+  "synthesis": {
+    "type": "multi_tone",
+    "waveform": "sine",
+    "volume": 0.15,
+    "noteDecay": 0.3,
+    "notes": [
+      { "freq": 784, "duration": 0.3, "delay": 0.21 },
+      { "freq": 1047, "duration": 0.3, "delay": 0.21 },
+      { "freq": 1319, "duration": 0.3, "delay": 0.21 }
+    ]
+  },
+  "bindings": [
+    { "event": "elimination", "filter": {} }
+  ]
+}

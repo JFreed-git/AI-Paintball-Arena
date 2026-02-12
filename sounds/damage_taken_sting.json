@@ -1,0 +1,16 @@
+{
+  "id": "damage_taken_sting",
+  "name": "Damage Taken Sting",
+  "synthesis": {
+    "type": "tone",
+    "waveform": "square",
+    "frequency": 2800,
+    "duration": 0.05,
+    "volume": 0.2,
+    "attack": 0.001,
+    "decay": 0.049
+  },
+  "bindings": [
+    { "event": "damage_taken", "filter": {} }
+  ]
+}

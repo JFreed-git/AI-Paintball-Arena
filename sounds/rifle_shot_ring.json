@@ -1,0 +1,16 @@
+{
+  "id": "rifle_shot_ring",
+  "name": "Rifle Shot Ring",
+  "synthesis": {
+    "type": "tone",
+    "waveform": "sine",
+    "frequency": 4200,
+    "duration": 0.08,
+    "volume": 0.15,
+    "attack": 0.001,
+    "decay": 0.079
+  },
+  "bindings": [
+    { "event": "weapon_fire", "filter": { "weaponModelType": "rifle" } }
+  ]
+}
