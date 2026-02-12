@@ -4,11 +4,11 @@
   "synthesis": {
     "type": "tone",
     "waveform": "square",
-    "frequency": 900,
-    "duration": 0.08,
-    "volume": 0.2,
-    "attack": 0.002,
-    "decay": 0.078
+    "frequency": 1400,
+    "duration": 0.04,
+    "volume": 0.25,
+    "attack": 0.001,
+    "decay": 0.039
   },
   "bindings": [
     { "event": "reload_end", "filter": {} }

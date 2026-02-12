@@ -2,13 +2,15 @@
   "id": "reload_start",
   "name": "Reload Start",
   "synthesis": {
-    "type": "tone",
+    "type": "sweep",
     "waveform": "square",
-    "frequency": 600,
-    "duration": 0.06,
-    "volume": 0.15,
-    "attack": 0.002,
-    "decay": 0.058
+    "startFreq": 800,
+    "endFreq": 200,
+    "duration": 0.1,
+    "volume": 0.2,
+    "attack": 0.001,
+    "decay": 0.099,
+    "noiseAmount": 0.3
   },
   "bindings": [
     { "event": "reload_start", "filter": {} }

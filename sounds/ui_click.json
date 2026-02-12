@@ -4,11 +4,11 @@
   "synthesis": {
     "type": "tone",
     "waveform": "sine",
-    "frequency": 1200,
-    "duration": 0.03,
-    "volume": 0.12,
+    "frequency": 1500,
+    "duration": 0.025,
+    "volume": 0.18,
     "attack": 0.001,
-    "decay": 0.029
+    "decay": 0.024
   },
   "bindings": [
     { "event": "ui_click", "filter": {} }

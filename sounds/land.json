@@ -3,13 +3,13 @@
   "name": "Land",
   "synthesis": {
     "type": "noise_burst",
-    "frequency": 300,
+    "frequency": 200,
     "filterType": "lowpass",
-    "filterQ": 0.5,
-    "duration": 0.06,
+    "filterQ": 0.6,
+    "duration": 0.08,
     "volume": 0.18,
     "attack": 0.001,
-    "decay": 0.059
+    "decay": 0.079
   },
   "bindings": [
     { "event": "land", "filter": {} }

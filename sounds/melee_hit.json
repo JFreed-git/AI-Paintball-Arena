@@ -3,13 +3,13 @@
   "name": "Melee Hit",
   "synthesis": {
     "type": "noise_burst",
-    "frequency": 800,
-    "filterType": "bandpass",
-    "filterQ": 0.6,
-    "duration": 0.08,
+    "frequency": 350,
+    "filterType": "lowpass",
+    "filterQ": 0.7,
+    "duration": 0.12,
     "volume": 0.35,
     "attack": 0.001,
-    "decay": 0.079
+    "decay": 0.119
   },
   "bindings": [
     { "event": "melee_hit", "filter": {} }

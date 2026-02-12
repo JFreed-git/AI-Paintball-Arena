@@ -3,12 +3,12 @@
   "name": "Hit Marker",
   "synthesis": {
     "type": "tone",
-    "waveform": "sine",
-    "frequency": 1800,
-    "duration": 0.05,
-    "volume": 0.25,
+    "waveform": "triangle",
+    "frequency": 3200,
+    "duration": 0.07,
+    "volume": 0.3,
     "attack": 0.001,
-    "decay": 0.049
+    "decay": 0.069
   },
   "bindings": [
     { "event": "hit_marker", "filter": {} }

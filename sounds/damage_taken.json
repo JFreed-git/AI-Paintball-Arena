@@ -2,14 +2,15 @@
   "id": "damage_taken",
   "name": "Damage Taken",
   "synthesis": {
-    "type": "noise_burst",
-    "frequency": 500,
-    "filterType": "lowpass",
-    "filterQ": 0.8,
-    "duration": 0.1,
+    "type": "sweep",
+    "waveform": "square",
+    "startFreq": 200,
+    "endFreq": 60,
+    "duration": 0.18,
     "volume": 0.3,
-    "attack": 0.001,
-    "decay": 0.099
+    "attack": 0.002,
+    "decay": 0.178,
+    "noiseAmount": 0.4
   },
   "bindings": [
     { "event": "damage_taken", "filter": {} }
