@@ -13,7 +13,9 @@
  *   fetchMapList()                 — GET map list from server
  *   fetchMapData(name)             — GET map from server
  *   recalcNextMirrorPairId(mapData) — recompute mirror pair IDs
- *   normalizeSpawns(spawns)          — convert old/new spawn formats to array
+ *   normalizeSpawns(spawns)          — convert any spawn format to per-mode object
+ *   getMapSpawnsForMode(mapData, mode) — get spawn array for a given mode
+ *   getMapMaxPlayers(mapData, mode)  — max player count (optionally per-mode)
  *   computeColliderForMesh(mesh)    — compute Box3 collider(s) for a mesh
  *
  * DEPENDENCIES: Three.js, game.js (scene global), physics.js (GROUND_Y)
@@ -133,10 +135,12 @@
       name: 'Default Arena',
       version: 1,
       arena: { width: 60, length: 90, wallHeight: 3.5 },
-      spawns: [
-        { id: 'spawn_1', position: [0, 0, -37], team: 'A' },
-        { id: 'spawn_2', position: [0, 0, 37], team: 'B' }
-      ],
+      spawns: {
+        ffa: [
+          { id: 'spawn_1', position: [0, 0, -37], team: 0 },
+          { id: 'spawn_2', position: [0, 0, 37], team: 0 }
+        ]
+      },
       objects: objects
     };
   };
@@ -156,35 +160,86 @@
     return max + 1;
   };
 
-  // ── Normalize spawns to array format ──
-  // Handles backward compatibility: old {A:[x,y,z], B:[x,y,z]} → new array format
+  // ── Normalize spawns to per-mode object format ──
+  // Returns: { ffa: [{id, position, team}], tdm: [...], ... }
+  // team is an integer: 0 = no team (any player), 1/2/3/4 = team-specific
+  // Handles three input formats:
+  //   1. Array (current format): wrap as { ffa: [...] }, convert team letters to numbers
+  //   2. Object with mode keys (new format): return as-is
+  //   3. Ancient {A:[x,y,z], B:[x,y,z]} format: convert to { ffa: [...] }
+
+  var _letterToTeam = { A: 1, B: 2, C: 3, D: 4 };
+
+  function _convertTeamToNumber(team) {
+    if (typeof team === 'number') return team;
+    if (typeof team === 'string' && _letterToTeam[team]) return _letterToTeam[team];
+    return 0;
+  }
 
   window.normalizeSpawns = function (spawns) {
-    if (Array.isArray(spawns)) return spawns;
-    // Old format: { A: [x,y,z], B: [x,y,z] }
-    var arr = [];
-    var id = 1;
-    if (spawns && spawns.A) {
-      arr.push({ id: 'spawn_' + id++, position: spawns.A.slice(), team: 'A' });
-    }
-    if (spawns && spawns.B) {
-      arr.push({ id: 'spawn_' + id++, position: spawns.B.slice(), team: 'B' });
-    }
-    // Handle additional teams if present
-    var keys = spawns ? Object.keys(spawns) : [];
-    for (var i = 0; i < keys.length; i++) {
-      if (keys[i] !== 'A' && keys[i] !== 'B') {
-        arr.push({ id: 'spawn_' + id++, position: spawns[keys[i]].slice(), team: keys[i] });
+    if (!spawns) return { ffa: [] };
+
+    // Case 1: Array (current format) — convert team letters to numbers, wrap as { ffa: [...] }
+    if (Array.isArray(spawns)) {
+      var converted = [];
+      for (var i = 0; i < spawns.length; i++) {
+        var sp = spawns[i];
+        converted.push({ id: sp.id, position: sp.position, team: _convertTeamToNumber(sp.team) });
       }
+      return { ffa: converted };
     }
-    return arr;
+
+    // Object — check if new per-mode format or ancient {A:pos, B:pos}
+    var keys = Object.keys(spawns);
+    if (keys.length === 0) return { ffa: [] };
+
+    // Ancient format: keys are single uppercase letters (A, B, C, D)
+    if (/^[A-Z]$/.test(keys[0])) {
+      var arr = [];
+      var id = 1;
+      for (var k = 0; k < keys.length; k++) {
+        arr.push({
+          id: 'spawn_' + id++,
+          position: spawns[keys[k]].slice(),
+          team: _letterToTeam[keys[k]] || 0
+        });
+      }
+      return { ffa: arr };
+    }
+
+    // Case 2: New per-mode format — return as-is
+    return spawns;
   };
 
-  window.getMapMaxPlayers = function (mapData) {
+  // supportedModes can be derived from Object.keys(normalizeSpawns(mapData.spawns))
+
+  window.getMapMaxPlayers = function (mapData, mode) {
     if (!mapData) return 2;
+    var spawnsByMode = window.normalizeSpawns(mapData.spawns);
+    if (mode) {
+      var modeSpawns = spawnsByMode[mode] || spawnsByMode.ffa || [];
+      return Math.max(2, modeSpawns.length);
+    }
+    // No mode: fall back to maxPlayers if set, otherwise max across all modes
     if (mapData.maxPlayers) return mapData.maxPlayers;
-    var spawns = window.normalizeSpawns(mapData.spawns);
-    return Math.max(2, spawns.length);
+    var max = 0;
+    var modes = Object.keys(spawnsByMode);
+    for (var m = 0; m < modes.length; m++) {
+      var count = spawnsByMode[modes[m]].length;
+      if (count > max) max = count;
+    }
+    return Math.max(2, max);
+  };
+
+  window.getMapSpawnsForMode = function (mapData, mode) {
+    if (!mapData || !mapData.spawns) return [];
+    var spawnsByMode = window.normalizeSpawns(mapData.spawns);
+    if (spawnsByMode[mode]) return spawnsByMode[mode];
+    if (spawnsByMode.ffa) return spawnsByMode.ffa;
+    // Fall back to first available mode
+    var keys = Object.keys(spawnsByMode);
+    if (keys.length > 0) return spawnsByMode[keys[0]];
+    return [];
   };
 
   // ── Compute colliders for a mesh ──
@@ -458,23 +513,24 @@
       }
     }
 
-    // Spawns — normalize to array format (backward compat with old {A,B} maps)
-    var spawnsList = window.normalizeSpawns(mapData.spawns);
+    // Spawns — normalize to per-mode object, get FFA spawns for arena rendering
+    var spawnsByMode = window.normalizeSpawns(mapData.spawns);
+    var spawnsList = window.getMapSpawnsForMode(mapData, 'ffa');
 
-    // Find team A and B for backward compatibility with game modes
+    // Find first two spawns for backward compatibility (spawnA/spawnB used by game modes)
     var spawnA = new THREE.Vector3(0, 0, -10);
     var spawnB = new THREE.Vector3(0, 0, 10);
     for (var si = 0; si < spawnsList.length; si++) {
       var sp = spawnsList[si];
-      if (sp.team === 'A') {
+      if (sp.team === 1 || (si === 0 && spawnA.z === -10)) {
         spawnA.set(sp.position[0], sp.position[1] || 0, sp.position[2]);
-      } else if (sp.team === 'B') {
+      } else if (sp.team === 2 || (si === 1 && spawnB.z === 10)) {
         spawnB.set(sp.position[0], sp.position[1] || 0, sp.position[2]);
       }
     }
 
-    // Color-coded spawn rings (gold=teamless, red=A, blue=B, green=C, orange=D)
-    var spawnTeamColors = { 'A': 0xff4444, 'B': 0x4488ff, 'C': 0x44ff44, 'D': 0xff8844 };
+    // Color-coded spawn rings (gold=teamless, red=team1, blue=team2, green=team3, orange=team4)
+    var spawnTeamColors = { 1: 0xff4444, 2: 0x4488ff, 3: 0x44ff44, 4: 0xff8844 };
     for (var si2 = 0; si2 < spawnsList.length; si2++) {
       var sp2 = spawnsList[si2];
       var spColor = spawnTeamColors[sp2.team] || 0xffd700;
@@ -594,7 +650,8 @@
       solids: solids,
       waypoints: waypoints,
       spawns: { A: spawnA, B: spawnB },
-      spawnsList: spawnsList
+      spawnsList: spawnsList,
+      spawnsByMode: spawnsByMode
     };
   };
 
