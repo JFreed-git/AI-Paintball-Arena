@@ -253,6 +253,28 @@ function bindUI() {
       card.appendChild(thumb);
       card.appendChild(badge);
       card.appendChild(info);
+
+      // Delete button for server maps (skip Default Arena at idx 0)
+      if (idx > 0) {
+        var delBtn = document.createElement('button');
+        delBtn.className = 'map-card-delete';
+        delBtn.textContent = '\u00D7';
+        delBtn.title = 'Delete map';
+        delBtn.addEventListener('click', function (ev) {
+          ev.stopPropagation();
+          if (!confirm('Delete map "' + entry.name + '"?')) return;
+          if (typeof deleteMapFromServer === 'function') {
+            deleteMapFromServer(entry.name).then(function () {
+              _gameSetupMaps.splice(idx, 1);
+              _renderMapCards();
+            }).catch(function (err) {
+              alert('Failed to delete map: ' + (err.message || err));
+            });
+          }
+        });
+        card.appendChild(delBtn);
+      }
+
       mapGrid.appendChild(card);
 
       card.addEventListener('click', function () { _selectMapCard(idx); });
