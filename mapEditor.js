@@ -2005,7 +2005,7 @@
     var spawnHits = raycaster.intersectObjects(spawnMeshArr, true);
     if (spawnHits.length > 0) {
       for (var si = 0; si < spawnEntries.length; si++) {
-        if (spawnEntries[si].mesh === spawnHits[0].object) {
+        if (spawnEntries[si].mesh === spawnHits[0].object || isDescendant(spawnHits[0].object, spawnEntries[si].mesh)) {
           return { spawnEntry: spawnEntries[si] };
         }
       }

@@ -84,6 +84,21 @@ body {
     color: #ddd;
 }
 
+.menu input[type="text"] {
+    flex: 1;
+    padding: 8px 10px;
+    background: #222;
+    color: #fff;
+    border: 1px solid #444;
+    border-radius: 6px;
+    outline: none;
+    font-size: 14px;
+}
+
+.menu input[type="text"]:focus {
+    border-color: #00ff88;
+}
+
 .menu input[type="number"] {
     width: 90px;
     padding: 6px 8px;
