@@ -760,6 +760,8 @@
   function endRound(winnerId, winningTeam) {
     if (!state) return;
     state.match.roundActive = false;
+    hideRespawnHeroPrompt();
+    window._roundTransition = true;
     if (typeof clearAllProjectiles === 'function') clearAllProjectiles();
     if (typeof playGameSound === 'function') playGameSound('elimination');
 
@@ -799,6 +801,7 @@
     }
 
     if (isMatchOver) {
+      window._roundTransition = false;
       // Match is over — show post-match results
       if (socket) {
         socket.emit('matchOver', {
@@ -826,6 +829,7 @@
           if (socket) socket.emit('betweenRoundHeroSelect', { round: state.match.currentRound });
 
           var finishRoundTransition = function (heroId) {
+            window._roundTransition = false;
             var localEntry = state && state.players[state.localId];
             if (localEntry) {
               applyHeroWeapon(localEntry.entity, heroId);
@@ -1759,6 +1763,7 @@
 
     socket.on('startRound', function (data) {
       if (!state || state.isHost) return;
+      window._roundTransition = false;
       var secs = (data && data.seconds) || COUNTDOWN_SECONDS;
       resetAllPlayersForRound();
       updateHUDForLocalPlayer();
@@ -1768,6 +1773,8 @@
     socket.on('roundResult', function (data) {
       if (!state || state.isHost) return;
       state.match.roundActive = false;
+      hideRespawnHeroPrompt();
+      window._roundTransition = true;
       if (typeof clearAllProjectiles === 'function') clearAllProjectiles();
       if (typeof playGameSound === 'function') playGameSound('elimination');
       if (data && data.roundWins) state.match.roundWins = data.roundWins;
@@ -1796,6 +1803,7 @@
 
     socket.on('matchOver', function (data) {
       if (!state || state.isHost) return;
+      window._roundTransition = false;
       state.match.roundActive = false;
       if (typeof clearAllProjectiles === 'function') clearAllProjectiles();
       if (typeof playGameSound === 'function') playGameSound('elimination');
@@ -2170,7 +2178,8 @@
       state.loopHandle = 0;
     }
     try { if (typeof window.closePreRoundHeroSelect === 'function') window.closePreRoundHeroSelect(); } catch (e) {}
-    // Clean up respawn hero prompt
+    // Clean up respawn hero prompt and round transition flag
+    window._roundTransition = false;
     var rhp = document.getElementById('respawnHeroPrompt');
     if (rhp) rhp.classList.add('hidden');
     window._ffaRespawnHeroCallback = null;
