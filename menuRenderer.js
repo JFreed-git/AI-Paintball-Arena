@@ -32,7 +32,7 @@
       id: 'mainMenu',
       name: 'Main Menu',
       width: 420,
-      height: 230,
+      height: 274,
       style: {},
       elements: [
         {
@@ -41,31 +41,38 @@
           style: {}
         },
         {
+          uid: 'mm_name', type: 'textInput', label: 'Player Name',
+          elementId: 'playerNameInput', placeholder: 'Enter your name',
+          maxlength: 20,
+          x: 24, y: 68, width: 372, height: 30,
+          style: {}
+        },
+        {
           uid: 'mm_2', type: 'slider', label: 'Mouse Sensitivity',
           inputId: 'sensInput', valueId: 'sensValue',
           min: 0.2, max: 3, step: 0.1, defaultValue: 1.0,
-          x: 24, y: 72, width: 372, height: 30,
+          x: 24, y: 116, width: 372, height: 30,
           style: {}
         },
         {
           uid: 'mm_3', type: 'slider', label: 'Field of View',
           inputId: 'fovInput', valueId: 'fovValue',
           min: 50, max: 110, step: 1, defaultValue: 75,
-          x: 24, y: 116, width: 372, height: 30,
+          x: 24, y: 160, width: 372, height: 30,
           style: {}
         },
         {
           uid: 'mm_4', type: 'button', text: 'Start Game',
           elementId: 'gotoStartGame', variant: 'primary',
           action: 'showMenu:startGameMenu',
-          x: 60, y: 172, width: 140, height: 40,
+          x: 60, y: 216, width: 140, height: 40,
           style: {}
         },
         {
           uid: 'mm_5', type: 'button', text: 'Training Range',
           elementId: 'gotoTraining', variant: 'secondary',
           action: 'showMenu:trainingMenu',
-          x: 220, y: 172, width: 140, height: 40,
+          x: 220, y: 216, width: 140, height: 40,
           style: {}
         }
       ]
@@ -275,9 +282,10 @@
         tiInput.type = 'text';
         if (cfg.elementId) tiInput.id = cfg.elementId;
         if (cfg.placeholder) tiInput.placeholder = cfg.placeholder;
+        if (cfg.maxlength) tiInput.maxLength = cfg.maxlength;
 
-        tiLabel.appendChild(tiInput);
         root.appendChild(tiLabel);
+        root.appendChild(tiInput);
         break;
       }
 
