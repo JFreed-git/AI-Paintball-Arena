@@ -1600,6 +1600,10 @@
   window.startFFAHost = function (roomId, settings, existingSocket) {
     if (!roomId || typeof roomId !== 'string') { alert('Please enter a Room ID'); return; }
     if (window.ffaActive) { try { stopFFAInternal(); } catch (e) {} }
+    // Cross-mode cleanup: stop training range if active
+    if (window.trainingRangeActive && typeof window.stopTrainingRangeInternal === 'function') {
+      try { window.stopTrainingRangeInternal(false); } catch (e) {}
+    }
 
     var mapName = settings && settings.mapName;
 
@@ -1894,6 +1898,16 @@
   }
 
   function startFFASession(settings, mapData) {
+    // Defensive cleanup: remove any leftover arena groups from the scene
+    if (typeof scene !== 'undefined' && scene) {
+      for (var ci = scene.children.length - 1; ci >= 0; ci--) {
+        var cname = scene.children[ci].name;
+        if (cname === 'PaintballArena' || cname === 'TrainingRangeArena') {
+          scene.remove(scene.children[ci]);
+        }
+      }
+    }
+
     state = newState(settings);
     state.isHost = true;
     state.localId = socket.id;
@@ -2020,6 +2034,16 @@
   }
 
   function initClientSession(clientSettings) {
+    // Defensive cleanup: remove any leftover arena groups from the scene
+    if (typeof scene !== 'undefined' && scene) {
+      for (var ci = scene.children.length - 1; ci >= 0; ci--) {
+        var cname = scene.children[ci].name;
+        if (cname === 'PaintballArena' || cname === 'TrainingRangeArena') {
+          scene.remove(scene.children[ci]);
+        }
+      }
+    }
+
     state = newState(clientSettings || {});
     state.isHost = false;
     state.localId = socket.id;

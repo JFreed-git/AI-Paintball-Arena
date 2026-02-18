@@ -435,6 +435,19 @@
     if (window.trainingRangeActive) {
       try { if (typeof stopTrainingRangeInternal === 'function') stopTrainingRangeInternal(); } catch (e) {}
     }
+    // Cross-mode cleanup: stop FFA if active
+    if (window.ffaActive && typeof window.stopFFAInternal === 'function') {
+      try { window.stopFFAInternal(); } catch (e) {}
+    }
+    // Defensive cleanup: remove any leftover arena groups from the scene
+    if (typeof scene !== 'undefined' && scene) {
+      for (var ci = scene.children.length - 1; ci >= 0; ci--) {
+        var cname = scene.children[ci].name;
+        if (cname === 'PaintballArena' || cname === 'TrainingRangeArena') {
+          scene.remove(scene.children[ci]);
+        }
+      }
+    }
     var requestedHeroId = (opts && opts._heroId) || (window.getCurrentHeroId ? window.getCurrentHeroId() : 'marksman');
     var hero = window.getHeroById ? window.getHeroById(requestedHeroId) : null;
     var weaponOpts = hero ? hero.weapon : {};
