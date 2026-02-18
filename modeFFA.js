@@ -613,11 +613,15 @@
     if (state.isHost) maybeSendSnapshot(performance.now(), true);
   }
 
-  function getPlayerName(id) {
+  function getPlayerActualName(id) {
     if (!id) return 'Unknown';
     if (state && state.players[id] && state.players[id].name) return state.players[id].name;
-    if (id === (state && state.localId)) return 'You';
     return 'Player ' + id.substring(0, 4);
+  }
+
+  function getPlayerDisplayName(id) {
+    if (id === (state && state.localId)) return 'You';
+    return getPlayerActualName(id);
   }
 
   function checkEliminationWin() {
@@ -668,20 +672,20 @@
     state.match.scores[killerId].kills++;
     state.match.scores[victimId].deaths++;
 
-    // Broadcast kill event to all clients
+    // Broadcast kill event to all clients (use actual names, not "You")
     var killPayload = {
       killerId: killerId,
       victimId: victimId,
       weapon: weapon || 'unknown',
-      killerName: getPlayerName(killerId),
-      victimName: getPlayerName(victimId)
+      killerName: getPlayerActualName(killerId),
+      victimName: getPlayerActualName(victimId)
     };
     if (socket && state.isHost) {
       socket.emit('ffaKill', killPayload);
     }
 
-    // Show local kill feed
-    showKillFeedEntry(killPayload.killerName, killPayload.victimName);
+    // Show local kill feed (use display names so host sees "You")
+    showKillFeedEntry(getPlayerDisplayName(killerId), getPlayerDisplayName(victimId));
 
     // Update scoreboard if available
     if (typeof window.updateFFAScoreboard === 'function') {
@@ -724,7 +728,7 @@
         ? teamName + ' wins the match!'
         : teamName + ' wins round ' + roundNum + '!';
     } else {
-      var winnerName = getPlayerName(winnerId);
+      var winnerName = getPlayerDisplayName(winnerId);
       bannerText = isMatchOver
         ? winnerName + ' wins the match!'
         : winnerName + ' wins round ' + roundNum + '!';
@@ -1572,7 +1576,9 @@
     // Kill event (clients receive from host)
     socket.on('ffaKill', function (payload) {
       if (!state || !payload) return;
-      showKillFeedEntry(payload.killerName || 'Player', payload.victimName || 'Player');
+      var killerDisplay = (payload.killerId === state.localId) ? 'You' : (payload.killerName || 'Player');
+      var victimDisplay = (payload.victimId === state.localId) ? 'You' : (payload.victimName || 'Player');
+      showKillFeedEntry(killerDisplay, victimDisplay);
       if (typeof window.updateFFAScoreboard === 'function') {
         window.updateFFAScoreboard();
       }
@@ -1646,7 +1652,7 @@
           : teamName + ' wins round ' + (data.roundNum || state.match.currentRound) + '!';
       } else {
         var winnerName = (data && data.winnerId)
-          ? ((data.winnerId === state.localId) ? 'You' : getPlayerName(data.winnerId))
+          ? getPlayerDisplayName(data.winnerId)
           : 'Player';
         bannerText = data.isMatchOver
           ? winnerName + ' wins the match!'
@@ -1671,7 +1677,7 @@
       } else {
         var winnerName = 'Player';
         if (data && data.winnerId) {
-          winnerName = (data.winnerId === state.localId) ? 'You' : getPlayerName(data.winnerId);
+          winnerName = getPlayerDisplayName(data.winnerId);
         }
         bannerText = winnerName + ' wins!';
       }
@@ -1716,6 +1722,15 @@
       respawnAt: 0,
       team: team
     };
+    var lobbyPlayers = window._lobbyState && window._lobbyState.playerList;
+    if (lobbyPlayers) {
+      for (var i = 0; i < lobbyPlayers.length; i++) {
+        if (lobbyPlayers[i].id === clientId) {
+          state.players[clientId].name = lobbyPlayers[i].name;
+          break;
+        }
+      }
+    }
     state.match.scores[clientId] = { kills: 0, deaths: 0 };
     state._meleeSwingState[clientId] = { swinging: false, swingEnd: 0 };
     state._remoteInputs[clientId] = {};
@@ -1787,7 +1802,8 @@
       alive: true,
       isAI: false,
       respawnAt: 0,
-      team: hostTeam
+      team: hostTeam,
+      name: (typeof localStorage !== 'undefined' && localStorage.getItem('playerName')) || 'Player 1'
     };
     state.match.scores[state.localId] = { kills: 0, deaths: 0 };
     state._meleeSwingState[state.localId] = { swinging: false, swingEnd: 0 };
