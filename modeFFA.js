@@ -619,12 +619,22 @@
   function showRespawnHeroPrompt() {
     if (!state) return;
     state._respawnHeroPromptActive = true;
+    state._respawnHeroPromptShownAt = performance.now();
     var el = document.getElementById('respawnHeroPrompt');
     if (el) el.classList.remove('hidden');
     if (state._respawnHeroPromptTimer) clearTimeout(state._respawnHeroPromptTimer);
     state._respawnHeroPromptTimer = setTimeout(function () {
       hideRespawnHeroPrompt();
     }, 5000);
+
+    // Expose timer cancel for heroSelectUI.js (state is IIFE-local)
+    window._cancelRespawnHeroTimer = function () {
+      if (state && state._respawnHeroPromptTimer) {
+        clearTimeout(state._respawnHeroPromptTimer);
+        state._respawnHeroPromptTimer = 0;
+      }
+      if (state) state._respawnHeroPromptActive = false;
+    };
 
     // Set callback for heroSelectUI.js H key handler
     window._ffaRespawnHeroCallback = function (heroId) {
@@ -651,6 +661,7 @@
     var el = document.getElementById('respawnHeroPrompt');
     if (el) el.classList.add('hidden');
     window._ffaRespawnHeroCallback = null;
+    window._cancelRespawnHeroTimer = null;
   }
 
   function getPlayerActualName(id) {
@@ -1099,8 +1110,10 @@
         entry.entity.input.meleeDown = enabledLocal && !!localInput.meleePressed;
         if (enabledLocal && localInput.reloadPressed) entry.entity.input.reloadPressed = true;
 
-        // Hide respawn hero prompt on first movement
-        if (state._respawnHeroPromptActive && (localInput.moveX || localInput.moveZ)) {
+        // Hide respawn hero prompt on first movement (500ms grace period for stale input)
+        if (state._respawnHeroPromptActive
+            && (performance.now() - state._respawnHeroPromptShownAt > 500)
+            && (localInput.moveX || localInput.moveZ)) {
           hideRespawnHeroPrompt();
         }
 
@@ -1302,8 +1315,10 @@
       p.input.fireDown = false;
     }
 
-    // Hide respawn hero prompt on first movement
-    if (state._respawnHeroPromptActive && (rawInput.moveX || rawInput.moveZ)) {
+    // Hide respawn hero prompt on first movement (500ms grace period for stale input)
+    if (state._respawnHeroPromptActive
+        && (performance.now() - state._respawnHeroPromptShownAt > 500)
+        && (rawInput.moveX || rawInput.moveZ)) {
       hideRespawnHeroPrompt();
     }
 
@@ -2159,6 +2174,7 @@
     var rhp = document.getElementById('respawnHeroPrompt');
     if (rhp) rhp.classList.add('hidden');
     window._ffaRespawnHeroCallback = null;
+    window._cancelRespawnHeroTimer = null;
     if (state) {
       if (state._respawnHeroPromptTimer) clearTimeout(state._respawnHeroPromptTimer);
       if (state.bannerTimerRef && state.bannerTimerRef.id) {

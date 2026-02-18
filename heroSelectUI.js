@@ -299,6 +299,8 @@
       e.preventDefault();
       var rhp = document.getElementById('respawnHeroPrompt');
       if (rhp) rhp.classList.add('hidden');
+      // Cancel the auto-hide timer so it doesn't null the callback while overlay is open
+      if (typeof window._cancelRespawnHeroTimer === 'function') window._cancelRespawnHeroTimer();
       openHeroSelect();
     } else if (typeof window._ffaRespawnHeroCallback === 'function' && window._heroSelectOpen) {
       e.preventDefault();
