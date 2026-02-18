@@ -232,6 +232,106 @@
     return 'qg_' + (_nextQuadGroupId++);
   }
 
+  function generateSpawnMirrorPairId() {
+    return 'smp_' + (_nextSpawnMirrorPairId++);
+  }
+
+  function generateSpawnQuadGroupId() {
+    return 'sqg_' + (_nextSpawnQuadGroupId++);
+  }
+
+  function recalcNextSpawnMirrorIds() {
+    var maxPair = 0, maxQuad = 0;
+    var modes = Object.keys(mapData.spawns || {});
+    for (var m = 0; m < modes.length; m++) {
+      var spawns = mapData.spawns[modes[m]] || [];
+      for (var i = 0; i < spawns.length; i++) {
+        var sp = spawns[i];
+        if (sp.mirrorPairId) {
+          var num = parseInt(sp.mirrorPairId.replace('smp_', ''), 10);
+          if (num > maxPair) maxPair = num;
+        }
+        if (sp.quadGroupId) {
+          var qnum = parseInt(sp.quadGroupId.replace('sqg_', ''), 10);
+          if (qnum > maxQuad) maxQuad = qnum;
+        }
+      }
+    }
+    _nextSpawnMirrorPairId = maxPair + 1;
+    _nextSpawnQuadGroupId = maxQuad + 1;
+  }
+
+  // ── Spawn mirror/quad helpers ──
+
+  function findSpawnMirrorPartner(spawnData) {
+    if (!spawnData.mirrorPairId) return null;
+    var spawns = getCurrentSpawns();
+    for (var i = 0; i < spawns.length; i++) {
+      if (spawns[i] !== spawnData && spawns[i].mirrorPairId === spawnData.mirrorPairId) return spawns[i];
+    }
+    return null;
+  }
+
+  function findSpawnMirrorPartnerEntry(spawnData) {
+    if (!spawnData.mirrorPairId) return null;
+    for (var i = 0; i < spawnEntries.length; i++) {
+      if (spawnEntries[i].data !== spawnData && spawnEntries[i].data.mirrorPairId === spawnData.mirrorPairId) {
+        return spawnEntries[i];
+      }
+    }
+    return null;
+  }
+
+  function findSpawnQuadGroupData(spawnData) {
+    if (!spawnData.quadGroupId) return [];
+    var spawns = getCurrentSpawns();
+    var result = [];
+    for (var i = 0; i < spawns.length; i++) {
+      if (spawns[i] !== spawnData && spawns[i].quadGroupId === spawnData.quadGroupId) {
+        result.push(spawns[i]);
+      }
+    }
+    return result;
+  }
+
+  function findSpawnQuadGroupEntries(spawnData) {
+    if (!spawnData.quadGroupId) return [];
+    var result = [];
+    for (var i = 0; i < spawnEntries.length; i++) {
+      if (spawnEntries[i].data !== spawnData && spawnEntries[i].data.quadGroupId === spawnData.quadGroupId) {
+        result.push(spawnEntries[i]);
+      }
+    }
+    return result;
+  }
+
+  function syncSpawnMirrorPartner(srcData) {
+    var partner = findSpawnMirrorPartner(srcData);
+    if (!partner) return;
+    var axis = srcData.mirrorAxis || 'z';
+    // Only sync position — team is independent
+    partner.position = srcData.position.slice();
+    if (axis === 'z') partner.position[2] = -srcData.position[2];
+    else if (axis === 'x') partner.position[0] = -srcData.position[0];
+  }
+
+  function syncSpawnQuadGroup(srcData) {
+    if (!srcData.quadGroupId) return;
+    var members = findSpawnQuadGroupData(srcData);
+    var srcRole = srcData.quadRole || 'original';
+    for (var i = 0; i < members.length; i++) {
+      var m = members[i];
+      var targetRole = m.quadRole || 'original';
+      // Only sync position — team is independent
+      m.position = quadMirrorPosition(srcData.position, srcRole, targetRole);
+    }
+  }
+
+  function syncAllLinkedSpawns(srcData) {
+    syncSpawnMirrorPartner(srcData);
+    syncSpawnQuadGroup(srcData);
+  }
+
   // Get the spawn array for the currently selected mode
   function getCurrentSpawns() {
     if (!mapData.spawns || typeof mapData.spawns !== 'object') mapData.spawns = { ffa: [] };
@@ -275,6 +375,7 @@
     recalcNextMirrorPairId();
     recalcNextQuadGroupId();
     recalcNextSpawnId();
+    recalcNextSpawnMirrorIds();
 
     showOnlyMenu(null);
     setHUDVisible(false);
@@ -412,12 +513,23 @@
       var sp = spawns[si];
       var color = SPAWN_COLORS[sp.team] || SPAWN_COLORS[0];
       var ringMat = new THREE.MeshBasicMaterial({ color: color, side: THREE.DoubleSide });
+      var isLinked = !!(sp.mirrorPairId || sp.quadGroupId);
+      var group = new THREE.Group();
       var ring = new THREE.Mesh(new THREE.RingGeometry(1.0, 1.8, 32), ringMat);
       ring.rotation.x = -Math.PI / 2;
-      ring.position.set(sp.position[0], -0.94, sp.position[2]);
-      ring.name = 'EditorGroup';
-      editorScene.add(ring);
-      spawnEntries.push({ mesh: ring, data: sp });
+      group.add(ring);
+      // Inner dot for mirrored/linked spawns
+      if (isLinked) {
+        var dotMat = new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide });
+        var dot = new THREE.Mesh(new THREE.RingGeometry(0.0, 0.5, 16), dotMat);
+        dot.rotation.x = -Math.PI / 2;
+        dot.position.y = 0.01;
+        group.add(dot);
+      }
+      group.position.set(sp.position[0], -0.94, sp.position[2]);
+      group.name = 'EditorGroup';
+      editorScene.add(group);
+      spawnEntries.push({ mesh: group, data: sp });
     }
   }
 
@@ -736,6 +848,46 @@
   }
 
   function mirrorSelected() {
+    // Handle spawn mirror copy
+    if (selectedSpawnEntry) {
+      var axis = mirrorMode !== 'off' && mirrorMode !== 'quad' ? mirrorMode : 'z';
+      pushUndo();
+      var spData = selectedSpawnEntry.data;
+
+      if (spData.mirrorPairId && findSpawnMirrorPartner(spData)) {
+        showEditorToast('Already has a mirror partner');
+        return;
+      }
+      if (spData.quadGroupId) {
+        showEditorToast('Already in a quad group');
+        return;
+      }
+
+      var mpId = generateSpawnMirrorPairId();
+      spData.mirrorPairId = mpId;
+      spData.mirrorAxis = axis;
+      var mirPos = spData.position.slice();
+      if (axis === 'z') mirPos[2] = -mirPos[2];
+      else if (axis === 'x') mirPos[0] = -mirPos[0];
+
+      var partnerData = {
+        id: 'spawn_' + (_nextSpawnId++),
+        position: mirPos,
+        team: 0,
+        mirrorPairId: mpId,
+        mirrorAxis: axis
+      };
+      var spawns = getCurrentSpawns();
+      spawns.push(partnerData);
+      rebuildSpawnMeshes();
+      // Re-select original
+      for (var si = 0; si < spawnEntries.length; si++) {
+        if (spawnEntries[si].data === spData) { selectSpawnEntry(spawnEntries[si]); break; }
+      }
+      updateStatusBar();
+      return;
+    }
+
     if (!selectedObj) return;
     var axis = mirrorMode !== 'off' && mirrorMode !== 'quad' ? mirrorMode : 'z';
     pushUndo();
@@ -1218,7 +1370,7 @@
     document.getElementById('epropRotRow').style.display = 'none';
     document.getElementById('epropSpawnTeamRow').style.display = '';
     document.getElementById('epropSpawnTeam').value = data.team || 0;
-    document.getElementById('epropMirror').style.display = 'none';
+    document.getElementById('epropMirror').style.display = '';
   }
 
   function applyPropsToSelected() {
@@ -1229,6 +1381,8 @@
       sp.position[2] = parseFloat(document.getElementById('epropZ').value) || 0;
       var teamSel = document.getElementById('epropSpawnTeam');
       if (teamSel) sp.team = parseInt(teamSel.value, 10) || 0;
+      // Sync linked spawn positions (but NOT team)
+      syncAllLinkedSpawns(sp);
       rebuildSpawnMeshes();
       // Re-select the spawn after rebuild
       for (var si = 0; si < spawnEntries.length; si++) {
@@ -1433,12 +1587,93 @@
       team = (count1 <= count2) ? 1 : 2;
     }
 
+    var sx = snapToGrid(worldX);
+    var sz = snapToGrid(worldZ);
+
     var spawnData = {
       id: 'spawn_' + (_nextSpawnId++),
-      position: [snapToGrid(worldX), 0, snapToGrid(worldZ)],
+      position: [sx, 0, sz],
       team: team
     };
     spawns.push(spawnData);
+
+    // Mirror/quad spawn placement
+    if (mirrorMode === 'quad') {
+      var onZAxis = Math.abs(sz) < 0.3;
+      var onXAxis = Math.abs(sx) < 0.3;
+      if (onZAxis && onXAxis) {
+        // Center — just one spawn
+      } else if (onZAxis) {
+        // On Z axis — X-mirror pair only
+        var pairId = generateSpawnMirrorPairId();
+        spawnData.mirrorPairId = pairId;
+        spawnData.mirrorAxis = 'x';
+        spawns.push({
+          id: 'spawn_' + (_nextSpawnId++),
+          position: [-sx, 0, sz],
+          team: 0,
+          mirrorPairId: pairId,
+          mirrorAxis: 'x'
+        });
+      } else if (onXAxis) {
+        // On X axis — Z-mirror pair only
+        var pairIdZ = generateSpawnMirrorPairId();
+        spawnData.mirrorPairId = pairIdZ;
+        spawnData.mirrorAxis = 'z';
+        spawns.push({
+          id: 'spawn_' + (_nextSpawnId++),
+          position: [sx, 0, -sz],
+          team: 0,
+          mirrorPairId: pairIdZ,
+          mirrorAxis: 'z'
+        });
+      } else {
+        // Full quad: 4 spawns
+        var qgId = generateSpawnQuadGroupId();
+        spawnData.quadGroupId = qgId;
+        spawnData.quadRole = 'original';
+        spawns.push({
+          id: 'spawn_' + (_nextSpawnId++),
+          position: [-sz, 0, sx],
+          team: 0,
+          quadGroupId: qgId,
+          quadRole: 'rot90'
+        });
+        spawns.push({
+          id: 'spawn_' + (_nextSpawnId++),
+          position: [-sx, 0, -sz],
+          team: 0,
+          quadGroupId: qgId,
+          quadRole: 'rot180'
+        });
+        spawns.push({
+          id: 'spawn_' + (_nextSpawnId++),
+          position: [sz, 0, -sx],
+          team: 0,
+          quadGroupId: qgId,
+          quadRole: 'rot270'
+        });
+      }
+    } else if (mirrorMode !== 'off') {
+      var onAxis = (mirrorMode === 'z' && Math.abs(sz) < 0.3) ||
+                   (mirrorMode === 'x' && Math.abs(sx) < 0.3);
+      if (!onAxis) {
+        var mpId = generateSpawnMirrorPairId();
+        spawnData.mirrorPairId = mpId;
+        spawnData.mirrorAxis = mirrorMode;
+        var mirPos = [sx, 0, sz];
+        if (mirrorMode === 'z') mirPos[2] = -sz;
+        else if (mirrorMode === 'x') mirPos[0] = -sx;
+        spawns.push({
+          id: 'spawn_' + (_nextSpawnId++),
+          position: mirPos,
+          team: 0,
+          mirrorPairId: mpId,
+          mirrorAxis: mirrorMode
+        });
+      }
+    }
+
     rebuildSpawnMeshes();
     // Select the new spawn
     for (var si = 0; si < spawnEntries.length; si++) {
@@ -1451,8 +1686,18 @@
     if (selectedSpawnEntry) {
       pushUndo();
       var spawns = getCurrentSpawns();
-      var spIdx = spawns.indexOf(selectedSpawnEntry.data);
-      if (spIdx >= 0) spawns.splice(spIdx, 1);
+      // Collect linked spawns to delete (mirror partner or quad group)
+      var toRemove = [selectedSpawnEntry.data];
+      var partner = findSpawnMirrorPartner(selectedSpawnEntry.data);
+      if (partner) toRemove.push(partner);
+      var quadMembers = findSpawnQuadGroupData(selectedSpawnEntry.data);
+      for (var qi = 0; qi < quadMembers.length; qi++) {
+        if (toRemove.indexOf(quadMembers[qi]) < 0) toRemove.push(quadMembers[qi]);
+      }
+      for (var ri = 0; ri < toRemove.length; ri++) {
+        var spIdx = spawns.indexOf(toRemove[ri]);
+        if (spIdx >= 0) spawns.splice(spIdx, 1);
+      }
       rebuildSpawnMeshes();
       deselectAll();
       updateStatusBar();
@@ -1719,6 +1964,7 @@
     recalcNextMirrorPairId();
     recalcNextQuadGroupId();
     recalcNextSpawnId();
+    recalcNextSpawnMirrorIds();
     rebuildEditorScene();
   }
 
@@ -1731,6 +1977,7 @@
     recalcNextMirrorPairId();
     recalcNextQuadGroupId();
     recalcNextSpawnId();
+    recalcNextSpawnMirrorIds();
     rebuildEditorScene();
   }
 
@@ -2091,6 +2338,19 @@
         selectedSpawnEntry.mesh.position.z = newZ;
         selectedSpawnEntry.data.position[0] = newX;
         selectedSpawnEntry.data.position[2] = newZ;
+        // Sync linked spawn partners
+        syncAllLinkedSpawns(selectedSpawnEntry.data);
+        // Update partner meshes
+        var partnerEntry = findSpawnMirrorPartnerEntry(selectedSpawnEntry.data);
+        if (partnerEntry) {
+          partnerEntry.mesh.position.x = partnerEntry.data.position[0];
+          partnerEntry.mesh.position.z = partnerEntry.data.position[2];
+        }
+        var quadEntries = findSpawnQuadGroupEntries(selectedSpawnEntry.data);
+        for (var qi = 0; qi < quadEntries.length; qi++) {
+          quadEntries[qi].mesh.position.x = quadEntries[qi].data.position[0];
+          quadEntries[qi].mesh.position.z = quadEntries[qi].data.position[2];
+        }
         refreshSelectionVisuals();
         showSpawnPropsPanel(selectedSpawnEntry.data);
       } else if (selectedObjects.length > 0) {
@@ -2285,6 +2545,7 @@
       recalcNextMirrorPairId();
       recalcNextQuadGroupId();
       recalcNextSpawnId();
+      recalcNextSpawnMirrorIds();
       document.getElementById('esMapName').value = name;
       rebuildEditorScene();
       loadPanel.classList.add('hidden');
