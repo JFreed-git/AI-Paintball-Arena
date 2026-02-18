@@ -605,12 +605,52 @@
       camera.rotation.set(0, 0, 0, 'YXZ');
       updateHUDForLocalPlayer();
       if (typeof playGameSound === 'function') playGameSound('respawn');
+      showRespawnHeroPrompt();
     }
 
     entry.entity._syncMeshPosition();
 
     // Broadcast immediate snapshot so clients see the respawn
     if (state.isHost) maybeSendSnapshot(performance.now(), true);
+  }
+
+  // ── Respawn hero change prompt ──
+
+  function showRespawnHeroPrompt() {
+    if (!state) return;
+    state._respawnHeroPromptActive = true;
+    var el = document.getElementById('respawnHeroPrompt');
+    if (el) el.classList.remove('hidden');
+    if (state._respawnHeroPromptTimer) clearTimeout(state._respawnHeroPromptTimer);
+    state._respawnHeroPromptTimer = setTimeout(function () {
+      hideRespawnHeroPrompt();
+    }, 5000);
+
+    // Set callback for heroSelectUI.js H key handler
+    window._ffaRespawnHeroCallback = function (heroId) {
+      if (!state) return;
+      var localEntry = state.players[state.localId];
+      if (localEntry) {
+        applyHeroWeapon(localEntry.entity, heroId);
+        localEntry.heroId = heroId;
+        sharedSetMeleeOnlyHUD(!!localEntry.entity.weapon.meleeOnly, state.hud.ammoDisplay, state.hud.reloadIndicator, state.hud.meleeCooldown);
+        updateHUDForLocalPlayer();
+      }
+      if (socket) socket.emit('heroSelect', { heroId: heroId, clientId: state.localId });
+      window._ffaRespawnHeroCallback = null;
+    };
+  }
+
+  function hideRespawnHeroPrompt() {
+    if (!state) return;
+    state._respawnHeroPromptActive = false;
+    if (state._respawnHeroPromptTimer) {
+      clearTimeout(state._respawnHeroPromptTimer);
+      state._respawnHeroPromptTimer = 0;
+    }
+    var el = document.getElementById('respawnHeroPrompt');
+    if (el) el.classList.add('hidden');
+    window._ffaRespawnHeroCallback = null;
   }
 
   function getPlayerActualName(id) {
@@ -764,14 +804,43 @@
         window.stopFFAInternal();
       }, ROUND_BANNER_MS + 500);
     } else {
-      // More rounds to play — reset and start next round after banner
+      // More rounds to play — hero select then reset and start next round
       setTimeout(function () {
         if (!state) return;
         state.match.currentRound++;
-        resetAllPlayersForRound();
-        updateHUDForLocalPlayer();
-        startRoundCountdown(COUNTDOWN_SECONDS);
-        if (socket) socket.emit('startRound', { seconds: COUNTDOWN_SECONDS });
+
+        // Show hero re-selection (15s timed) before starting next round
+        if (typeof window.showPreRoundHeroSelect === 'function') {
+          // Notify clients to also show hero select
+          if (socket) socket.emit('betweenRoundHeroSelect', { round: state.match.currentRound });
+
+          var finishRoundTransition = function (heroId) {
+            var localEntry = state && state.players[state.localId];
+            if (localEntry) {
+              applyHeroWeapon(localEntry.entity, heroId);
+              localEntry.heroId = heroId;
+              sharedSetMeleeOnlyHUD(!!localEntry.entity.weapon.meleeOnly, state.hud.ammoDisplay, state.hud.reloadIndicator, state.hud.meleeCooldown);
+            }
+            if (socket) socket.emit('heroSelect', { heroId: heroId, clientId: state.localId });
+            if (typeof window.closePreRoundHeroSelect === 'function') window.closePreRoundHeroSelect();
+            resetAllPlayersForRound();
+            updateHUDForLocalPlayer();
+            startRoundCountdown(COUNTDOWN_SECONDS);
+            if (socket) socket.emit('startRound', { seconds: COUNTDOWN_SECONDS });
+          };
+
+          window.showPreRoundHeroSelect({
+            seconds: 15,
+            onConfirmed: finishRoundTransition,
+            onTimeout: finishRoundTransition
+          });
+        } else {
+          // Fallback: no hero select available, go straight to round
+          resetAllPlayersForRound();
+          updateHUDForLocalPlayer();
+          startRoundCountdown(COUNTDOWN_SECONDS);
+          if (socket) socket.emit('startRound', { seconds: COUNTDOWN_SECONDS });
+        }
       }, ROUND_BANNER_MS + 1000);
     }
   }
@@ -1028,6 +1097,11 @@
         entry.entity.input.meleeDown = enabledLocal && !!localInput.meleePressed;
         if (enabledLocal && localInput.reloadPressed) entry.entity.input.reloadPressed = true;
 
+        // Hide respawn hero prompt on first movement
+        if (state._respawnHeroPromptActive && (localInput.moveX || localInput.moveZ)) {
+          hideRespawnHeroPrompt();
+        }
+
         sharedSetCrosshairBySprint(!!localInput.sprint, entry.entity.weapon.spreadRad, entry.entity.weapon.sprintSpreadRad);
         sharedSetSprintUI(!!localInput.sprint, state.hud.sprintIndicator);
 
@@ -1083,6 +1157,7 @@
         moveDir.addScaledVector(right, entry.entity.input.moveX || 0);
         if (moveDir.lengthSq() > 1e-6) moveDir.normalize(); else moveDir.set(0, 0, 0);
 
+        var prevGroundedRemote = entry.entity.grounded;
         updateFullPhysics(
           entry.entity,
           { worldMoveDir: moveDir, sprint: entry.entity.input.sprint, jump: entry.entity.input.jump },
@@ -1098,6 +1173,17 @@
         }
         entry.entity._meshGroup.rotation.set(0, entry.entity._hitboxYaw, 0);
         entry.entity._syncMeshPosition();
+
+        // Movement sounds for remote players (spatial)
+        if (typeof playGameSound === 'function') {
+          var remotePos = entry.entity.position;
+          if (prevGroundedRemote && !entry.entity.grounded) playGameSound('jump', { _worldPos: remotePos });
+          if (!prevGroundedRemote && entry.entity.grounded) playGameSound('land', { _worldPos: remotePos });
+          var remoteMoving = (entry.entity.input.moveX !== 0 || entry.entity.input.moveZ !== 0);
+          if (remoteMoving && entry.entity.grounded && typeof playFootstepIfDue === 'function') {
+            playFootstepIfDue(!!entry.entity.input.sprint, null, now, remotePos);
+          }
+        }
 
         // Clear pending one-shot flags
         if (state._remoteInputPending[id]) {
@@ -1212,6 +1298,11 @@
     if (p.weapon && p.weapon.meleeOnly && p.input.fireDown) {
       p.input.meleeDown = true;
       p.input.fireDown = false;
+    }
+
+    // Hide respawn hero prompt on first movement
+    if (state._respawnHeroPromptActive && (rawInput.moveX || rawInput.moveZ)) {
+      hideRespawnHeroPrompt();
     }
 
     sharedSetCrosshairBySprint(!!rawInput.sprint, p.weapon.spreadRad, p.weapon.sprintSpreadRad);
@@ -1628,6 +1719,27 @@
       if (typeof playGameSound === 'function') playGameSound('melee_swing', { _worldPos: (entry && entry.entity) ? entry.entity.position : null });
     });
 
+    // Between-round hero re-selection (clients)
+    socket.on('betweenRoundHeroSelect', function (data) {
+      if (!state || state.isHost) return;
+      if (typeof window.showPreRoundHeroSelect !== 'function') return;
+      var finishClientHeroSelect = function (heroId) {
+        var localEntry = state && state.players[state.localId];
+        if (localEntry) {
+          applyHeroWeapon(localEntry.entity, heroId);
+          localEntry.heroId = heroId;
+          sharedSetMeleeOnlyHUD(!!localEntry.entity.weapon.meleeOnly, state.hud.ammoDisplay, state.hud.reloadIndicator, state.hud.meleeCooldown);
+        }
+        if (socket) socket.emit('heroSelect', { heroId: heroId, clientId: state.localId });
+        if (typeof window.closePreRoundHeroSelect === 'function') window.closePreRoundHeroSelect();
+      };
+      window.showPreRoundHeroSelect({
+        seconds: 15,
+        onConfirmed: finishClientHeroSelect,
+        onTimeout: finishClientHeroSelect
+      });
+    });
+
     socket.on('startRound', function (data) {
       if (!state || state.isHost) return;
       var secs = (data && data.seconds) || COUNTDOWN_SECONDS;
@@ -2041,7 +2153,12 @@
       state.loopHandle = 0;
     }
     try { if (typeof window.closePreRoundHeroSelect === 'function') window.closePreRoundHeroSelect(); } catch (e) {}
+    // Clean up respawn hero prompt
+    var rhp = document.getElementById('respawnHeroPrompt');
+    if (rhp) rhp.classList.add('hidden');
+    window._ffaRespawnHeroCallback = null;
     if (state) {
+      if (state._respawnHeroPromptTimer) clearTimeout(state._respawnHeroPromptTimer);
       if (state.bannerTimerRef && state.bannerTimerRef.id) {
         clearTimeout(state.bannerTimerRef.id);
         state.bannerTimerRef.id = 0;
