@@ -1930,7 +1930,8 @@
         alive: true,
         isAI: false,
         respawnAt: 0,
-        team: localTeam
+        team: localTeam,
+        name: (typeof localStorage !== 'undefined' && localStorage.getItem('playerName')) || 'Player'
       };
       state.match.scores[state.localId] = { kills: 0, deaths: 0 };
       state._meleeSwingState[state.localId] = { swinging: false, swingEnd: 0 };

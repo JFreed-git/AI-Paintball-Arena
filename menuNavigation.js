@@ -23,6 +23,22 @@
 
 
 function bindUI() {
+  // Player Name: load, display, and wire
+  var playerNameInput = document.getElementById('playerNameInput');
+  if (playerNameInput) {
+    var savedName = null;
+    try { savedName = localStorage.getItem('playerName'); } catch (e) { console.warn('menuNavigation: failed to read playerName from localStorage', e); }
+    if (savedName !== null) {
+      playerNameInput.value = savedName;
+    }
+    playerNameInput.addEventListener('input', function () {
+      try { localStorage.setItem('playerName', playerNameInput.value); } catch (e) { console.warn('menuNavigation: failed to save playerName to localStorage', e); }
+    });
+    playerNameInput.addEventListener('blur', function () {
+      try { localStorage.setItem('playerName', playerNameInput.value); } catch (e) { console.warn('menuNavigation: failed to save playerName to localStorage', e); }
+    });
+  }
+
   // Sensitivity: load, display, and wire
   const sensInput = document.getElementById('sensInput');
   const sensValue = document.getElementById('sensValue');
@@ -542,7 +558,8 @@ function lobbyShowAsHost() {
     mapName: cfg.mapName || '__default__',
     rounds: cfg.rounds || 3,
     mode: cfg.mode || 'ffa',
-    noRespawns: !!cfg.noRespawns
+    noRespawns: !!cfg.noRespawns,
+    playerName: localStorage.getItem('playerName') || 'Player 1'
   };
 
   sock.emit('createRoom', window._lobbyState.roomId, settings, function (res) {
@@ -579,7 +596,7 @@ window.lobbyJoinRoom = function (roomId, onError) {
   var sock = lobbyEnsureSocket();
   if (!sock) return;
 
-  sock.emit('joinRoom', roomId, function (res) {
+  sock.emit('joinRoom', roomId, localStorage.getItem('playerName') || 'Player', function (res) {
     if (!res || !res.ok) {
       var errMsg = (res && res.error) ? res.error : 'Failed to join room';
       window._lobbyState = null;
