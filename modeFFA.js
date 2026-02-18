@@ -628,6 +628,7 @@
 
     // Set callback for heroSelectUI.js H key handler
     window._ffaRespawnHeroCallback = function (heroId) {
+      hideRespawnHeroPrompt();
       if (!state) return;
       var localEntry = state.players[state.localId];
       if (localEntry) {
@@ -637,7 +638,6 @@
         updateHUDForLocalPlayer();
       }
       if (socket) socket.emit('heroSelect', { heroId: heroId, clientId: state.localId });
-      window._ffaRespawnHeroCallback = null;
     };
   }
 
@@ -952,6 +952,8 @@
     if (id === state.localId) {
       if (typeof playGameSound === 'function') playGameSound('melee_swing');
       if (typeof window.triggerFPMeleeSwing === 'function') window.triggerFPMeleeSwing(w.meleeSwingMs);
+    } else {
+      if (typeof playGameSound === 'function') playGameSound('melee_swing', { _worldPos: entry.entity.position });
     }
     if (entry.entity.triggerMeleeSwing) entry.entity.triggerMeleeSwing(w.meleeSwingMs);
 

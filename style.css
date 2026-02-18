@@ -44,8 +44,23 @@ body {
 /* Ensure hidden overrides element-specific display on round UI */
 #roundBanner.hidden,
 #roundCountdown.hidden,
+#respawnHeroPrompt.hidden,
 #editorLoadPanel.hidden {
     display: none;
+}
+
+#respawnHeroPrompt {
+    position: fixed;
+    bottom: 15%;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(0, 0, 0, 0.6);
+    color: #fff;
+    padding: 10px 24px;
+    border-radius: 8px;
+    font-size: 16px;
+    z-index: 100;
+    pointer-events: none;
 }
 
 

@@ -76,6 +76,11 @@
       card.addEventListener('click', function () {
         if (_preRoundMode) {
           handlePreRoundCardClick(hero.id);
+        } else if (typeof window._ffaRespawnHeroCallback === 'function') {
+          _currentHeroId = hero.id;
+          updateCardSelection();
+          closeHeroSelect();
+          window._ffaRespawnHeroCallback(hero.id);
         } else {
           selectHero(hero.id);
           closeHeroSelect();
@@ -284,11 +289,21 @@
     if (waitingEl) waitingEl.classList.remove('hidden');
   };
 
-  // Listen for 'H' key (training range only)
+  // Listen for 'H' key (training range + FFA respawn hero change)
   document.addEventListener('keydown', function (e) {
-    if (e.code === 'KeyH' && window.trainingRangeActive && !window.devConsoleOpen) {
+    if (e.code !== 'KeyH' || window.devConsoleOpen) return;
+    if (window.trainingRangeActive) {
       e.preventDefault();
       toggleHeroSelect();
+    } else if (typeof window._ffaRespawnHeroCallback === 'function' && !window._heroSelectOpen) {
+      e.preventDefault();
+      var rhp = document.getElementById('respawnHeroPrompt');
+      if (rhp) rhp.classList.add('hidden');
+      openHeroSelect();
+    } else if (typeof window._ffaRespawnHeroCallback === 'function' && window._heroSelectOpen) {
+      e.preventDefault();
+      closeHeroSelect();
+      window._ffaRespawnHeroCallback = null;
     }
   });
 
