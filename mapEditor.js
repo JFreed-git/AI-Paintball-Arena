@@ -513,19 +513,10 @@
       var sp = spawns[si];
       var color = SPAWN_COLORS[sp.team] || SPAWN_COLORS[0];
       var ringMat = new THREE.MeshBasicMaterial({ color: color, side: THREE.DoubleSide });
-      var isLinked = !!(sp.mirrorPairId || sp.quadGroupId);
       var group = new THREE.Group();
       var ring = new THREE.Mesh(new THREE.RingGeometry(1.0, 1.8, 32), ringMat);
       ring.rotation.x = -Math.PI / 2;
       group.add(ring);
-      // Inner dot for mirrored/linked spawns
-      if (isLinked) {
-        var dotMat = new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide });
-        var dot = new THREE.Mesh(new THREE.RingGeometry(0.0, 0.5, 16), dotMat);
-        dot.rotation.x = -Math.PI / 2;
-        dot.position.y = 0.01;
-        group.add(dot);
-      }
       group.position.set(sp.position[0], -0.94, sp.position[2]);
       group.name = 'EditorGroup';
       editorScene.add(group);
