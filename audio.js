@@ -28,6 +28,10 @@
   var _soundRegistry = [];
   var _eventIndex = {};
 
+  // Cached listener state (populated even before _ctx exists)
+  var _cachedListenerPos = null;
+  var _cachedListenerQuat = null;
+
   // Footstep cooldown tracking
   var _lastFootstepTime = 0;
   var FOOTSTEP_WALK_CD = 400;
@@ -57,6 +61,10 @@
       _synthBus.connect(_analyser);
       _analyser.connect(_masterGain);
       _buildNoiseBuffer();
+      // Apply cached listener position if updateAudioListener was called before context existed
+      if (_cachedListenerPos && _cachedListenerQuat) {
+        _applyListenerState(_ctx.listener, _cachedListenerPos, _cachedListenerQuat);
+      }
     } catch (e) {
       console.warn('audio: failed to create AudioContext', e);
       return null;
@@ -534,37 +542,52 @@
 
   // --- Listener positioning for spatial audio ---
 
-  window.updateAudioListener = function (position, quaternion) {
-    if (!_ctx) return;
-    var listener = _ctx.listener;
+  function _rotateVecByQuat(v, qx, qy, qz, qw) {
+    var ix = qw * v.x + qy * v.z - qz * v.y;
+    var iy = qw * v.y + qz * v.x - qx * v.z;
+    var iz = qw * v.z + qx * v.y - qy * v.x;
+    var iw = -qx * v.x - qy * v.y - qz * v.z;
+    return {
+      x: ix * qw + iw * -qx + iy * -qz - iz * -qy,
+      y: iy * qw + iw * -qy + iz * -qx - ix * -qz,
+      z: iz * qw + iw * -qz + ix * -qy - iy * -qx
+    };
+  }
+
+  function _applyListenerState(listener, position, quaternion) {
     if (!listener) return;
-
-    // Compute forward and up vectors from quaternion
-    var fw = { x: 0, y: 0, z: -1 };
-    var up = { x: 0, y: 1, z: 0 };
-    // Apply quaternion rotation: v' = q * v * q^-1
     var qx = quaternion.x, qy = quaternion.y, qz = quaternion.z, qw = quaternion.w;
-    function rotateVec(v) {
-      var ix = qw * v.x + qy * v.z - qz * v.y;
-      var iy = qw * v.y + qz * v.x - qx * v.z;
-      var iz = qw * v.z + qx * v.y - qy * v.x;
-      var iw = -qx * v.x - qy * v.y - qz * v.z;
-      return {
-        x: ix * qw + iw * -qx + iy * -qz - iz * -qy,
-        y: iy * qw + iw * -qy + iz * -qx - ix * -qz,
-        z: iz * qw + iw * -qz + ix * -qy - iy * -qx
-      };
-    }
-    var fwd = rotateVec(fw);
-    var upd = rotateVec(up);
+    var fwd = _rotateVecByQuat({ x: 0, y: 0, z: -1 }, qx, qy, qz, qw);
+    var upd = _rotateVecByQuat({ x: 0, y: 1, z: 0 }, qx, qy, qz, qw);
 
-    // Use deprecated API for broad browser compat
-    if (listener.setPosition) {
-      listener.setPosition(position.x, position.y, position.z);
+    // Prefer modern AudioParam API; fall back to deprecated methods
+    if (listener.positionX) {
+      listener.positionX.value = position.x;
+      listener.positionY.value = position.y;
+      listener.positionZ.value = position.z;
+      listener.forwardX.value = fwd.x;
+      listener.forwardY.value = fwd.y;
+      listener.forwardZ.value = fwd.z;
+      listener.upX.value = upd.x;
+      listener.upY.value = upd.y;
+      listener.upZ.value = upd.z;
+    } else {
+      if (listener.setPosition) {
+        listener.setPosition(position.x, position.y, position.z);
+      }
+      if (listener.setOrientation) {
+        listener.setOrientation(fwd.x, fwd.y, fwd.z, upd.x, upd.y, upd.z);
+      }
     }
-    if (listener.setOrientation) {
-      listener.setOrientation(fwd.x, fwd.y, fwd.z, upd.x, upd.y, upd.z);
-    }
+  }
+
+  window.updateAudioListener = function (position, quaternion) {
+    // Always cache so ensureContext() can initialize the listener immediately
+    _cachedListenerPos = position;
+    _cachedListenerQuat = quaternion;
+
+    if (!_ctx) return;
+    _applyListenerState(_ctx.listener, position, quaternion);
   };
 
   // Auto-load sounds on startup
