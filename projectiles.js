@@ -838,8 +838,8 @@
       onHit(closestTarget, closestPoint, closestDist, totalDamage, dmgMult);
     }
 
-    // Melee hit sound
-    if (closestTarget && typeof playGameSound === 'function') playGameSound('melee_hit');
+    // Melee hit sound (spatial at impact point)
+    if (closestTarget && typeof playGameSound === 'function') playGameSound('melee_hit', { _worldPos: closestPoint || null });
 
     weapon.lastMeleeTime = performance.now();
 

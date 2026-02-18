@@ -503,11 +503,11 @@
     _synthesize(synthesis);
   };
 
-  window.playFootstepIfDue = function (sprinting, heroId, now) {
+  window.playFootstepIfDue = function (sprinting, heroId, now, worldPos) {
     var cd = sprinting ? FOOTSTEP_SPRINT_CD : FOOTSTEP_WALK_CD;
     if ((now - _lastFootstepTime) < cd) return;
     _lastFootstepTime = now;
-    var ctx = { heroId: heroId || undefined, sprinting: !!sprinting };
+    var ctx = { heroId: heroId || undefined, sprinting: !!sprinting, _worldPos: worldPos || null };
     window.playGameSound('footstep', ctx);
   };
 

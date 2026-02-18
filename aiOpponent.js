@@ -537,8 +537,9 @@ class AIOpponent {
       }
     });
 
-    // Play TP swing animation on AI's player mesh
+    // Play TP swing animation and spatial sound on AI's player mesh
     if (this.player.triggerMeleeSwing) this.player.triggerMeleeSwing(w.meleeSwingMs);
+    if (typeof playGameSound === 'function') playGameSound('melee_swing', { _worldPos: this.player.position });
     return true;
   }
 
