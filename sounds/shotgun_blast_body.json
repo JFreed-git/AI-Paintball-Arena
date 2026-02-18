@@ -2,15 +2,14 @@
   "id": "shotgun_blast_body",
   "name": "Shotgun Blast Body",
   "synthesis": {
-    "type": "sweep",
-    "waveform": "sawtooth",
-    "startFreq": 2000,
-    "endFreq": 100,
-    "duration": 0.18,
-    "volume": 0.4,
+    "type": "noise_burst",
+    "frequency": 700,
+    "filterType": "bandpass",
+    "filterQ": 0.8,
+    "duration": 0.06,
+    "volume": 0.3,
     "attack": 0.001,
-    "decay": 0.179,
-    "noiseAmount": 0.7
+    "decay": 0.059
   },
   "bindings": [
     { "event": "weapon_fire", "filter": { "weaponModelType": "shotgun" } }

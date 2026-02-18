@@ -74,6 +74,7 @@
     var remain = Math.max(1, Math.floor(seconds));
     el.classList.remove('hidden');
     el.textContent = String(remain);
+    if (typeof playGameSound === 'function') playGameSound('countdown_tick');
 
     if (opts.timerRef && opts.timerRef.id) {
       try { clearInterval(opts.timerRef.id); } catch (e) { console.warn('clearInterval failed:', e); }
@@ -85,8 +86,10 @@
       remain -= 1;
       if (remain > 0) {
         el.textContent = String(remain);
+        if (typeof playGameSound === 'function') playGameSound('countdown_tick');
       } else {
         el.textContent = 'GO!';
+        if (typeof playGameSound === 'function') playGameSound('countdown_go');
         setTimeout(function () { el.classList.add('hidden'); }, 1000);
         try { clearInterval(timer); } catch (e) { console.warn('clearInterval failed:', e); }
         if (opts.timerRef) opts.timerRef.id = 0;

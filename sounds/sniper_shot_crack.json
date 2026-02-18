@@ -1,0 +1,17 @@
+{
+  "id": "sniper_shot_crack",
+  "name": "Sniper Shot Crack",
+  "synthesis": {
+    "type": "noise_burst",
+    "frequency": 1000,
+    "filterType": "bandpass",
+    "filterQ": 1.5,
+    "duration": 0.04,
+    "volume": 0.4,
+    "attack": 0.001,
+    "decay": 0.039
+  },
+  "bindings": [
+    { "event": "weapon_fire", "filter": { "weaponModelType": "sniper" } }
+  ]
+}

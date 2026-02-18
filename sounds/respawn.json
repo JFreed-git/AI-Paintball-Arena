@@ -1,0 +1,20 @@
+{
+  "id": "respawn",
+  "name": "Respawn Phase",
+  "synthesis": {
+    "type": "filtered_osc",
+    "waveform": "square",
+    "frequency": 200,
+    "filterType": "bandpass",
+    "filterFreq": 300,
+    "filterEndFreq": 2000,
+    "filterQ": 4,
+    "duration": 0.35,
+    "volume": 0.15,
+    "attack": 0.01,
+    "decay": 0.34
+  },
+  "bindings": [
+    { "event": "respawn", "filter": {} }
+  ]
+}

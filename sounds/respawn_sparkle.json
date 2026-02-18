@@ -1,0 +1,19 @@
+{
+  "id": "respawn_sparkle",
+  "name": "Respawn Sparkle",
+  "synthesis": {
+    "type": "multi_tone",
+    "waveform": "sine",
+    "volume": 0.1,
+    "noteDecay": 0.2,
+    "notes": [
+      { "freq": 1200, "duration": 0.12, "delay": 0.05 },
+      { "freq": 1600, "duration": 0.12, "delay": 0.12 },
+      { "freq": 2000, "duration": 0.12, "delay": 0.19 },
+      { "freq": 2400, "duration": 0.15, "delay": 0.26 }
+    ]
+  },
+  "bindings": [
+    { "event": "respawn", "filter": {} }
+  ]
+}

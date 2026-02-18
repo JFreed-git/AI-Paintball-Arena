@@ -1,0 +1,17 @@
+{
+  "id": "sniper_shot_boom",
+  "name": "Sniper Shot Boom",
+  "synthesis": {
+    "type": "noise_burst",
+    "frequency": 150,
+    "filterType": "lowpass",
+    "filterQ": 0.5,
+    "duration": 0.3,
+    "volume": 0.6,
+    "attack": 0.001,
+    "decay": 0.299
+  },
+  "bindings": [
+    { "event": "weapon_fire", "filter": { "weaponModelType": "sniper" } }
+  ]
+}

@@ -1,0 +1,18 @@
+{
+  "id": "countdown_go_chord",
+  "name": "Countdown Go Chord",
+  "synthesis": {
+    "type": "multi_tone",
+    "waveform": "triangle",
+    "volume": 0.15,
+    "noteDecay": 0.4,
+    "notes": [
+      { "freq": 523, "duration": 0.4, "delay": 0.02 },
+      { "freq": 659, "duration": 0.4, "delay": 0.02 },
+      { "freq": 784, "duration": 0.4, "delay": 0.02 }
+    ]
+  },
+  "bindings": [
+    { "event": "countdown_go", "filter": {} }
+  ]
+}

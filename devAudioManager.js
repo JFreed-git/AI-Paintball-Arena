@@ -25,8 +25,16 @@
   var _elBindingsList, _elAddBinding;
   var _elPlayBtn, _elSaveBtn, _elNewBtn, _elDeleteBtn, _elDuplicateBtn, _elRandomizeBtn;
 
+  // New synth type DOM refs
+  var _elCarrierFreq, _elCarrierWaveform, _elModFreq, _elModDepth, _elModWaveform;
+  var _elPluckFreq, _elPluckDamping;
+  var _elFOscFreq, _elFOscFilterType, _elFOscFilterFreq, _elFOscFilterEnd, _elFOscFilterQ;
+  var _elImpactBodyFreq, _elImpactBodyDecay, _elImpactNoiseFreq, _elImpactNoiseFilterType;
+  var _elImpactNoiseQ, _elImpactNoiseDur, _elImpactMix;
+
   // Synthesis type param sections
   var _secNoiseBurst, _secSweep, _secMultiTone, _secWaveform;
+  var _secFM, _secPluck, _secFilteredOsc, _secImpact;
 
   // Viewport refs
   var _elSoundTable, _elEnvelopeCanvas, _elWaveformCanvas;
@@ -77,6 +85,37 @@
     _secSweep = document.getElementById('amSecSweep');
     _secMultiTone = document.getElementById('amSecMultiTone');
     _secWaveform = document.getElementById('amSecWaveform');
+    _secFM = document.getElementById('amSecFM');
+    _secPluck = document.getElementById('amSecPluck');
+    _secFilteredOsc = document.getElementById('amSecFilteredOsc');
+    _secImpact = document.getElementById('amSecImpact');
+
+    // FM refs
+    _elCarrierFreq = document.getElementById('amCarrierFreq');
+    _elCarrierWaveform = document.getElementById('amCarrierWaveform');
+    _elModFreq = document.getElementById('amModFreq');
+    _elModDepth = document.getElementById('amModDepth');
+    _elModWaveform = document.getElementById('amModWaveform');
+
+    // Pluck refs
+    _elPluckFreq = document.getElementById('amPluckFreq');
+    _elPluckDamping = document.getElementById('amPluckDamping');
+
+    // Filtered osc refs
+    _elFOscFreq = document.getElementById('amFOscFreq');
+    _elFOscFilterType = document.getElementById('amFOscFilterType');
+    _elFOscFilterFreq = document.getElementById('amFOscFilterFreq');
+    _elFOscFilterEnd = document.getElementById('amFOscFilterEnd');
+    _elFOscFilterQ = document.getElementById('amFOscFilterQ');
+
+    // Impact refs
+    _elImpactBodyFreq = document.getElementById('amImpactBodyFreq');
+    _elImpactBodyDecay = document.getElementById('amImpactBodyDecay');
+    _elImpactNoiseFreq = document.getElementById('amImpactNoiseFreq');
+    _elImpactNoiseFilterType = document.getElementById('amImpactNoiseFilterType');
+    _elImpactNoiseQ = document.getElementById('amImpactNoiseQ');
+    _elImpactNoiseDur = document.getElementById('amImpactNoiseDur');
+    _elImpactMix = document.getElementById('amImpactMix');
 
     // Viewport elements
     _elSoundTable = document.getElementById('amSoundTable');
@@ -269,6 +308,33 @@
     // multi_tone
     if (_elNotes) _elNotes.value = syn.notes ? JSON.stringify(syn.notes, null, 2) : '[]';
 
+    // fm
+    if (_elCarrierFreq) _elCarrierFreq.value = syn.carrierFreq || 440;
+    if (_elCarrierWaveform) _elCarrierWaveform.value = syn.carrierWaveform || 'sine';
+    if (_elModFreq) _elModFreq.value = syn.modFreq || 880;
+    if (_elModDepth) _elModDepth.value = syn.modDepth || 200;
+    if (_elModWaveform) _elModWaveform.value = syn.modWaveform || 'sine';
+
+    // pluck
+    if (_elPluckFreq) _elPluckFreq.value = syn.frequency || 200;
+    if (_elPluckDamping) _elPluckDamping.value = (typeof syn.damping === 'number') ? syn.damping : 0.5;
+
+    // filtered_osc
+    if (_elFOscFreq) _elFOscFreq.value = syn.frequency || 440;
+    if (_elFOscFilterType) _elFOscFilterType.value = syn.filterType || 'lowpass';
+    if (_elFOscFilterFreq) _elFOscFilterFreq.value = syn.filterFreq || 2000;
+    if (_elFOscFilterEnd) _elFOscFilterEnd.value = (syn.filterEndFreq != null) ? syn.filterEndFreq : '';
+    if (_elFOscFilterQ) _elFOscFilterQ.value = (typeof syn.filterQ === 'number') ? syn.filterQ : 4;
+
+    // impact
+    if (_elImpactBodyFreq) _elImpactBodyFreq.value = syn.bodyFreq || 100;
+    if (_elImpactBodyDecay) _elImpactBodyDecay.value = syn.bodyDecay || 0.05;
+    if (_elImpactNoiseFreq) _elImpactNoiseFreq.value = syn.noiseFreq || 2000;
+    if (_elImpactNoiseFilterType) _elImpactNoiseFilterType.value = syn.noiseFilterType || 'bandpass';
+    if (_elImpactNoiseQ) _elImpactNoiseQ.value = (typeof syn.noiseFilterQ === 'number') ? syn.noiseFilterQ : 1;
+    if (_elImpactNoiseDur) _elImpactNoiseDur.value = syn.noiseDuration || 0.03;
+    if (_elImpactMix) _elImpactMix.value = (typeof syn.mix === 'number') ? syn.mix : 0.5;
+
     // Bindings
     populateBindings(data.bindings || []);
     drawEnvelope();
@@ -291,6 +357,29 @@
     if (_elEndFreq) _elEndFreq.value = '200';
     if (_elNoiseAmount) _elNoiseAmount.value = '0';
     if (_elNotes) _elNotes.value = '[]';
+    // fm
+    if (_elCarrierFreq) _elCarrierFreq.value = '440';
+    if (_elCarrierWaveform) _elCarrierWaveform.value = 'sine';
+    if (_elModFreq) _elModFreq.value = '880';
+    if (_elModDepth) _elModDepth.value = '200';
+    if (_elModWaveform) _elModWaveform.value = 'sine';
+    // pluck
+    if (_elPluckFreq) _elPluckFreq.value = '200';
+    if (_elPluckDamping) _elPluckDamping.value = '0.5';
+    // filtered_osc
+    if (_elFOscFreq) _elFOscFreq.value = '440';
+    if (_elFOscFilterType) _elFOscFilterType.value = 'lowpass';
+    if (_elFOscFilterFreq) _elFOscFilterFreq.value = '2000';
+    if (_elFOscFilterEnd) _elFOscFilterEnd.value = '';
+    if (_elFOscFilterQ) _elFOscFilterQ.value = '4';
+    // impact
+    if (_elImpactBodyFreq) _elImpactBodyFreq.value = '100';
+    if (_elImpactBodyDecay) _elImpactBodyDecay.value = '0.05';
+    if (_elImpactNoiseFreq) _elImpactNoiseFreq.value = '2000';
+    if (_elImpactNoiseFilterType) _elImpactNoiseFilterType.value = 'bandpass';
+    if (_elImpactNoiseQ) _elImpactNoiseQ.value = '1';
+    if (_elImpactNoiseDur) _elImpactNoiseDur.value = '0.03';
+    if (_elImpactMix) _elImpactMix.value = '0.5';
     if (_elBindingsList) _elBindingsList.innerHTML = '';
     onTypeChange();
     drawEnvelope();
@@ -301,8 +390,13 @@
     if (_secNoiseBurst) _secNoiseBurst.classList.toggle('hidden', type !== 'noise_burst');
     if (_secSweep) _secSweep.classList.toggle('hidden', type !== 'sweep');
     if (_secMultiTone) _secMultiTone.classList.toggle('hidden', type !== 'multi_tone');
-    // Shared waveform: show for tone, sweep, multi_tone
-    if (_secWaveform) _secWaveform.classList.toggle('hidden', type === 'noise_burst');
+    if (_secFM) _secFM.classList.toggle('hidden', type !== 'fm');
+    if (_secPluck) _secPluck.classList.toggle('hidden', type !== 'pluck');
+    if (_secFilteredOsc) _secFilteredOsc.classList.toggle('hidden', type !== 'filtered_osc');
+    if (_secImpact) _secImpact.classList.toggle('hidden', type !== 'impact');
+    // Shared waveform: show for tone, sweep, multi_tone, filtered_osc
+    var showWaveform = (type === 'tone' || type === 'sweep' || type === 'multi_tone' || type === 'filtered_osc');
+    if (_secWaveform) _secWaveform.classList.toggle('hidden', !showWaveform);
   }
 
   // --- Build synthesis params from form ---
@@ -331,6 +425,31 @@
     } else if (type === 'multi_tone') {
       syn.waveform = _elWaveform ? _elWaveform.value : 'sine';
       try { syn.notes = JSON.parse(_elNotes ? _elNotes.value : '[]'); } catch (e) { syn.notes = []; }
+    } else if (type === 'fm') {
+      syn.carrierFreq = parseFloat(_elCarrierFreq ? _elCarrierFreq.value : 440) || 440;
+      syn.carrierWaveform = _elCarrierWaveform ? _elCarrierWaveform.value : 'sine';
+      syn.modFreq = parseFloat(_elModFreq ? _elModFreq.value : 880) || 880;
+      syn.modDepth = parseFloat(_elModDepth ? _elModDepth.value : 200) || 200;
+      syn.modWaveform = _elModWaveform ? _elModWaveform.value : 'sine';
+    } else if (type === 'pluck') {
+      syn.frequency = parseFloat(_elPluckFreq ? _elPluckFreq.value : 200) || 200;
+      syn.damping = parseFloat(_elPluckDamping ? _elPluckDamping.value : 0.5) || 0.5;
+    } else if (type === 'filtered_osc') {
+      syn.waveform = _elWaveform ? _elWaveform.value : 'sawtooth';
+      syn.frequency = parseFloat(_elFOscFreq ? _elFOscFreq.value : 440) || 440;
+      syn.filterType = _elFOscFilterType ? _elFOscFilterType.value : 'lowpass';
+      syn.filterFreq = parseFloat(_elFOscFilterFreq ? _elFOscFilterFreq.value : 2000) || 2000;
+      var fEnd = _elFOscFilterEnd ? _elFOscFilterEnd.value.trim() : '';
+      if (fEnd !== '') syn.filterEndFreq = parseFloat(fEnd) || null;
+      syn.filterQ = parseFloat(_elFOscFilterQ ? _elFOscFilterQ.value : 4) || 4;
+    } else if (type === 'impact') {
+      syn.bodyFreq = parseFloat(_elImpactBodyFreq ? _elImpactBodyFreq.value : 100) || 100;
+      syn.bodyDecay = parseFloat(_elImpactBodyDecay ? _elImpactBodyDecay.value : 0.05) || 0.05;
+      syn.noiseFreq = parseFloat(_elImpactNoiseFreq ? _elImpactNoiseFreq.value : 2000) || 2000;
+      syn.noiseFilterType = _elImpactNoiseFilterType ? _elImpactNoiseFilterType.value : 'bandpass';
+      syn.noiseFilterQ = parseFloat(_elImpactNoiseQ ? _elImpactNoiseQ.value : 1) || 1;
+      syn.noiseDuration = parseFloat(_elImpactNoiseDur ? _elImpactNoiseDur.value : 0.03) || 0.03;
+      syn.mix = parseFloat(_elImpactMix ? _elImpactMix.value : 0.5);
     }
 
     return syn;
@@ -527,7 +646,12 @@
   function onRandomize() {
     // Apply ±15% random variation to numeric synthesis params
     var numInputs = [_elDuration, _elVolume, _elAttack, _elDecay, _elFrequency, _elFilterQ,
-                     _elStartFreq, _elEndFreq, _elNoiseAmount];
+                     _elStartFreq, _elEndFreq, _elNoiseAmount,
+                     _elCarrierFreq, _elModFreq, _elModDepth,
+                     _elPluckFreq, _elPluckDamping,
+                     _elFOscFreq, _elFOscFilterFreq, _elFOscFilterEnd, _elFOscFilterQ,
+                     _elImpactBodyFreq, _elImpactBodyDecay, _elImpactNoiseFreq,
+                     _elImpactNoiseQ, _elImpactNoiseDur, _elImpactMix];
     numInputs.forEach(function (el) {
       if (!el || el.offsetParent === null) return; // skip hidden
       var val = parseFloat(el.value);

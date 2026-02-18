@@ -268,6 +268,12 @@
     }
     if (w.reloading) return;
 
+    if (input.fireDown && !w.reloading && w.ammo <= 0) {
+      if (typeof playGameSound === 'function') playGameSound('dry_fire');
+      if (sharedStartReload(w, now)) sharedSetReloadingUI(true, state.hud.reloadIndicator);
+      return;
+    }
+
     if (input.fireDown && sharedCanShoot(w, now, w.cooldownMs)) {
       var dir = new THREE.Vector3();
       camera.getWorldDirection(dir);
@@ -306,7 +312,7 @@
           else if (typeof target.takeDamage === 'function') {
             target.takeDamage(w.damage * (damageMultiplier || 1.0));
           }
-          if (typeof playGameSound === 'function') playGameSound('hit_marker');
+          if (typeof playGameSound === 'function') playGameSound('hit_marker', { headshot: (damageMultiplier || 1) > 1 });
           state.stats.hits++;
         }
       });
@@ -398,6 +404,11 @@
 
     // Melee + Shooting
     var now = performance.now();
+    // Melee-only weapons: left-click triggers melee swing, not fire
+    if (state.player.weapon.meleeOnly && input.fireDown) {
+      input.meleePressed = true;
+      input.fireDown = false;
+    }
     handleMelee(input, now);
     if (!_meleeSwinging) handlePlayerShooting(input, now);
     updateReload(now);
@@ -409,6 +420,12 @@
     if (window.devShowHitboxes && window.updateHitboxVisuals) window.updateHitboxVisuals();
 
     updateHUD();
+
+    // Update audio listener for spatial sound
+    if (typeof window.updateAudioListener === 'function') {
+      window.updateAudioListener(camera.position, camera.quaternion);
+    }
+
     state.loopHandle = requestAnimationFrame(tick);
   }
 

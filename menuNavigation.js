@@ -171,7 +171,7 @@ function bindUI() {
       name: 'Default Arena',
       mapData: defaultMapData,
       maxPlayers: defaultMapData ? (typeof getMapMaxPlayers === 'function' ? getMapMaxPlayers(defaultMapData) : 2) : 6,
-      supportedModes: (defaultMapData && defaultMapData.spawns && typeof normalizeSpawns === 'function') ? Object.keys(normalizeSpawns(defaultMapData.spawns)) : ['ffa']
+      supportedModes: (defaultMapData && defaultMapData.supportedModes) ? defaultMapData.supportedModes : (defaultMapData && defaultMapData.spawns && typeof normalizeSpawns === 'function') ? Object.keys(normalizeSpawns(defaultMapData.spawns)) : ['ffa']
     };
 
     _fetchServerMaps(function (serverMaps) {
@@ -192,7 +192,7 @@ function bindUI() {
             name: mapData.name || name,
             mapData: mapData,
             maxPlayers: typeof getMapMaxPlayers === 'function' ? getMapMaxPlayers(mapData) : 2,
-            supportedModes: (mapData.spawns && typeof normalizeSpawns === 'function') ? Object.keys(normalizeSpawns(mapData.spawns)) : ['ffa']
+            supportedModes: mapData.supportedModes ? mapData.supportedModes : (mapData.spawns && typeof normalizeSpawns === 'function') ? Object.keys(normalizeSpawns(mapData.spawns)) : ['ffa']
           });
           if (--pending === 0) callback(entries);
         }).catch(function () {
@@ -301,6 +301,16 @@ function bindUI() {
     }
   }
 
+  // Wire No Respawns checkbox to disable Kill Limit when checked
+  var _setupNoRespawns = document.getElementById('setupNoRespawns');
+  var _setupKillLimit = document.getElementById('setupKillLimit');
+  if (_setupNoRespawns && _setupKillLimit) {
+    _setupNoRespawns.addEventListener('change', function () {
+      _setupKillLimit.disabled = _setupNoRespawns.checked;
+      _setupKillLimit.style.opacity = _setupNoRespawns.checked ? '0.4' : '1';
+    });
+  }
+
   var setupBack = document.getElementById('setupBack');
   var setupBackBottom = document.getElementById('setupBackBottom');
   if (setupBack) setupBack.addEventListener('click', function () { showOnlyMenu('startGameMenu'); });
@@ -312,6 +322,7 @@ function bindUI() {
     var modeSelect = document.getElementById('setupMode');
     var roundsInput = document.getElementById('setupRounds');
     var killLimitInput = document.getElementById('setupKillLimit');
+    var noRespawnsCheckbox = document.getElementById('setupNoRespawns');
     var selectedMode = modeSelect ? modeSelect.value : 'ffa';
     var maxPlayers = (typeof getMapMaxPlayers === 'function' && _gameSetupSelected.mapData)
       ? getMapMaxPlayers(_gameSetupSelected.mapData, selectedMode)
@@ -322,7 +333,8 @@ function bindUI() {
       mode: selectedMode,
       rounds: roundsInput ? parseInt(roundsInput.value, 10) || 3 : 3,
       killLimit: killLimitInput ? parseInt(killLimitInput.value, 10) || 10 : 10,
-      maxPlayers: maxPlayers
+      maxPlayers: maxPlayers,
+      noRespawns: noRespawnsCheckbox ? noRespawnsCheckbox.checked : false
     };
     showOnlyMenu('lobbyMenu');
     lobbyShowAsHost();
@@ -528,7 +540,9 @@ function lobbyShowAsHost() {
     killLimit: cfg.killLimit || 10,
     maxPlayers: maxPlayers,
     mapName: cfg.mapName || '__default__',
-    rounds: cfg.rounds || 3
+    rounds: cfg.rounds || 3,
+    mode: cfg.mode || 'ffa',
+    noRespawns: !!cfg.noRespawns
   };
 
   sock.emit('createRoom', window._lobbyState.roomId, settings, function (res) {
@@ -805,6 +819,7 @@ function launchFFAFromLobby() {
       mapName: cfg.mapName || '__default__',
       mode: cfg.mode || 'ffa',
       rounds: cfg.rounds || 3,
+      noRespawns: !!cfg.noRespawns,
       aiConfigs: slotData.aiConfigs
     };
     if (typeof window.startFFAHost === 'function') {

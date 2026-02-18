@@ -38,9 +38,10 @@
     "sprintSpreadRad": 0.02,
     "maxRange": 500,
     "pellets": 1,
-    "projectileSpeed": 200,
+    "projectileSpeed": 0,
     "projectileGravity": 0,
     "splashRadius": 0,
+    "meleeOnly": false,
     "meleeDamage": 30,
     "meleeRange": 2.5,
     "meleeCooldownMs": 600,
@@ -52,7 +53,7 @@
       "overlay": null,
       "spreadMultiplier": 0.15
     },
-    "modelType": "rifle",
+    "modelType": "sniper",
     "tracerColor": 16776960,
     "crosshair": {
       "style": "cross",

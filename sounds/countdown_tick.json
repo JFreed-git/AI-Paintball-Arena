@@ -1,0 +1,19 @@
+{
+  "id": "countdown_tick",
+  "name": "Countdown Tick Strike",
+  "synthesis": {
+    "type": "fm",
+    "carrierFreq": 440,
+    "carrierWaveform": "sine",
+    "modFreq": 880,
+    "modDepth": 200,
+    "modWaveform": "sine",
+    "duration": 0.08,
+    "volume": 0.25,
+    "attack": 0.001,
+    "decay": 0.079
+  },
+  "bindings": [
+    { "event": "countdown_tick", "filter": {} }
+  ]
+}

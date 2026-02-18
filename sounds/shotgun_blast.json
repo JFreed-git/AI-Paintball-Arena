@@ -3,13 +3,13 @@
   "name": "Shotgun Blast",
   "synthesis": {
     "type": "noise_burst",
-    "frequency": 400,
+    "frequency": 180,
     "filterType": "lowpass",
-    "filterQ": 0.5,
-    "duration": 0.2,
+    "filterQ": 0.3,
+    "duration": 0.22,
     "volume": 0.55,
     "attack": 0.001,
-    "decay": 0.199
+    "decay": 0.219
   },
   "bindings": [
     { "event": "weapon_fire", "filter": { "weaponModelType": "shotgun" } }

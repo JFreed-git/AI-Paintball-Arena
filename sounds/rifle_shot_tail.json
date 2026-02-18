@@ -4,12 +4,12 @@
   "synthesis": {
     "type": "sweep",
     "waveform": "sawtooth",
-    "startFreq": 1200,
-    "endFreq": 200,
-    "duration": 0.12,
-    "volume": 0.35,
+    "startFreq": 500,
+    "endFreq": 120,
+    "duration": 0.08,
+    "volume": 0.22,
     "attack": 0.002,
-    "decay": 0.118,
+    "decay": 0.078,
     "noiseAmount": 0.5
   },
   "bindings": [

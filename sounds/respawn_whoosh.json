@@ -1,0 +1,17 @@
+{
+  "id": "respawn_whoosh",
+  "name": "Respawn Whoosh",
+  "synthesis": {
+    "type": "noise_burst",
+    "frequency": 1500,
+    "filterType": "bandpass",
+    "filterQ": 0.3,
+    "duration": 0.25,
+    "volume": 0.12,
+    "attack": 0.05,
+    "decay": 0.2
+  },
+  "bindings": [
+    { "event": "respawn", "filter": {} }
+  ]
+}

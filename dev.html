@@ -257,6 +257,10 @@
                                 <option value="tone">tone</option>
                                 <option value="sweep">sweep</option>
                                 <option value="multi_tone">multi_tone</option>
+                                <option value="fm">fm</option>
+                                <option value="pluck">pluck</option>
+                                <option value="filtered_osc">filtered_osc</option>
+                                <option value="impact">impact</option>
                             </select>
                         </div>
 
@@ -305,6 +309,71 @@
                                 <label>Notes (JSON)</label>
                                 <textarea id="amNotes" rows="4" style="width:100%;background:#1a1a1a;color:#fff;border:1px solid #444;border-radius:4px;font-family:monospace;font-size:11px;padding:4px;">[]</textarea>
                             </div>
+                        </div>
+
+                        <!-- fm params -->
+                        <div id="amSecFM" class="hidden">
+                            <div class="dev-field"><label>Carrier Freq</label><input type="number" id="amCarrierFreq" value="440" step="10" min="20" /></div>
+                            <div class="dev-field">
+                                <label>Carrier Wave</label>
+                                <select id="amCarrierWaveform">
+                                    <option value="sine">sine</option>
+                                    <option value="square">square</option>
+                                    <option value="triangle">triangle</option>
+                                    <option value="sawtooth">sawtooth</option>
+                                </select>
+                            </div>
+                            <div class="dev-field"><label>Mod Freq</label><input type="number" id="amModFreq" value="880" step="10" min="1" /></div>
+                            <div class="dev-field"><label>Mod Depth</label><input type="number" id="amModDepth" value="200" step="10" min="0" /></div>
+                            <div class="dev-field">
+                                <label>Mod Wave</label>
+                                <select id="amModWaveform">
+                                    <option value="sine">sine</option>
+                                    <option value="square">square</option>
+                                    <option value="triangle">triangle</option>
+                                    <option value="sawtooth">sawtooth</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <!-- pluck params -->
+                        <div id="amSecPluck" class="hidden">
+                            <div class="dev-field"><label>Frequency</label><input type="number" id="amPluckFreq" value="200" step="10" min="20" /></div>
+                            <div class="dev-field"><label>Damping</label><input type="number" id="amPluckDamping" value="0.5" step="0.05" min="0" max="1" /></div>
+                        </div>
+
+                        <!-- filtered_osc params -->
+                        <div id="amSecFilteredOsc" class="hidden">
+                            <div class="dev-field"><label>Osc Freq</label><input type="number" id="amFOscFreq" value="440" step="10" min="20" /></div>
+                            <div class="dev-field">
+                                <label>Filter</label>
+                                <select id="amFOscFilterType">
+                                    <option value="lowpass">lowpass</option>
+                                    <option value="highpass">highpass</option>
+                                    <option value="bandpass">bandpass</option>
+                                </select>
+                            </div>
+                            <div class="dev-field"><label>Filter Freq</label><input type="number" id="amFOscFilterFreq" value="2000" step="50" min="20" /></div>
+                            <div class="dev-field"><label>Filter End</label><input type="number" id="amFOscFilterEnd" value="" step="50" min="20" placeholder="(no sweep)" /></div>
+                            <div class="dev-field"><label>Filter Q</label><input type="number" id="amFOscFilterQ" value="4" step="0.5" min="0" /></div>
+                        </div>
+
+                        <!-- impact params -->
+                        <div id="amSecImpact" class="hidden">
+                            <div class="dev-field"><label>Body Freq</label><input type="number" id="amImpactBodyFreq" value="100" step="10" min="20" /></div>
+                            <div class="dev-field"><label>Body Decay</label><input type="number" id="amImpactBodyDecay" value="0.05" step="0.01" min="0.001" /></div>
+                            <div class="dev-field"><label>Noise Freq</label><input type="number" id="amImpactNoiseFreq" value="2000" step="100" min="20" /></div>
+                            <div class="dev-field">
+                                <label>Noise Filter</label>
+                                <select id="amImpactNoiseFilterType">
+                                    <option value="lowpass">lowpass</option>
+                                    <option value="highpass">highpass</option>
+                                    <option value="bandpass">bandpass</option>
+                                </select>
+                            </div>
+                            <div class="dev-field"><label>Noise Q</label><input type="number" id="amImpactNoiseQ" value="1" step="0.5" min="0" /></div>
+                            <div class="dev-field"><label>Noise Dur</label><input type="number" id="amImpactNoiseDur" value="0.03" step="0.005" min="0.001" /></div>
+                            <div class="dev-field"><label>Mix (body)</label><input type="number" id="amImpactMix" value="0.5" step="0.05" min="0" max="1" /></div>
                         </div>
                     </div>
 
@@ -445,7 +514,7 @@
                         <div class="editor-dropdown-menu" id="editorPlaceMenu">
                             <button class="editor-shape-opt" data-tool="box">Box</button>
                             <button class="editor-shape-opt" data-tool="cylinder">Cylinder</button>
-                            <button class="editor-shape-opt" data-tool="halfCylinder">Half-Cylinder</button>
+                            <button class="editor-shape-opt" data-tool="sphere">Sphere</button>
                             <button class="editor-shape-opt" data-tool="ramp">Ramp</button>
                             <div class="editor-dropdown-sep"></div>
                             <button class="editor-shape-opt" data-tool="wedge">Wedge</button>
@@ -508,6 +577,11 @@
                     <div class="eprop"><label>Arena Width</label><input type="number" id="esArenaW" step="1" min="20" value="60" /></div>
                     <div class="eprop"><label>Arena Length</label><input type="number" id="esArenaL" step="1" min="20" value="90" /></div>
                     <div class="eprop"><label>Wall Height</label><input type="number" id="esWallH" step="0.5" min="1" value="3.5" /></div>
+                    <div class="eprop"><label>Modes</label>
+                      <label><input type="checkbox" id="esModeFFA" checked /> FFA</label>
+                      <label><input type="checkbox" id="esModeTDM" /> TDM</label>
+                      <label><input type="checkbox" id="esModeCTF" /> CTF</label>
+                    </div>
                     <button class="editor-btn" id="esMakeSquare">Make Square</button>
                     <button class="editor-btn" id="esApply">Apply</button>
                     <button class="editor-btn" id="esClose">Close</button>

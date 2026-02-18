@@ -1,0 +1,18 @@
+{
+  "id": "countdown_tick_body",
+  "name": "Countdown Tick Body",
+  "synthesis": {
+    "type": "impact",
+    "bodyFreq": 180,
+    "bodyDecay": 0.06,
+    "noiseFreq": 400,
+    "noiseFilterType": "lowpass",
+    "noiseFilterQ": 1,
+    "noiseDuration": 0.03,
+    "mix": 0.6,
+    "volume": 0.15
+  },
+  "bindings": [
+    { "event": "countdown_tick", "filter": {} }
+  ]
+}

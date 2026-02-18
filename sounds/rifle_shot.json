@@ -3,13 +3,13 @@
   "name": "Rifle Shot",
   "synthesis": {
     "type": "noise_burst",
-    "frequency": 5000,
-    "filterType": "highpass",
-    "filterQ": 2,
-    "duration": 0.04,
-    "volume": 0.5,
+    "frequency": 800,
+    "filterType": "bandpass",
+    "filterQ": 1.0,
+    "duration": 0.05,
+    "volume": 0.35,
     "attack": 0.001,
-    "decay": 0.039
+    "decay": 0.049
   },
   "bindings": [
     { "event": "weapon_fire", "filter": { "weaponModelType": "rifle" } }

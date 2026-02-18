@@ -4,11 +4,11 @@
   "synthesis": {
     "type": "tone",
     "waveform": "triangle",
-    "frequency": 3200,
-    "duration": 0.07,
-    "volume": 0.3,
+    "frequency": 800,
+    "duration": 0.03,
+    "volume": 0.12,
     "attack": 0.001,
-    "decay": 0.069
+    "decay": 0.029
   },
   "bindings": [
     { "event": "hit_marker", "filter": {} }

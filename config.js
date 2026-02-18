@@ -30,6 +30,9 @@
 
     // --- Hero Selection ---
     HERO_SELECT_SECONDS: 15,             // seconds for pre-round hero selection
+
+    // --- Combat ---
+    SHOT_DELAY_AFTER_COUNTDOWN: 300,     // ms grace period before firing after countdown
   };
 
   // Freeze to prevent accidental mutation

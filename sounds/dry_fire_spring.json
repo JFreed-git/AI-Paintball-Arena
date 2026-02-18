@@ -1,0 +1,14 @@
+{
+  "id": "dry_fire_spring",
+  "name": "Dry Fire Spring",
+  "synthesis": {
+    "type": "pluck",
+    "frequency": 400,
+    "damping": 0.7,
+    "duration": 0.08,
+    "volume": 0.1
+  },
+  "bindings": [
+    { "event": "dry_fire", "filter": {} }
+  ]
+}

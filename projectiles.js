@@ -518,7 +518,7 @@
       }
 
       // Fire sound
-      if (typeof playGameSound === 'function') playGameSound('weapon_fire', { weaponModelType: weapon.modelType });
+      if (typeof playGameSound === 'function') playGameSound('weapon_fire', { weaponModelType: weapon.modelType, _worldPos: opts.worldPos || null });
 
       return { pelletsFired: pelletCount, hits: 0, results: projResults, magazineEmpty: projMagEmpty };
     }
@@ -617,7 +617,7 @@
     }
 
     // Fire sound
-    if (typeof playGameSound === 'function') playGameSound('weapon_fire', { weaponModelType: weapon.modelType });
+    if (typeof playGameSound === 'function') playGameSound('weapon_fire', { weaponModelType: weapon.modelType, _worldPos: opts.worldPos || null });
 
     return { pelletsFired: stopped ? results.length : pelletCount, hits: hits, results: results, magazineEmpty: magazineEmpty };
   }

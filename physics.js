@@ -121,6 +121,26 @@ function resolveCollisions2D(position, radius, aabbs, feetY) {
 
   for (let i = 0; i < aabbs.length; i++) {
     const box = aabbs[i];
+
+    // --- Cylinder collider: radial push-out ---
+    if (box.isCylinder) {
+      if (feetY + 0.1 >= box.max.y) continue;
+      if (box.max.y < feetY + 0.2 || box.min.y > feetY + EYE_HEIGHT + 0.2) continue;
+      var cdx = position.x - box.centerX;
+      var cdz = position.z - box.centerZ;
+      var cdist = Math.sqrt(cdx * cdx + cdz * cdz);
+      var cMinDist = box.radius + radius;
+      if (cdist < cMinDist) {
+        if (cdist < 1e-6) { position.x += cMinDist; }
+        else {
+          var cPush = cMinDist - cdist;
+          position.x += (cdx / cdist) * cPush;
+          position.z += (cdz / cdist) * cPush;
+        }
+      }
+      continue;
+    }
+
     // Skip colliders the player is standing on top of (feet at or above the collider top)
     if (feetY + 0.1 >= box.max.y) continue;
     // Skip colliders entirely above our head
@@ -165,6 +185,10 @@ function resolveCollisions2D(position, radius, aabbs, feetY) {
 function resolveCollisions3D(state, colliders) {
   if (!colliders || colliders.length === 0) return;
   var radius = state.radius || 0.3;
+  // When grounded, use a generous Y-skip tolerance (MAX_STEP_HEIGHT) so ramp
+  // staircase steps are reliably skipped even on steeper slopes.  When airborne,
+  // keep the tight 0.1 tolerance to prevent clipping through obstacles mid-jump.
+  var ySkipTol = state.grounded ? MAX_STEP_HEIGHT : 0.1;
 
   for (var pass = 0; pass < 3; pass++) {
     var resolved = false;
@@ -174,8 +198,28 @@ function resolveCollisions3D(state, colliders) {
       var feetY = state.feetY;
       var headY = feetY + EYE_HEIGHT;
 
+      // --- Cylinder collider: radial push-out ---
+      if (box.isCylinder) {
+        if (feetY + ySkipTol >= box.max.y) continue;
+        if (headY <= box.min.y || feetY >= box.max.y) continue;
+        var cdx = state.position.x - box.centerX;
+        var cdz = state.position.z - box.centerZ;
+        var cdist = Math.sqrt(cdx * cdx + cdz * cdz);
+        var cMinDist = box.radius + radius;
+        if (cdist < cMinDist) {
+          if (cdist < 1e-6) { state.position.x += cMinDist; }
+          else {
+            var cPush = cMinDist - cdist;
+            state.position.x += (cdx / cdist) * cPush;
+            state.position.z += (cdz / cdist) * cPush;
+          }
+          resolved = true;
+        }
+        continue;
+      }
+
       // Skip blocks player is standing on top of (let ground detection handle this)
-      if (feetY + 0.1 >= box.max.y) continue;
+      if (feetY + ySkipTol >= box.max.y) continue;
 
       // Expand block by player radius in XZ for capsule approximation
       var bMinX = box.min.x - radius;

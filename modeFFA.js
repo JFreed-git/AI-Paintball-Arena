@@ -337,14 +337,21 @@
         color: getTeamColor(team)
       });
 
-      // Apply selected hero
-      if (typeof window.applyHeroToPlayer === 'function') {
-        window.applyHeroToPlayer(ai.player, slot.heroId);
+      // Resolve 'random' hero to an actual random pick from available heroes
+      var resolvedHeroId = slot.heroId;
+      if (resolvedHeroId === 'random' && window.HEROES && window.HEROES.length > 0) {
+        resolvedHeroId = window.HEROES[Math.floor(Math.random() * window.HEROES.length)].id;
       }
+
+      // Apply selected hero and adjust AI playstyle for weapon type
+      if (typeof window.applyHeroToPlayer === 'function') {
+        window.applyHeroToPlayer(ai.player, resolvedHeroId);
+      }
+      ai.applyHeroPlaystyle();
 
       state.players[aiId] = {
         entity: ai.player,
-        heroId: slot.heroId,
+        heroId: resolvedHeroId,
         alive: true,
         isAI: true,
         aiInstance: ai,
@@ -360,11 +367,15 @@
   function buildAITargetList(excludeId) {
     var targets = [];
     if (!state) return targets;
+    var excludeEntry = state.players[excludeId];
+    var shooterTeam = excludeEntry ? excludeEntry.team : 0;
     var ids = Object.keys(state.players);
     for (var i = 0; i < ids.length; i++) {
       if (ids[i] === excludeId) continue;
       var entry = state.players[ids[i]];
       if (!entry || !entry.entity || !entry.alive) continue;
+      // In TDM, skip teammates
+      if (state.mode === 'tdm' && shooterTeam && entry.team === shooterTeam) continue;
       var pos = (ids[i] === state.localId) ? camera.position.clone() : entry.entity.position.clone();
       targets.push({
         position: pos,
@@ -418,8 +429,8 @@
 
             if (state.match.roundActive && !victimEntry.entity.alive) {
               victimEntry.alive = false;
-              victimEntry.respawnAt = performance.now() + RESPAWN_DELAY_MS;
-              if (typeof playGameSound === 'function') playGameSound('elimination');
+              victimEntry.respawnAt = state.noRespawns ? 0 : performance.now() + RESPAWN_DELAY_MS;
+              if (victimId === state.localId && typeof playGameSound === 'function') playGameSound('own_death');
               recordKill(shooterId, victimId, state.players[shooterId] && state.players[shooterId].aiInstance ? state.players[shooterId].aiInstance.weapon.modelType || 'gun' : 'gun');
             }
           };
@@ -521,6 +532,8 @@
       players: {},        // { [socketId]: { entity: Player, heroId, alive, isAI, respawnAt, team } }
       arena: null,
       spawnsFFA: [],
+      mode: (settings && settings.mode) || 'ffa',
+      noRespawns: !!(settings && settings.noRespawns),
       match: {
         scores: {},       // { [socketId]: { kills: 0, deaths: 0 } }
         killLimit: (settings && settings.killLimit) || 10,
@@ -591,6 +604,7 @@
       entry.entity.syncCameraFromPlayer();
       camera.rotation.set(0, 0, 0, 'YXZ');
       updateHUDForLocalPlayer();
+      if (typeof playGameSound === 'function') playGameSound('respawn');
     }
 
     entry.entity._syncMeshPosition();
@@ -604,6 +618,47 @@
     if (state && state.players[id] && state.players[id].name) return state.players[id].name;
     if (id === (state && state.localId)) return 'You';
     return 'Player ' + id.substring(0, 4);
+  }
+
+  function checkEliminationWin() {
+    if (!state || !state.noRespawns || !state.match.roundActive) return;
+    var ids = Object.keys(state.players);
+    if (state.mode === 'tdm') {
+      // Count alive players per team
+      var teamsAlive = {};
+      for (var i = 0; i < ids.length; i++) {
+        var entry = state.players[ids[i]];
+        if (!entry || !entry.alive || !entry.team) continue;
+        teamsAlive[entry.team] = true;
+      }
+      var aliveTeams = Object.keys(teamsAlive);
+      if (aliveTeams.length === 1) {
+        // Find a player on the winning team to pass as winnerId
+        var winTeam = parseInt(aliveTeams[0], 10);
+        var winnerId = null;
+        for (var j = 0; j < ids.length; j++) {
+          if (state.players[ids[j]] && state.players[ids[j]].team === winTeam && state.players[ids[j]].alive) {
+            winnerId = ids[j];
+            break;
+          }
+        }
+        endRound(winnerId, winTeam);
+      } else if (aliveTeams.length === 0) {
+        // Everyone dead simultaneously — draw, no winner
+        endRound(null, null);
+      }
+    } else {
+      // FFA: last player standing wins
+      var aliveIds = [];
+      for (var k = 0; k < ids.length; k++) {
+        if (state.players[ids[k]] && state.players[ids[k]].alive) {
+          aliveIds.push(ids[k]);
+        }
+      }
+      if (aliveIds.length <= 1) {
+        endRound(aliveIds[0] || null, null);
+      }
+    }
   }
 
   function recordKill(killerId, victimId, weapon) {
@@ -631,6 +686,12 @@
     // Update scoreboard if available
     if (typeof window.updateFFAScoreboard === 'function') {
       window.updateFFAScoreboard();
+    }
+
+    // Check elimination win condition (no respawns mode — kill limit is ignored)
+    if (state.noRespawns) {
+      checkEliminationWin();
+      return;
     }
 
     // Check win condition — when a player hits killLimit, their TEAM wins the round
@@ -711,15 +772,19 @@
     }
   }
 
-  // Build all other players' hit targets (excluding the shooter)
+  // Build all other players' hit targets (excluding the shooter and teammates in TDM)
   function buildHitTargets(shooterId) {
     var targets = [];
     var entities = [];
+    var shooterEntry = state.players[shooterId];
+    var shooterTeam = shooterEntry ? shooterEntry.team : 0;
     var ids = Object.keys(state.players);
     for (var i = 0; i < ids.length; i++) {
       if (ids[i] === shooterId) continue;
       var entry = state.players[ids[i]];
       if (!entry || !entry.entity || !entry.entity.alive) continue;
+      // In TDM, skip teammates
+      if (state.mode === 'tdm' && shooterTeam && entry.team === shooterTeam) continue;
       targets.push({ segments: entry.entity.getHitSegments(), entity: entry.entity, playerId: ids[i] });
       entities.push(entry.entity);
     }
@@ -780,7 +845,7 @@
     sharedMeleeAttack(w, origin, dir, {
       solids: state.arena.solids,
       targets: hitInfo.targets,
-      onHit: function (target, point, dist, totalDamage) {
+      onHit: function (target, point, dist, totalDamage, dmgMult) {
         if (window.devGodMode && target.playerId === state.localId) return;
         var victimEntry = null;
         var victimId = null;
@@ -795,14 +860,15 @@
         if (!victimEntry || !victimEntry.entity.alive) return;
 
         victimEntry.entity.takeDamage(totalDamage);
-        if (id === state.localId && typeof playGameSound === 'function') playGameSound('hit_marker');
+        if (id === state.localId && typeof playGameSound === 'function') playGameSound('hit_marker', { headshot: (dmgMult || 1) > 1 });
         if (victimId === state.localId && typeof playGameSound === 'function') playGameSound('damage_taken');
         if (victimId === state.localId) updateHUDForLocalPlayer();
 
         if (state.match.roundActive && !victimEntry.entity.alive) {
           victimEntry.alive = false;
-          victimEntry.respawnAt = performance.now() + RESPAWN_DELAY_MS;
-          if (typeof playGameSound === 'function') playGameSound('elimination');
+          victimEntry.respawnAt = state.noRespawns ? 0 : performance.now() + RESPAWN_DELAY_MS;
+          if (id === state.localId && typeof playGameSound === 'function') playGameSound('elimination');
+          if (victimId === state.localId && typeof playGameSound === 'function') playGameSound('own_death');
           recordKill(id, victimId, 'melee');
         }
       }
@@ -842,6 +908,7 @@
     if (!inp.fireDown) return;
     if ((now - w.lastShotTime) < w.cooldownMs) return;
     if (w.ammo <= 0) {
+      if (id === state.localId && typeof playGameSound === 'function') playGameSound('dry_fire');
       if (sharedStartReload(w, now)) {
         if (id === state.localId) sharedSetReloadingUI(true, state.hud.reloadIndicator);
       }
@@ -862,6 +929,7 @@
       targets: hitInfo.targets,
       projectileTargetEntities: hitInfo.entities,
       tracerColor: tracerColor,
+      worldPos: (id !== state.localId) ? origin : null,
       onHit: function (target, point, dist, pelletIdx, damageMultiplier) {
         var victimId = null;
         var victimEntry = null;
@@ -876,14 +944,15 @@
         if (window.devGodMode && victimId === state.localId) return;
 
         victimEntry.entity.takeDamage(w.damage * (damageMultiplier || 1.0));
-        if (id === state.localId && typeof playGameSound === 'function') playGameSound('hit_marker');
+        if (id === state.localId && typeof playGameSound === 'function') playGameSound('hit_marker', { headshot: (damageMultiplier || 1) > 1 });
         if (victimId === state.localId && typeof playGameSound === 'function') playGameSound('damage_taken');
         if (victimId === state.localId) updateHUDForLocalPlayer();
 
         if (state.match.roundActive && !victimEntry.entity.alive) {
           victimEntry.alive = false;
-          victimEntry.respawnAt = performance.now() + RESPAWN_DELAY_MS;
-          if (typeof playGameSound === 'function') playGameSound('elimination');
+          victimEntry.respawnAt = state.noRespawns ? 0 : performance.now() + RESPAWN_DELAY_MS;
+          if (id === state.localId && typeof playGameSound === 'function') playGameSound('elimination');
+          if (victimId === state.localId && typeof playGameSound === 'function') playGameSound('own_death');
           recordKill(id, victimId, w.modelType || 'gun');
           return false;
         }
@@ -1073,6 +1142,11 @@
 
     // Phase 6: Send snapshot
     maybeSendSnapshot(now);
+
+    // Phase 7: Update audio listener for spatial sound
+    if (typeof window.updateAudioListener === 'function') {
+      window.updateAudioListener(camera.position, camera.quaternion);
+    }
   }
 
   var lastSnapshotMs = 0;
@@ -1130,6 +1204,11 @@
     p.input.fireDown = enabled && !!rawInput.fireDown;
     p.input.meleeDown = enabled && !!rawInput.meleePressed;
     if (enabled && rawInput.reloadPressed) p.input.reloadPressed = true;
+    // Melee-only weapons: left-click triggers melee swing, not fire
+    if (p.weapon && p.weapon.meleeOnly && p.input.fireDown) {
+      p.input.meleeDown = true;
+      p.input.fireDown = false;
+    }
 
     sharedSetCrosshairBySprint(!!rawInput.sprint, p.weapon.spreadRad, p.weapon.sprintSpreadRad);
     sharedSetSprintUI(!!rawInput.sprint, state.hud.sprintIndicator);
@@ -1183,6 +1262,23 @@
       p.input.reloadPressed = false;
     }
 
+    // Client-side melee prediction (animation + sound + HUD only, no damage)
+    var clientMs = state._meleeSwingState[state.localId];
+    if (!clientMs) { clientMs = { swinging: false, swingEnd: 0 }; state._meleeSwingState[state.localId] = clientMs; }
+    if (clientMs.swinging && now >= clientMs.swingEnd) clientMs.swinging = false;
+    if (entry.alive && p.input.meleeDown && !clientMs.swinging) {
+      var w = p.weapon;
+      if (!w.reloading && (now - w.lastMeleeTime) >= w.meleeCooldownMs) {
+        clientMs.swinging = true;
+        clientMs.swingEnd = now + w.meleeSwingMs;
+        w.lastMeleeTime = now;
+        if (typeof playGameSound === 'function') playGameSound('melee_swing');
+        if (typeof window.triggerFPMeleeSwing === 'function') window.triggerFPMeleeSwing(w.meleeSwingMs);
+        if (p.triggerMeleeSwing) p.triggerMeleeSwing(w.meleeSwingMs);
+      }
+    }
+    p.input.meleeDown = false;
+
     // Interpolate remote players
     var ids = Object.keys(state.players);
     for (var i = 0; i < ids.length; i++) {
@@ -1203,6 +1299,11 @@
 
     if (typeof updateProjectiles === 'function') updateProjectiles(dt);
     if (window.devShowHitboxes && window.updateHitboxVisuals) window.updateHitboxVisuals();
+
+    // Update audio listener for spatial sound
+    if (typeof window.updateAudioListener === 'function') {
+      window.updateAudioListener(camera.position, camera.quaternion);
+    }
 
     // Send input to host
     if (socket && entry.alive) {
@@ -1244,6 +1345,7 @@
         if (!sp.alive && localEntry.entity.alive) {
           localEntry.entity.alive = false;
           if (typeof playGameSound === 'function') playGameSound('damage_taken');
+          if (typeof playGameSound === 'function') playGameSound('own_death');
         }
         localEntry.alive = sp.alive;
         localEntry.entity.alive = sp.alive;
@@ -1263,7 +1365,8 @@
           var serverPos = new THREE.Vector3(sp.pos[0], sp.pos[1], sp.pos[2]);
           var dx = _predictedPos.x - serverPos.x;
           var dz = _predictedPos.z - serverPos.z;
-          var distSq = dx * dx + dz * dz;
+          var dy = _predictedFeetY - sp.feetY;
+          var distSq = dx * dx + dy * dy + dz * dz;
           if (distSq > SNAP_THRESHOLD_SQ) {
             _predictedPos.copy(serverPos);
             _predictedFeetY = sp.feetY;
@@ -1272,8 +1375,13 @@
             localEntry.entity.position.copy(serverPos);
             localEntry.entity.feetY = sp.feetY;
           } else {
-            _predictedPos.lerp(serverPos, 0.1);
-            _predictedFeetY += (sp.feetY - _predictedFeetY) * 0.1;
+            // Smooth reconcile XZ; Y is driven by feetY via physics
+            _predictedPos.x += (serverPos.x - _predictedPos.x) * 0.1;
+            _predictedPos.z += (serverPos.z - _predictedPos.z) * 0.1;
+            _predictedFeetY += (sp.feetY - _predictedFeetY) * 0.15;
+            _predictedPos.y = _predictedFeetY + EYE_HEIGHT;
+            _predictedGrounded = sp.grounded;
+            if (sp.grounded && _predictedVVel < 0) _predictedVVel = 0;
           }
         } else if (sp.pos) {
           _predictedPos = new THREE.Vector3(sp.pos[0], sp.pos[1], sp.pos[2]);
@@ -1468,7 +1576,8 @@
       if (typeof window.updateFFAScoreboard === 'function') {
         window.updateFFAScoreboard();
       }
-      if (typeof playGameSound === 'function') playGameSound('elimination');
+      if (payload.killerId === state.localId && typeof playGameSound === 'function') playGameSound('elimination');
+      if (payload.victimId === state.localId && typeof playGameSound === 'function') playGameSound('own_death');
     });
 
     // ── Client-side socket events ──
@@ -1500,16 +1609,17 @@
         var e = new THREE.Vector3(data.e[0], data.e[1], data.e[2]);
         if (typeof spawnTracer === 'function') spawnTracer(o, e, data.c || 0x66aaff, TRACER_LIFETIME);
       }
-      if (typeof playGameSound === 'function') playGameSound('gunshot');
+      if (typeof playGameSound === 'function') playGameSound('weapon_fire', { weaponModelType: data.w || 'rifle', _worldPos: o });
     });
 
     socket.on('melee', function (data) {
       if (!state || !data) return;
+      if (data.playerId === state.localId) return; // already predicted locally
       var entry = state.players[data.playerId];
       if (entry && entry.entity && entry.entity.triggerMeleeSwing) {
         entry.entity.triggerMeleeSwing(data.swingMs || 300);
       }
-      if (typeof playGameSound === 'function') playGameSound('melee_swing');
+      if (typeof playGameSound === 'function') playGameSound('melee_swing', { _worldPos: (entry && entry.entity) ? entry.entity.position : null });
     });
 
     socket.on('startRound', function (data) {
@@ -1807,6 +1917,7 @@
         team: localTeam
       };
       state.match.scores[state.localId] = { kills: 0, deaths: 0 };
+      state._meleeSwingState[state.localId] = { swinging: false, swingEnd: 0 };
 
       // Reset prediction state
       _predictedPos = localPlayer.position.clone();

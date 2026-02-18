@@ -1,0 +1,18 @@
+{
+  "id": "countdown_go",
+  "name": "Countdown Go Horn",
+  "synthesis": {
+    "type": "sweep",
+    "waveform": "sawtooth",
+    "startFreq": 350,
+    "endFreq": 700,
+    "duration": 0.3,
+    "volume": 0.3,
+    "attack": 0.005,
+    "decay": 0.295,
+    "noiseAmount": 0.15
+  },
+  "bindings": [
+    { "event": "countdown_go", "filter": {} }
+  ]
+}

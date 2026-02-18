@@ -76,6 +76,7 @@
     return group;
   }
   WEAPON_MODEL_REGISTRY['rifle'] = buildRifle;
+  WEAPON_MODEL_REGISTRY['sniper'] = buildRifle;
 
   // --- Shotgun: Short wide barrel, pump detail, warm tones ---
   function buildShotgun() {

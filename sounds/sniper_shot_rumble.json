@@ -1,0 +1,18 @@
+{
+  "id": "sniper_shot_rumble",
+  "name": "Sniper Shot Rumble",
+  "synthesis": {
+    "type": "sweep",
+    "waveform": "sawtooth",
+    "startFreq": 200,
+    "endFreq": 40,
+    "duration": 0.35,
+    "volume": 0.3,
+    "attack": 0.002,
+    "decay": 0.348,
+    "noiseAmount": 0.7
+  },
+  "bindings": [
+    { "event": "weapon_fire", "filter": { "weaponModelType": "sniper" } }
+  ]
+}

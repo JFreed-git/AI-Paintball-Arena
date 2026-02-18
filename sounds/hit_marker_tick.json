@@ -1,17 +1,16 @@
 {
   "id": "hit_marker_tick",
-  "name": "Hit Marker Tick",
+  "name": "Hit Marker Headshot",
   "synthesis": {
-    "type": "noise_burst",
-    "frequency": 8000,
-    "filterType": "highpass",
-    "filterQ": 3,
-    "duration": 0.015,
-    "volume": 0.2,
+    "type": "tone",
+    "waveform": "triangle",
+    "frequency": 2200,
+    "duration": 0.045,
+    "volume": 0.22,
     "attack": 0.001,
-    "decay": 0.014
+    "decay": 0.044
   },
   "bindings": [
-    { "event": "hit_marker", "filter": {} }
+    { "event": "hit_marker", "filter": { "headshot": true } }
   ]
 }

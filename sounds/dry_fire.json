@@ -1,0 +1,18 @@
+{
+  "id": "dry_fire",
+  "name": "Dry Fire Click",
+  "synthesis": {
+    "type": "impact",
+    "bodyFreq": 1800,
+    "bodyDecay": 0.003,
+    "noiseFreq": 2500,
+    "noiseFilterType": "bandpass",
+    "noiseFilterQ": 3,
+    "noiseDuration": 0.012,
+    "mix": 0.4,
+    "volume": 0.2
+  },
+  "bindings": [
+    { "event": "dry_fire", "filter": {} }
+  ]
+}

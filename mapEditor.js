@@ -7,7 +7,7 @@
  * DEPENDENCIES: Three.js, mapFormat.js
  *
  * FEATURES:
- *   - 7 shape types: box, cylinder, halfCylinder, ramp, wedge, lshape, arch
+ *   - 7 shape types: box, cylinder, sphere, ramp, wedge, lshape, arch
  *   - Mirror modes: off, z, x, quad (4-way)
  *   - Flexible spawn points (array-based, team assignment)
  *   - Copy/paste (Ctrl+C/V), multi-select (Shift+click, Ctrl+A)
@@ -66,6 +66,9 @@
   var resizeStartRadius = 0;
   var resizeStartHeight = 0;
   var resizePlane = new THREE.Plane();
+  var resizeFixedWorld = new THREE.Vector3();
+  var resizeSignX = 0;
+  var resizeSignZ = 0;
   var handleCornerMat = new THREE.MeshBasicMaterial({ color: 0xff8800, depthTest: false, transparent: true, opacity: 0.85 });
   var handleTopMat = new THREE.MeshBasicMaterial({ color: 0x00ccff, depthTest: false, transparent: true, opacity: 0.85 });
   var handleCornerGeom = new THREE.BoxGeometry(0.45, 0.45, 0.45);
@@ -99,7 +102,7 @@
 
   // Shape display names
   var SHAPE_NAMES = {
-    box: 'Box', cylinder: 'Cylinder', halfCylinder: 'Half-Cylinder',
+    box: 'Box', cylinder: 'Cylinder', sphere: 'Sphere',
     ramp: 'Ramp', wedge: 'Wedge', lshape: 'L-Shape', arch: 'Arch'
   };
 
@@ -766,10 +769,15 @@
       mesh = new THREE.Mesh(new THREE.CylinderGeometry(r, r, h, 24), mat);
       mesh.position.set(obj.position[0], -1 + h / 2 + yOff, obj.position[2]);
     } else if (obj.type === 'halfCylinder') {
-      var r2 = obj.radius || 2.0, h2 = obj.height || 3.0;
-      var hMat = new THREE.MeshLambertMaterial({ color: obj.color || '#7A6A55', side: THREE.DoubleSide });
-      mesh = new THREE.Mesh(new THREE.CylinderGeometry(r2, r2, h2, 24, 1, false, 0, Math.PI), hMat);
+      // Legacy: convert halfCylinder to cylinder
+      obj.type = 'cylinder';
+      var r2 = obj.radius || 1.5, h2 = obj.height || 3.0;
+      mesh = new THREE.Mesh(new THREE.CylinderGeometry(r2, r2, h2, 24), mat);
       mesh.position.set(obj.position[0], -1 + h2 / 2 + yOff, obj.position[2]);
+    } else if (obj.type === 'sphere') {
+      var sr = obj.radius || 1.5;
+      mesh = new THREE.Mesh(new THREE.SphereGeometry(sr, 24, 16), mat);
+      mesh.position.set(obj.position[0], -1 + sr + yOff, obj.position[2]);
     } else if (obj.type === 'ramp' || obj.type === 'wedge') {
       var rsx = obj.size[0], rsy = obj.size[1], rsz = obj.size[2];
       var shape = new THREE.Shape();
@@ -801,26 +809,22 @@
     } else if (obj.type === 'arch') {
       var aw = obj.size[0], ah = obj.size[1], ad = obj.size[2];
       var openW = aw * 0.6; // opening is 60% of width
-      var openH = ah * 0.65; // opening is 65% of height
-      var archShape = new THREE.Shape();
-      // Outer rectangle
-      archShape.moveTo(-aw / 2, 0);
-      archShape.lineTo(aw / 2, 0);
-      archShape.lineTo(aw / 2, ah);
-      archShape.lineTo(-aw / 2, ah);
-      archShape.closePath();
-      // Hole: arch (rectangle with semicircular top)
-      var hole = new THREE.Path();
+      var openH = (obj.thickness != null) ? Math.max(0.5, ah - obj.thickness) : ah * 0.65;
       var holeHW = openW / 2;
-      var rectH = openH - holeHW; // straight part height
+      var rectH = openH - holeHW; // straight part of opening
       if (rectH < 0) rectH = 0;
-      hole.moveTo(-holeHW, 0);
-      hole.lineTo(-holeHW, rectH);
-      // Semicircular top
-      hole.absarc(0, rectH, holeHW, Math.PI, 0, true);
-      hole.lineTo(holeHW, 0);
-      hole.closePath();
-      archShape.holes.push(hole);
+      // Single path tracing the arch profile (no hole — avoids bottom face under opening)
+      // CCW: outer boundary → inward around the opening
+      var archShape = new THREE.Shape();
+      archShape.moveTo(-aw / 2, -0.05);       // bottom-left
+      archShape.lineTo(-aw / 2, ah);           // up left side
+      archShape.lineTo(aw / 2, ah);            // across top
+      archShape.lineTo(aw / 2, -0.05);         // down right side
+      archShape.lineTo(holeHW, -0.05);         // inward along bottom to right opening edge
+      archShape.lineTo(holeHW, rectH);         // up right side of opening
+      archShape.absarc(0, rectH, holeHW, 0, Math.PI, false); // arc across top of opening
+      archShape.lineTo(-holeHW, -0.05);        // down left side of opening
+      archShape.closePath();                    // back to start under left pillar
       var archGeom = new THREE.ExtrudeGeometry(archShape, { depth: ad, bevelEnabled: false });
       archGeom.translate(0, 0, -ad / 2);
       mesh = new THREE.Mesh(archGeom, mat);
@@ -852,23 +856,26 @@
     var baseY = -1 + (d.position[1] || 0);
     var cx = d.position[0], cz = d.position[2];
     var rot = d.rotation || 0;
-    var isCyl = (d.type === 'cylinder' || d.type === 'halfCylinder');
+    var usesRadius = (d.type === 'cylinder' || d.type === 'sphere');
 
-    if (isCyl) {
+    if (usesRadius) {
       var r = d.radius || 1.5;
-      var h = d.height || 3.0;
+      var h = d.type === 'sphere' ? r * 2 : (d.height || 3.0);
+      var handleY = d.type === 'sphere' ? baseY + r : baseY + 0.25;
       var rOff1 = rotateOffset(r, 0, rot);
       var rOff2 = rotateOffset(-r, 0, rot);
       var rOff3 = rotateOffset(0, r, rot);
       var rOff4 = rotateOffset(0, -r, rot);
-      addHandle(cx + rOff1.x, baseY + 0.25, cz + rOff1.z, 'radius', 1, 0);
-      addHandle(cx + rOff2.x, baseY + 0.25, cz + rOff2.z, 'radius', -1, 0);
-      addHandle(cx + rOff3.x, baseY + 0.25, cz + rOff3.z, 'radius', 0, 1);
-      addHandle(cx + rOff4.x, baseY + 0.25, cz + rOff4.z, 'radius', 0, -1);
-      addHandle(cx, baseY + h, cz, 'top', 0, 0);
+      addHandle(cx + rOff1.x, handleY, cz + rOff1.z, 'radius', 1, 0);
+      addHandle(cx + rOff2.x, handleY, cz + rOff2.z, 'radius', -1, 0);
+      addHandle(cx + rOff3.x, handleY, cz + rOff3.z, 'radius', 0, 1);
+      addHandle(cx + rOff4.x, handleY, cz + rOff4.z, 'radius', 0, -1);
+      // No top handle for sphere (radius handles control size)
+      if (d.type !== 'sphere') addHandle(cx, baseY + h, cz, 'top', 0, 0);
     } else if (d.size) {
-      var hsx = d.size[0] / 2;
-      var hsz = d.size[2] / 2;
+      var isRamp = (d.type === 'ramp' || d.type === 'wedge');
+      var hsx = isRamp ? d.size[2] / 2 : d.size[0] / 2;
+      var hsz = isRamp ? d.size[0] / 2 : d.size[2] / 2;
       var sy = d.size[1];
       var c1 = rotateOffset(hsx, hsz, rot);
       var c2 = rotateOffset(hsx, -hsz, rot);
@@ -941,6 +948,17 @@
       var baseY = -1 + (d.position[1] || 0) + 0.25;
       resizePlane.setFromNormalAndCoplanarPoint(new THREE.Vector3(0, 1, 0), new THREE.Vector3(0, baseY, 0));
     }
+    // For corner handles, compute the fixed (opposite) corner in world space
+    if (handle.handleType === 'corner' && d.size) {
+      resizeSignX = handle.signX;
+      resizeSignZ = handle.signZ;
+      var isRamp = (d.type === 'ramp' || d.type === 'wedge');
+      var hsx = isRamp ? d.size[2] / 2 : d.size[0] / 2;
+      var hsz = isRamp ? d.size[0] / 2 : d.size[2] / 2;
+      var rot = d.rotation || 0;
+      var fixedOff = rotateOffset(-resizeSignX * hsx, -resizeSignZ * hsz, rot);
+      resizeFixedWorld.set(d.position[0] + fixedOff.x, 0, d.position[2] + fixedOff.z);
+    }
     var rect = editorRenderer.domElement.getBoundingClientRect();
     mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
     mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
@@ -957,17 +975,36 @@
     var pt = new THREE.Vector3();
     if (!raycaster.ray.intersectPlane(resizePlane, pt)) return;
     var d = selectedObj.data;
-    var isCyl = (d.type === 'cylinder' || d.type === 'halfCylinder');
+    var usesRadius = (d.type === 'cylinder' || d.type === 'sphere');
     if (resizeHandle.handleType === 'top') {
       var deltaY = pt.y - resizeStartPoint.y;
       var newH = Math.max(0.5, Math.round((resizeStartHeight + deltaY) * 4) / 4);
-      if (isCyl) d.height = newH;
+      if (d.type === 'cylinder') d.height = newH;
       else if (d.size) d.size[1] = newH;
     } else if (resizeHandle.handleType === 'corner' && d.size) {
-      var cx = d.position[0], cz = d.position[2];
-      d.size[0] = Math.max(0.5, Math.round(Math.abs(pt.x - cx) * 2 * 4) / 4);
-      d.size[2] = Math.max(0.5, Math.round(Math.abs(pt.z - cz) * 2 * 4) / 4);
-    } else if (resizeHandle.handleType === 'radius' && isCyl) {
+      var isRamp = (d.type === 'ramp' || d.type === 'wedge');
+      var rot = d.rotation || 0;
+      // World delta from fixed corner to drag point
+      var wdx = pt.x - resizeFixedWorld.x;
+      var wdz = pt.z - resizeFixedWorld.z;
+      // Un-rotate to local object space
+      var local = rotateOffset(wdx, wdz, -rot);
+      // local.x / local.z are full sizes (fixed corner to drag corner)
+      var newVisualX = Math.max(0.5, Math.round(Math.abs(local.x) * 4) / 4);
+      var newVisualZ = Math.max(0.5, Math.round(Math.abs(local.z) * 4) / 4);
+      // Map visual extents back to size array (ramps swap X↔Z)
+      if (isRamp) {
+        d.size[2] = newVisualX;
+        d.size[0] = newVisualZ;
+      } else {
+        d.size[0] = newVisualX;
+        d.size[2] = newVisualZ;
+      }
+      // New center = fixed corner + rotated offset by half the new size
+      var centerOff = rotateOffset(resizeSignX * newVisualX / 2, resizeSignZ * newVisualZ / 2, rot);
+      d.position[0] = resizeFixedWorld.x + centerOff.x;
+      d.position[2] = resizeFixedWorld.z + centerOff.z;
+    } else if (resizeHandle.handleType === 'radius' && usesRadius) {
       var cx2 = d.position[0], cz2 = d.position[2];
       d.radius = Math.max(0.25, Math.round(Math.sqrt((pt.x - cx2) * (pt.x - cx2) + (pt.z - cz2) * (pt.z - cz2)) * 4) / 4);
     }
@@ -1016,16 +1053,17 @@
     var rot = (d.rotation || 0) * Math.PI / 180;
     var cx = d.position[0], cz = d.position[2];
     var baseY = -1 + (d.position[1] || 0);
-    var isCyl = (d.type === 'cylinder' || d.type === 'halfCylinder');
+    var usesRadius = (d.type === 'cylinder' || d.type === 'sphere');
     var hx, hz, sy;
 
-    if (isCyl) {
+    if (usesRadius) {
       var r = d.radius || 1.5;
       hx = r; hz = r;
-      sy = d.height || 3.0;
+      sy = d.type === 'sphere' ? r * 2 : (d.height || 3.0);
     } else if (d.size) {
-      hx = d.size[0] / 2;
-      hz = d.size[2] / 2;
+      var isRamp = (d.type === 'ramp' || d.type === 'wedge');
+      hx = isRamp ? d.size[2] / 2 : d.size[0] / 2;
+      hz = isRamp ? d.size[0] / 2 : d.size[2] / 2;
       sy = d.size[1];
     } else {
       return new THREE.BoxHelper(entry.mesh, color);
@@ -1122,15 +1160,16 @@
     document.getElementById('epropSpawnTeamRow').style.display = 'none';
     document.getElementById('epropMirror').style.display = '';
 
-    var isCyl = (data.type === 'cylinder' || data.type === 'halfCylinder');
-    document.getElementById('epropSizeRow').style.display = isCyl ? 'none' : '';
-    document.getElementById('epropSZRow').style.display = isCyl ? 'none' : '';
-    document.getElementById('epropRadiusRow').style.display = isCyl ? '' : 'none';
-    document.getElementById('epropThicknessRow').style.display = data.type === 'lshape' ? '' : 'none';
+    var usesRadius = (data.type === 'cylinder' || data.type === 'sphere');
+    document.getElementById('epropSizeRow').style.display = usesRadius ? 'none' : '';
+    document.getElementById('epropSZRow').style.display = usesRadius ? 'none' : '';
+    document.getElementById('epropSYRow').style.display = data.type === 'sphere' ? 'none' : '';
+    document.getElementById('epropRadiusRow').style.display = usesRadius ? '' : 'none';
+    document.getElementById('epropThicknessRow').style.display = (data.type === 'lshape' || data.type === 'arch') ? '' : 'none';
 
-    if (isCyl) {
+    if (usesRadius) {
       document.getElementById('epropRadius').value = data.radius || 1.5;
-      document.getElementById('epropSY').value = data.height || 3.0;
+      if (data.type === 'cylinder') document.getElementById('epropSY').value = data.height || 3.0;
     } else {
       document.getElementById('epropSX').value = data.size ? data.size[0] : 2;
       document.getElementById('epropSY').value = data.size ? data.size[1] : 3;
@@ -1138,6 +1177,8 @@
     }
     if (data.type === 'lshape') {
       document.getElementById('epropThickness').value = data.thickness || 1.0;
+    } else if (data.type === 'arch') {
+      document.getElementById('epropThickness').value = data.thickness != null ? data.thickness : 1.4;
     }
   }
 
@@ -1217,10 +1258,10 @@
     d.rotation = parseFloat(document.getElementById('epropRot').value) || 0;
     d.color = document.getElementById('epropColor').value;
 
-    var isCyl = (d.type === 'cylinder' || d.type === 'halfCylinder');
-    if (isCyl) {
+    var usesRadius = (d.type === 'cylinder' || d.type === 'sphere');
+    if (usesRadius) {
       d.radius = Math.max(0.25, parseFloat(document.getElementById('epropRadius').value) || 1.5);
-      d.height = Math.max(0.5, parseFloat(document.getElementById('epropSY').value) || 3.0);
+      if (d.type === 'cylinder') d.height = Math.max(0.5, parseFloat(document.getElementById('epropSY').value) || 3.0);
     } else {
       if (!d.size) d.size = [2, 3, 2];
       d.size[0] = Math.max(0.5, parseFloat(document.getElementById('epropSX').value) || 2);
@@ -1229,6 +1270,8 @@
     }
     if (d.type === 'lshape') {
       d.thickness = Math.max(0.25, parseFloat(document.getElementById('epropThickness').value) || 1.0);
+    } else if (d.type === 'arch') {
+      d.thickness = Math.max(0.25, parseFloat(document.getElementById('epropThickness').value) || 1.4);
     }
 
     rebuildSingleObject(selectedObj);
@@ -1280,10 +1323,8 @@
     } else if (type === 'cylinder') {
       obj.radius = 1.5;
       obj.height = 3.0;
-    } else if (type === 'halfCylinder') {
-      obj.radius = 2.0;
-      obj.height = 3.0;
-      obj.color = '#7A6A55';
+    } else if (type === 'sphere') {
+      obj.radius = 1.5;
     } else if (type === 'ramp') {
       obj.size = [4, 2, 6];
       obj.color = '#4A4A4A';
@@ -1295,6 +1336,7 @@
       obj.thickness = 1.0;
     } else if (type === 'arch') {
       obj.size = [5, 4, 1.5];
+      obj.thickness = 1.4;
       obj.color = '#7A6A55';
     }
     return obj;
@@ -2299,6 +2341,18 @@
     document.getElementById('esArenaW').value = mapData.arena.width || 60;
     document.getElementById('esArenaL').value = mapData.arena.length || 90;
     document.getElementById('esWallH').value = mapData.arena.wallHeight || 3.5;
+    // Supported modes checkboxes
+    var modes = mapData.supportedModes;
+    if (!modes && mapData.spawns && typeof normalizeSpawns === 'function') {
+      modes = Object.keys(normalizeSpawns(mapData.spawns));
+    }
+    if (!modes || !modes.length) modes = ['ffa'];
+    var ffaCb = document.getElementById('esModeFFA');
+    var tdmCb = document.getElementById('esModeTDM');
+    var ctfCb = document.getElementById('esModeCTF');
+    if (ffaCb) ffaCb.checked = modes.indexOf('ffa') !== -1;
+    if (tdmCb) tdmCb.checked = modes.indexOf('tdm') !== -1;
+    if (ctfCb) ctfCb.checked = modes.indexOf('ctf') !== -1;
   }
 
   function onSettingsApply() {
@@ -2307,6 +2361,16 @@
     mapData.arena.width = Math.max(20, parseInt(document.getElementById('esArenaW').value, 10) || 60);
     mapData.arena.length = Math.max(20, parseInt(document.getElementById('esArenaL').value, 10) || 90);
     mapData.arena.wallHeight = Math.max(1, parseFloat(document.getElementById('esWallH').value) || 3.5);
+    // Supported modes
+    var modes = [];
+    var ffaCb = document.getElementById('esModeFFA');
+    var tdmCb = document.getElementById('esModeTDM');
+    var ctfCb = document.getElementById('esModeCTF');
+    if (ffaCb && ffaCb.checked) modes.push('ffa');
+    if (tdmCb && tdmCb.checked) modes.push('tdm');
+    if (ctfCb && ctfCb.checked) modes.push('ctf');
+    if (modes.length === 0) modes.push('ffa'); // ensure at least one
+    mapData.supportedModes = modes;
     rebuildEditorScene();
     settingsPanel.classList.add('hidden');
   }

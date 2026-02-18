@@ -117,7 +117,7 @@
   // Global key listener for 'c'
   document.addEventListener('keydown', function (e) {
     if (window._splitScreenActive) return; // input belongs to iframes
-    if (e.key === 'c' || e.key === 'C') {
+    if ((e.key === 'c' || e.key === 'C') && !e.ctrlKey && !e.metaKey && !e.altKey) {
       // Don't toggle if typing in an input/textarea (other than dev console inputs)
       var tag = document.activeElement && document.activeElement.tagName;
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') {

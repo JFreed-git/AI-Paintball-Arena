@@ -28,11 +28,39 @@ app.use(express.json({ limit: '1mb' }));
 
 // Block dev workbench files from being served to LAN players
 var DEV_BLOCKED = ['/dev.html', '/devApp.js', '/devApp.css', '/devHeroEditor.js', '/devSplitScreen.js',
-  '/electron-main.js', '/electron-preload.js', '/electron-fetch-shim.js', '/mapEditor.js', '/menuBuilder.js'];
+  '/electron-main.js', '/electron-preload.js', '/electron-fetch-shim.js', '/mapEditor.js', '/menuBuilder.js',
+  '/devConsole.js', '/devAudioManager.js', '/build.js'];
 app.use(function (req, res, next) {
   if (DEV_BLOCKED.indexOf(req.path) !== -1) return res.status(404).end();
   next();
 });
+
+// ── Production mode: serve minified bundle instead of source files ──
+var BUNDLE_PATH = path.join(__dirname, 'bundle.min.js');
+var PRODUCTION = fs.existsSync(BUNDLE_PATH);
+if (PRODUCTION) {
+  // Build a production index.html that loads the bundle instead of individual scripts
+  var rawHtml = fs.readFileSync(path.join(__dirname, 'index.html'), 'utf8');
+  // Replace individual game script tags with a single bundle reference
+  var productionHtml = rawHtml
+    .replace(/\s*<!-- Core systems[\s\S]*?<script src="devConsole\.js"><\/script>/, '\n    <script src="bundle.min.js"></script>')
+    .replace(/<div id="devConsole"[\s\S]*?<\/div>\s*<\/div>\s*<\/div>/, '');
+
+  app.get('/', function (req, res) { res.type('html').send(productionHtml); });
+  app.get('/index.html', function (req, res) { res.type('html').send(productionHtml); });
+
+  // Block all game source .js files (allow bundle, socket.io, and CDN)
+  app.use(function (req, res, next) {
+    if (req.path.endsWith('.js') && req.path !== '/bundle.min.js'
+        && !req.path.startsWith('/socket.io')) {
+      return res.status(404).end();
+    }
+    next();
+  });
+  console.log('[server] Production mode: serving minified bundle');
+} else {
+  console.log('[server] Dev mode: serving individual source files');
+}
 
 // Serve static files from this directory
 app.use(express.static(__dirname));

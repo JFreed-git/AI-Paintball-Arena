@@ -33,7 +33,7 @@ All JS files use IIFEs `(function() { ... })()` for scope isolation. Public APIs
 | `sounds/*.json` | Sound definition JSON files (editable via Audio Manager workbench) |
 | `weapon.js` | `Weapon` class — static stats + mutable state, `reset()` for rounds |
 | `weaponModels.js` | `WEAPON_MODEL_REGISTRY` — model type keys → `THREE.Group` builders |
-| `physics.js` | 3D movement engine: gravity, jumping, ground detection, AABB collision |
+| `physics.js` | 3D movement engine: gravity, jumping, ground detection, AABB + cylindrical collision |
 | `crosshair.js` | Crosshair rendering (cross/circle styles), spread, sprint spread |
 | `hud.js` | Shared HUD: reload state machine, health bar, ammo display |
 | `roundFlow.js` | Round banners and 3-2-1-GO countdown sequence |
@@ -48,7 +48,7 @@ All JS files use IIFEs `(function() { ... })()` for scope isolation. Public APIs
 | `arenaBuilder.js` | Shared arena construction helpers |
 | `arenaCompetitive.js` | Competitive arena with waypoints and symmetric spawns |
 | `arenaTraining.js` | Training range with shooting lanes and bot patrol routes |
-| `mapFormat.js` | Map JSON serialization, 7 shape types, shape-accurate colliders |
+| `mapFormat.js` | Map JSON serialization, 7 shape types (box, cylinder, sphere, ramp, wedge, lshape, arch), shape-accurate colliders (cylindrical for cylinders) |
 | `projectiles.js` | `sharedFireWeapon()`, `sharedMeleeAttack()`, projectile/hitscan, ray intersection per shape |
 | `aiOpponent.js` | 7-state AI with A* pathfinding and 3 playstyles |
 | `trainingBot.js` | Simple patrol bots for training range |

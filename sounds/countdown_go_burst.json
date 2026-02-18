@@ -1,0 +1,17 @@
+{
+  "id": "countdown_go_burst",
+  "name": "Countdown Go Burst",
+  "synthesis": {
+    "type": "noise_burst",
+    "frequency": 4000,
+    "filterType": "highpass",
+    "filterQ": 0.5,
+    "duration": 0.06,
+    "volume": 0.2,
+    "attack": 0.001,
+    "decay": 0.059
+  },
+  "bindings": [
+    { "event": "countdown_go", "filter": {} }
+  ]
+}

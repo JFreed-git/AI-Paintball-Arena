@@ -247,11 +247,13 @@
   // Ramps get staircase colliders (approximating the triangular cross-section)
   // plus a thin tall-wall collider. Other types get a single standard AABB.
   //
-  // The staircase works with resolveCollisions2D's Y-skip logic:
-  //   if (feetY + 0.1 >= box.max.y) continue;
-  // Each step's max.y = slope height at its lower edge, so when the player
-  // walks up the slope (feetY at slope surface), lower steps are skipped.
-  // Approaching from the side at ground level, the steps still block.
+  // The staircase works with resolveCollisions3D's grounded Y-skip logic:
+  //   if (feetY + MAX_STEP_HEIGHT >= box.max.y) continue;
+  // Step count is dynamic: ceil(height / MAX_STEP_HEIGHT) so each step delta
+  // is at most 0.3m. Ground detection (raycast against the ramp mesh) tracks
+  // the surface smoothly; the grounded Y-skip ensures step colliders beneath
+  // the player are ignored. No back wall — the tallest step blocks the steep
+  // face, and removing the wall lets players transition onto adjacent blocks.
 
   window.computeColliderForMesh = function (mesh) {
     var obj = mesh.userData.mapObj;
@@ -261,11 +263,17 @@
 
     // --- Ramp & Wedge: staircase approximation ---
     // Both use the same right-triangle ExtrudeGeometry. Staircase steps allow
-    // walking up the slope (Y-skip logic in resolveCollisions2D).
+    // walking up the slope while blocking side/back entry.
+    // Step count is dynamic: ceil(height / MAX_STEP_HEIGHT) so each step delta
+    // is at most 0.3m. The grounded Y-skip in resolveCollisions3D (feetY +
+    // MAX_STEP_HEIGHT >= box.max.y) lets players ascend smoothly.
+    // No back wall — the tallest step blocks the steep face, and removing the
+    // wall lets players transition smoothly onto adjacent blocks at the top.
     if (obj.type === 'ramp' || obj.type === 'wedge') {
       var rsx = obj.size[0], rsy = obj.size[1], rsz = obj.size[2];
       var result = [];
-      var N = 5;
+      var maxStep = (typeof window.MAX_STEP_HEIGHT === 'number') ? window.MAX_STEP_HEIGHT : 0.3;
+      var N = Math.max(5, Math.ceil(rsy / maxStep));
 
       for (var i = 0; i < N; i++) {
         var stepHeight = rsy * (N - i - 1) / N;
@@ -284,15 +292,6 @@
         mesh.remove(helper);
         stepGeom.dispose();
       }
-
-      var wallGeom = new THREE.BoxGeometry(0.3, rsy, rsx);
-      var wallHelper = new THREE.Mesh(wallGeom);
-      wallHelper.position.set(-rsz / 2, rsy / 2, 0);
-      mesh.add(wallHelper);
-      mesh.updateMatrixWorld(true);
-      result.push(new THREE.Box3().setFromObject(wallHelper));
-      mesh.remove(wallHelper);
-      wallGeom.dispose();
 
       return result;
     }
@@ -335,7 +334,7 @@
     if (obj.type === 'arch') {
       var aw = obj.size[0], ah = obj.size[1], ad = obj.size[2];
       var openW = aw * 0.6;
-      var openH = ah * 0.65;
+      var openH = (obj.thickness != null) ? Math.max(0.5, ah - obj.thickness) : ah * 0.65;
       var pillarW = (aw - openW) / 2;
       var result = [];
 
@@ -373,6 +372,19 @@
       }
 
       return result;
+    }
+
+    // --- Cylinder: radial collider ---
+    if (obj.type === 'cylinder') {
+      var cr = obj.radius || 1.5, ch = obj.height || 3.0;
+      return [{
+        isCylinder: true,
+        centerX: mesh.position.x,
+        centerZ: mesh.position.z,
+        radius: cr,
+        min: { y: mesh.position.y - ch / 2 },
+        max: { y: mesh.position.y + ch / 2 }
+      }];
     }
 
     // Default: single AABB
@@ -440,10 +452,15 @@
         mesh = new THREE.Mesh(new THREE.CylinderGeometry(r, r, h, 24), mat);
         mesh.position.set(obj.position[0], GROUND_Y + h / 2 + yOff, obj.position[2]);
       } else if (obj.type === 'halfCylinder') {
-        var r2 = obj.radius || 2.0, h2 = obj.height || 3.0;
-        var halfMat = new THREE.MeshLambertMaterial({ color: obj.color || '#7A6A55', side: THREE.DoubleSide });
-        mesh = new THREE.Mesh(new THREE.CylinderGeometry(r2, r2, h2, 24, 1, false, 0, Math.PI), halfMat);
+        // Legacy: convert halfCylinder to cylinder
+        obj.type = 'cylinder';
+        var r2 = obj.radius || 1.5, h2 = obj.height || 3.0;
+        mesh = new THREE.Mesh(new THREE.CylinderGeometry(r2, r2, h2, 24), mat);
         mesh.position.set(obj.position[0], GROUND_Y + h2 / 2 + yOff, obj.position[2]);
+      } else if (obj.type === 'sphere') {
+        var sr = obj.radius || 1.5;
+        mesh = new THREE.Mesh(new THREE.SphereGeometry(sr, 24, 16), mat);
+        mesh.position.set(obj.position[0], GROUND_Y + sr + yOff, obj.position[2]);
       } else if (obj.type === 'ramp' || obj.type === 'wedge') {
         var rsx = obj.size[0], rsy = obj.size[1], rsz = obj.size[2];
         var shape = new THREE.Shape();
@@ -474,23 +491,21 @@
       } else if (obj.type === 'arch') {
         var aw2 = obj.size[0], ah2 = obj.size[1], ad2 = obj.size[2];
         var openW = aw2 * 0.6;
-        var openH = ah2 * 0.65;
-        var archShape = new THREE.Shape();
-        archShape.moveTo(-aw2 / 2, 0);
-        archShape.lineTo(aw2 / 2, 0);
-        archShape.lineTo(aw2 / 2, ah2);
-        archShape.lineTo(-aw2 / 2, ah2);
-        archShape.closePath();
-        var hole = new THREE.Path();
+        var openH = (obj.thickness != null) ? Math.max(0.5, ah2 - obj.thickness) : ah2 * 0.65;
         var holeHW = openW / 2;
         var rectH = openH - holeHW;
         if (rectH < 0) rectH = 0;
-        hole.moveTo(-holeHW, 0);
-        hole.lineTo(-holeHW, rectH);
-        hole.absarc(0, rectH, holeHW, Math.PI, 0, true);
-        hole.lineTo(holeHW, 0);
-        hole.closePath();
-        archShape.holes.push(hole);
+        // Single path tracing the arch profile (no hole — avoids bottom face under opening)
+        var archShape = new THREE.Shape();
+        archShape.moveTo(-aw2 / 2, -0.05);
+        archShape.lineTo(-aw2 / 2, ah2);
+        archShape.lineTo(aw2 / 2, ah2);
+        archShape.lineTo(aw2 / 2, -0.05);
+        archShape.lineTo(holeHW, -0.05);
+        archShape.lineTo(holeHW, rectH);
+        archShape.absarc(0, rectH, holeHW, 0, Math.PI, false);
+        archShape.lineTo(-holeHW, -0.05);
+        archShape.closePath();
         var archGeom = new THREE.ExtrudeGeometry(archShape, { depth: ad2, bevelEnabled: false });
         archGeom.translate(0, 0, -ad2 / 2);
         mesh = new THREE.Mesh(archGeom, new THREE.MeshLambertMaterial({ color: obj.color || '#7A6A55', side: THREE.DoubleSide }));
@@ -545,31 +560,89 @@
       group.add(spRingMesh);
     }
 
-    // Auto-generate waypoints: grid ~7-unit spacing, Y-aware via raycast
+    // Auto-generate waypoints: grid ~7-unit spacing, Y-aware via raycast.
+    // Raycast first to find ground height, then test containsPoint at
+    // groundY + 0.15 so ramp-surface waypoints aren't rejected by the
+    // staircase colliders beneath them.
     var wpSpacing = 7;
     var wpRaycaster = new THREE.Raycaster();
     for (var wx = -halfW + wpSpacing; wx < halfW; wx += wpSpacing) {
       for (var wz = -halfL + wpSpacing; wz < halfL; wz += wpSpacing) {
-        var wp = new THREE.Vector3(wx, 0, wz);
+        // Raycast down to find actual ground height
+        wpRaycaster.set(new THREE.Vector3(wx, 20, wz), new THREE.Vector3(0, -1, 0));
+        wpRaycaster.far = 40;
+        var wpHits = wpRaycaster.intersectObjects(solids, true);
+        var groundY = GROUND_Y;
+        for (var h = 0; h < wpHits.length; h++) {
+          if (wpHits[h].point.y > groundY) groundY = wpHits[h].point.y;
+        }
+        // Filter out waypoints with no ground
+        if (groundY < GROUND_Y - 0.5) continue;
+
+        // Test containsPoint at ground height + offset (above ramp step surfaces)
+        var testPt = new THREE.Vector3(wx, groundY + 0.15, wz);
         var inside = false;
         for (var c = 0; c < colliders.length; c++) {
-          if (colliders[c].containsPoint(wp)) { inside = true; break; }
+          if (colliders[c].isCylinder) {
+            var _cdx = testPt.x - colliders[c].centerX;
+            var _cdz = testPt.z - colliders[c].centerZ;
+            if (_cdx*_cdx + _cdz*_cdz <= colliders[c].radius*colliders[c].radius
+                && testPt.y >= colliders[c].min.y && testPt.y <= colliders[c].max.y) {
+              inside = true; break;
+            }
+          } else if (colliders[c].containsPoint(testPt)) { inside = true; break; }
         }
         if (!inside) {
-          // Raycast down to find actual ground height
-          wpRaycaster.set(new THREE.Vector3(wx, 20, wz), new THREE.Vector3(0, -1, 0));
-          wpRaycaster.far = 40;
-          var wpHits = wpRaycaster.intersectObjects(solids, true);
-          var groundY = GROUND_Y;
-          for (var h = 0; h < wpHits.length; h++) {
-            if (wpHits[h].point.y > groundY) groundY = wpHits[h].point.y;
-          }
-          // Filter out waypoints with no ground (groundY stayed at extreme low)
-          if (groundY >= GROUND_Y - 0.5) {
-            wp.y = groundY;
-            waypoints.push(wp);
-          }
+          var wp = new THREE.Vector3(wx, groundY, wz);
+          waypoints.push(wp);
         }
+      }
+    }
+
+    // Add explicit ramp/wedge waypoints at top, on-slope, and base so AI can
+    // path up ramps.  Grid waypoints alone (7-unit spacing) miss ramp surfaces.
+    // Ramp shape in local space (after translate):
+    //   walk-up entry (low end) at x = +rsz/2,  y = 0
+    //   top of slope  (high end) at x = -rsz/2, y = rsy
+    for (var ri = 0; ri < objs.length; ri++) {
+      var rObj = objs[ri];
+      if (rObj.type !== 'ramp' && rObj.type !== 'wedge') continue;
+      var rwsy = rObj.size[1], rwsz = rObj.size[2];
+      var rRotY = (rObj.rotation || 0) * Math.PI / 180;
+      var rYOff = rObj.position[1] || 0;
+      var cosR = Math.cos(rRotY), sinR = Math.sin(rRotY);
+      var mirX = (rObj.mirrorFlip && rObj.mirrorAxis === 'x') ? -1 : 1;
+
+      // Three waypoints per ramp:
+      // 1) Base — on the ground, 1.5 units past the low end of the slope
+      // 2) On-slope — on the ramp surface, 1.5 units down from the top edge
+      // 3) Past-top — at ramp-top height, 1.5 units past the high edge
+      var slopeInset = Math.min(1.5, rwsz * 0.2);
+      var rampWpDefs = [
+        { lx: (rwsz / 2 + 1.5) * mirX,  ly: 0 },
+        { lx: (-rwsz / 2 + slopeInset) * mirX, ly: rwsy * (rwsz - slopeInset) / rwsz },
+        { lx: (-rwsz / 2 - 1.5) * mirX, ly: rwsy }
+      ];
+
+      for (var rw = 0; rw < rampWpDefs.length; rw++) {
+        var rDef = rampWpDefs[rw];
+        var rwx = rObj.position[0] + rDef.lx * cosR;
+        var rwz = rObj.position[2] + rDef.lx * sinR;
+        var rwy = GROUND_Y + rYOff + rDef.ly;
+        if (Math.abs(rwx) >= halfW - 1 || Math.abs(rwz) >= halfL - 1) continue;
+        var rwTest = new THREE.Vector3(rwx, rwy + 0.5, rwz);
+        var rwInside = false;
+        for (var rc = 0; rc < colliders.length; rc++) {
+          if (colliders[rc].isCylinder) {
+            var _cdx2 = rwTest.x - colliders[rc].centerX;
+            var _cdz2 = rwTest.z - colliders[rc].centerZ;
+            if (_cdx2*_cdx2 + _cdz2*_cdz2 <= colliders[rc].radius*colliders[rc].radius
+                && rwTest.y >= colliders[rc].min.y && rwTest.y <= colliders[rc].max.y) {
+              rwInside = true; break;
+            }
+          } else if (colliders[rc].containsPoint(rwTest)) { rwInside = true; break; }
+        }
+        if (!rwInside) waypoints.push(new THREE.Vector3(rwx, rwy, rwz));
       }
     }
 
@@ -584,7 +657,14 @@
         var swp = spawnPositions[spi].clone().add(spawnOffsets[oi]);
         var sInside = false;
         for (var c = 0; c < colliders.length; c++) {
-          if (colliders[c].containsPoint(swp)) { sInside = true; break; }
+          if (colliders[c].isCylinder) {
+            var _cdx3 = swp.x - colliders[c].centerX;
+            var _cdz3 = swp.z - colliders[c].centerZ;
+            if (_cdx3*_cdx3 + _cdz3*_cdz3 <= colliders[c].radius*colliders[c].radius
+                && swp.y >= colliders[c].min.y && swp.y <= colliders[c].max.y) {
+              sInside = true; break;
+            }
+          } else if (colliders[c].containsPoint(swp)) { sInside = true; break; }
         }
         if (!sInside && Math.abs(swp.x) < halfW && Math.abs(swp.z) < halfL) {
           wpRaycaster.set(new THREE.Vector3(swp.x, 20, swp.z), new THREE.Vector3(0, -1, 0));

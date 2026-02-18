@@ -1,0 +1,19 @@
+{
+  "id": "own_death_crunch",
+  "name": "Own Death Crunch",
+  "synthesis": {
+    "type": "fm",
+    "carrierFreq": 120,
+    "carrierWaveform": "sawtooth",
+    "modFreq": 67,
+    "modDepth": 300,
+    "modWaveform": "sine",
+    "duration": 0.4,
+    "volume": 0.3,
+    "attack": 0.002,
+    "decay": 0.398
+  },
+  "bindings": [
+    { "event": "own_death", "filter": {} }
+  ]
+}

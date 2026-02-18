@@ -16,10 +16,11 @@
  * STATE MACHINE:
  *   SPAWN_RUSH → PATROL → ENGAGE → SEEK_COVER → HOLD_COVER → FLANK → STUCK_RECOVER
  *
- * PLAYSTYLES (randomly selected per round):
+ * PLAYSTYLES (randomly selected per round, or auto-assigned by hero weapon):
  *   aggressive — close range, low cover threshold, high sprint/jump
  *   defensive  — long range, high cover threshold, frequent cover use
  *   balanced   — middle ground between aggressive and defensive
+ *   melee      — point-blank range, always sprints, never retreats or seeks cover
  *
  * DIFFICULTY (Easy/Medium/Hard):
  *   Aim error:     Easy 0.08rad, Medium 0.035rad, Hard 0.012rad
@@ -95,6 +96,15 @@ class AIOpponent {
         coverHoldTime: 2.5,
         flankAfterStalemateSec: 8,
         approachWeight: 0.75
+      },
+      melee: {
+        engageDistMin: 1, engageDistMax: 3,
+        coverHealthThreshold: 15,
+        sprintChance: 1.0, jumpChance: 0.2,
+        strafeIntensity: 1.0,
+        coverHoldTime: 0.5,
+        flankAfterStalemateSec: 4,
+        approachWeight: 1.2
       }
     };
     var styleNames = ['aggressive', 'defensive', 'balanced'];
@@ -237,6 +247,13 @@ class AIOpponent {
     this._strafeSign *= -1;
   }
 
+  applyHeroPlaystyle() {
+    if (this.weapon && this.weapon.meleeOnly) {
+      this._currentStyleName = 'melee';
+      this._style = this._playstyles.melee;
+    }
+  }
+
   destroy() {
     this.player.destroy();
   }
@@ -339,6 +356,12 @@ class AIOpponent {
   _buildWaypointGraph() {
     var wps = this.waypoints;
     var solids = this.arena ? this.arena.solids : [];
+    // Exclude ramp/wedge meshes from pathfinding LOS — AI walks ON them,
+    // so the ramp surface should not block graph edges between waypoints.
+    var pathSolids = solids.filter(function(m) {
+      var obj = m.userData && m.userData.mapObj;
+      return !obj || (obj.type !== 'ramp' && obj.type !== 'wedge');
+    });
     var n = wps.length;
     var graph = new Array(n);
     for (var i = 0; i < n; i++) graph[i] = [];
@@ -351,7 +374,7 @@ class AIOpponent {
         var losH = 1.0;
         var a = new THREE.Vector3(wps[i].x, wps[i].y + losH, wps[i].z);
         var b = new THREE.Vector3(wps[j].x, wps[j].y + losH, wps[j].z);
-        if (!hasBlockingBetween(a, b, solids)) {
+        if (!hasBlockingBetween(a, b, pathSolids)) {
           graph[i].push({ neighbor: j, cost: dist });
           graph[j].push({ neighbor: i, cost: dist });
         }
@@ -521,6 +544,11 @@ class AIOpponent {
 
   _tryShoot(ctx, hasLOS) {
     if (!hasLOS || this.weapon.reloading) return;
+    // Melee-only weapons (e.g. Slicer) should never fire projectiles
+    if (this.weapon.meleeOnly) {
+      this._tryMelee(ctx);
+      return;
+    }
     var now = performance.now();
     var canShoot = (now - this.weapon.lastShotTime) >= this.weapon.cooldownMs;
 
@@ -552,6 +580,7 @@ class AIOpponent {
         targets: aiTargets,
         projectileTargetEntities: aiTargetEntities,
         tracerColor: 0xff6666,
+        worldPos: this.position,
         onHit: function (target, point, dist, pelletIdx, damageMultiplier) {
           if (ctx.onPlayerHit) ctx.onPlayerHit(self.weapon.damage * (damageMultiplier || 1.0), ctx.playerEntity);
         }
@@ -792,8 +821,8 @@ class AIOpponent {
           this._computePathToPosition(playerPos);
         }
         moveDir = this._followPath(dt);
-        // Sprint when far from player
-        wantSprint = dist > 15 && Math.random() < this._style.sprintChance;
+        // Sprint when far from player (melee-only always sprints to close distance)
+        wantSprint = this.weapon.meleeOnly || (dist > 15 && Math.random() < this._style.sprintChance);
 
         // Transition: gained LOS → engage
         if (hasLOS) {
@@ -809,9 +838,9 @@ class AIOpponent {
           // Approach
           moveDir.add(dir.clone().multiplyScalar(this._style.approachWeight));
           this._lastBehavior = 'APPROACHING';
-          wantSprint = dist > idealDist + 5;
-        } else if (dist < idealDist - 1.5) {
-          // Retreat
+          wantSprint = this.weapon.meleeOnly ? (dist > this.weapon.meleeRange) : (dist > idealDist + 5);
+        } else if (dist < idealDist - 1.5 && !this.weapon.meleeOnly) {
+          // Retreat (melee-only AI never retreats — it needs to stay close)
           moveDir.add(dir.clone().multiplyScalar(-0.85));
           this._lastBehavior = 'RETREATING';
         } else {
@@ -836,8 +865,8 @@ class AIOpponent {
         if (!hasLOS) {
           this._enterState('PATROL');
         }
-        // Low health or reloading → seek cover (if cover spots exist)
-        else if ((this.health < coverThreshold || (this.weapon.reloading && this.health < 70)) && this._coverSpots.length > 0) {
+        // Low health or reloading → seek cover (if cover spots exist; melee-only never seeks cover)
+        else if (!this.weapon.meleeOnly && (this.health < coverThreshold || (this.weapon.reloading && this.health < 70)) && this._coverSpots.length > 0) {
           this._enterState('SEEK_COVER');
         }
         // Stalemate → flank (if balanced or aggressive and engaged too long)

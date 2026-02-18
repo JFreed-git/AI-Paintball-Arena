@@ -160,11 +160,19 @@
         break;
       }
       case 'halfCylinder': {
+        // Legacy: treat as cylinder
         var r = obj.radius || 1;
         var h = obj.height || 2;
-        var geo = new THREE.CylinderGeometry(r, r, h, 16, 1, false, 0, Math.PI);
+        var geo = new THREE.CylinderGeometry(r, r, h, 16);
         mesh = new THREE.Mesh(geo, mat);
         mesh.position.set(x, h / 2, z);
+        break;
+      }
+      case 'sphere': {
+        var r = obj.radius || 1.5;
+        var geo = new THREE.SphereGeometry(r, 16, 12);
+        mesh = new THREE.Mesh(geo, mat);
+        mesh.position.set(x, r, z);
         break;
       }
       case 'ramp':
