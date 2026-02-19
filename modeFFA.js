@@ -1606,6 +1606,7 @@
     }
 
     var mapName = settings && settings.mapName;
+    var preloadedMapData = settings && settings.mapData;
 
     if (existingSocket) {
       // Reuse lobby socket — room already created on server
@@ -1615,8 +1616,11 @@
       function doStartLobby(mapData) {
         startFFASession(settings || {}, mapData);
       }
-      if (mapName && mapName !== '__default__' && typeof fetchMapData === 'function') {
-        fetchMapData(mapName).then(doStartLobby).catch(function () { doStartLobby(null); });
+      // Prefer pre-loaded mapData from game setup (avoids re-fetch + silent fallback)
+      if (preloadedMapData) {
+        doStartLobby(preloadedMapData);
+      } else if (mapName && mapName !== '__default__' && typeof fetchMapData === 'function') {
+        fetchMapData(mapName).then(doStartLobby).catch(function (err) { console.error('Map fetch failed, using default:', err); doStartLobby(null); });
       } else {
         doStartLobby(null);
       }
@@ -1631,8 +1635,11 @@
       });
     }
 
-    if (mapName && mapName !== '__default__' && typeof fetchMapData === 'function') {
-      fetchMapData(mapName).then(doHost).catch(function () { doHost(null); });
+    // Prefer pre-loaded mapData from game setup
+    if (preloadedMapData) {
+      doHost(preloadedMapData);
+    } else if (mapName && mapName !== '__default__' && typeof fetchMapData === 'function') {
+      fetchMapData(mapName).then(doHost).catch(function (err) { console.error('Map fetch failed, using default:', err); doHost(null); });
     } else {
       doHost(null);
     }
@@ -2159,7 +2166,7 @@
     }
 
     if (mapName && mapName !== '__default__' && typeof fetchMapData === 'function') {
-      fetchMapData(mapName).then(setupClient).catch(function () { setupClient(null); });
+      fetchMapData(mapName).then(setupClient).catch(function (err) { console.error('Client map fetch failed, using default:', err); setupClient(null); });
     } else {
       setupClient(null);
     }

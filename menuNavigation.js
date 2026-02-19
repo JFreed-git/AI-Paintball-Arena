@@ -834,6 +834,7 @@ function launchFFAFromLobby() {
     var settings = {
       killLimit: cfg.killLimit || 10,
       mapName: cfg.mapName || '__default__',
+      mapData: cfg.mapData || null,
       mode: cfg.mode || 'ffa',
       rounds: cfg.rounds || 3,
       noRespawns: !!cfg.noRespawns,
