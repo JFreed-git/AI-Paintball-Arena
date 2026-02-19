@@ -263,17 +263,27 @@ class AIOpponent {
   _buildCoverSpots() {
     if (!this.arena || !this.arena.colliders) return;
     var colliders = this.arena.colliders;
-    var arenaHalfW = 30;
-    var arenaHalfL = 45;
+    var arenaGroup = this.arena.group;
+    var arenaHalfW = (arenaGroup && arenaGroup.userData && arenaGroup.userData.arenaHalfW) || 30;
+    var arenaHalfL = (arenaGroup && arenaGroup.userData && arenaGroup.userData.arenaHalfL) || 45;
     var spots = [];
     var offset = 1.2;
 
     for (var i = 0; i < colliders.length; i++) {
       var box = colliders[i];
       var size = new THREE.Vector3();
-      box.getSize(size);
       var center = new THREE.Vector3();
-      box.getCenter(center);
+
+      // Cylinder colliders are plain objects — compute size/center manually
+      if (box.isCylinder) {
+        var cylH = box.max.y - box.min.y;
+        var cylD = box.radius * 2;
+        size.set(cylD, cylH, cylD);
+        center.set(box.centerX, (box.min.y + box.max.y) / 2, box.centerZ);
+      } else {
+        box.getSize(size);
+        box.getCenter(center);
+      }
 
       // Skip perimeter walls (very large) and very short blocks
       if (size.y < 1.0) continue;
@@ -295,7 +305,13 @@ class AIOpponent {
         var inside = false;
         for (var j = 0; j < colliders.length; j++) {
           if (j === i) continue;
-          if (colliders[j].containsPoint(new THREE.Vector3(spot.x, center.y, spot.z))) {
+          var cj = colliders[j];
+          if (cj.isCylinder) {
+            var cdx = spot.x - cj.centerX, cdz = spot.z - cj.centerZ;
+            if (cdx * cdx + cdz * cdz <= cj.radius * cj.radius && center.y >= cj.min.y && center.y <= cj.max.y) {
+              inside = true; break;
+            }
+          } else if (cj.containsPoint(new THREE.Vector3(spot.x, center.y, spot.z))) {
             inside = true;
             break;
           }

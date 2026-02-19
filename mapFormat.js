@@ -403,6 +403,9 @@
 
     var aw = mapData.arena.width || 60;
     var al = mapData.arena.length || 90;
+    // Store arena dimensions for AI cover system
+    group.userData.arenaHalfW = aw / 2;
+    group.userData.arenaHalfL = al / 2;
     var wallHeight = mapData.arena.wallHeight || 3.5;
     var halfW = aw / 2;
     var halfL = al / 2;
