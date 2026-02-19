@@ -2809,7 +2809,16 @@
       registerBtn.addEventListener('click', function () {
         var def = getWmbModelDef();
         if (!def.modelType) { alert('Model name is required'); return; }
-        if (typeof window.registerCustomWeaponModel === 'function') {
+        if (def.source === 'gltf' && _wmbGltfScene) {
+          // Register GLTF model from cached scene
+          if (typeof window._registerGltfModel === 'function') {
+            window._registerGltfModel(def, _wmbGltfScene);
+            alert('GLTF model "' + def.modelType + '" registered. Available in hero editor Model Type dropdown.');
+            if (typeof populateModelTypeDropdown === 'function') {
+              populateModelTypeDropdown('heModelType');
+            }
+          }
+        } else if (typeof window.registerCustomWeaponModel === 'function') {
           window.registerCustomWeaponModel(def);
           alert('Model "' + def.modelType + '" registered. Available in hero editor Model Type dropdown.');
           if (typeof populateModelTypeDropdown === 'function') {
@@ -2863,12 +2872,14 @@
       });
     }
 
-    // Load dropdown
+    // Load dropdown (handles both parts-based and GLTF models)
     var loadSelect = document.getElementById('wmbLoadSelect');
     if (loadSelect) {
       loadSelect.addEventListener('change', function () {
         var name = loadSelect.value;
         if (!name) {
+          // "New" selected — reset everything
+          if (_wmbGltfMode) exitGltfMode();
           _wmbParts = [];
           _wmbSelectedIndex = -1;
           document.getElementById('wmbName').value = '';
@@ -2881,24 +2892,70 @@
           .then(function (r) { return r.json(); })
           .then(function (def) {
             document.getElementById('wmbName').value = def.modelType || name;
-            _wmbParts = (def.parts || []).map(function (p) {
-              return {
-                type: p.type || 'box',
-                sx: (p.size && p.size[0]) || 0.08,
-                sy: (p.size && p.size[1]) || 0.10,
-                sz: (p.size && p.size[2]) || 0.40,
-                px: (p.position && p.position[0]) || 0,
-                py: (p.position && p.position[1]) || 0,
-                pz: (p.position && p.position[2]) || 0,
-                rx: (p.rotation && p.rotation[0]) || 0,
-                ry: (p.rotation && p.rotation[1]) || 0,
-                rz: (p.rotation && p.rotation[2]) || 0,
-                color: p.color || '#444444'
-              };
-            });
-            _wmbSelectedIndex = -1;
-            renderWmbPartsList();
-            updateWmbPreview();
+
+            if (def.source === 'gltf' && def.gltfFile) {
+              // GLTF model — load the GLB and enter GLTF mode
+              fetch('/api/weapon-model-files/' + encodeURIComponent(def.gltfFile))
+                .then(function (r) {
+                  if (!r.ok) throw new Error('GLB file not found');
+                  return r.arrayBuffer();
+                })
+                .then(function (arrayBuffer) {
+                  if (!THREE.GLTFLoader) throw new Error('GLTFLoader not available');
+                  var loader = new THREE.GLTFLoader();
+                  loader.parse(arrayBuffer, '', function (gltf) {
+                    enterGltfMode(def.gltfFile, gltf.scene);
+
+                    // Restore saved values
+                    _wmbGltfScale = (def.scale && def.scale[0]) || 1;
+                    _wmbGltfRotation = def.rotation || [0, 0, 0];
+                    _wmbGltfOffset = def.offset || [0, 0, 0];
+
+                    var scaleInp = document.getElementById('wmbGltfScale');
+                    var rotXInp = document.getElementById('wmbGltfRotX');
+                    var rotYInp = document.getElementById('wmbGltfRotY');
+                    var rotZInp = document.getElementById('wmbGltfRotZ');
+                    var offXInp = document.getElementById('wmbGltfOffX');
+                    var offYInp = document.getElementById('wmbGltfOffY');
+                    var offZInp = document.getElementById('wmbGltfOffZ');
+                    if (scaleInp) scaleInp.value = String(_wmbGltfScale);
+                    if (rotXInp) rotXInp.value = String(_wmbGltfRotation[0]);
+                    if (rotYInp) rotYInp.value = String(_wmbGltfRotation[1]);
+                    if (rotZInp) rotZInp.value = String(_wmbGltfRotation[2]);
+                    if (offXInp) offXInp.value = String(_wmbGltfOffset[0]);
+                    if (offYInp) offYInp.value = String(_wmbGltfOffset[1]);
+                    if (offZInp) offZInp.value = String(_wmbGltfOffset[2]);
+
+                    updateWmbGltfPreview();
+                  }, function (err) {
+                    alert('Failed to parse GLTF: ' + (err.message || err));
+                  });
+                })
+                .catch(function (err) {
+                  alert('Failed to load GLB: ' + err.message);
+                });
+            } else {
+              // Parts-based model — exit GLTF mode if active
+              if (_wmbGltfMode) exitGltfMode();
+              _wmbParts = (def.parts || []).map(function (p) {
+                return {
+                  type: p.type || 'box',
+                  sx: (p.size && p.size[0]) || 0.08,
+                  sy: (p.size && p.size[1]) || 0.10,
+                  sz: (p.size && p.size[2]) || 0.40,
+                  px: (p.position && p.position[0]) || 0,
+                  py: (p.position && p.position[1]) || 0,
+                  pz: (p.position && p.position[2]) || 0,
+                  rx: (p.rotation && p.rotation[0]) || 0,
+                  ry: (p.rotation && p.rotation[1]) || 0,
+                  rz: (p.rotation && p.rotation[2]) || 0,
+                  color: p.color || '#444444'
+                };
+              });
+              _wmbSelectedIndex = -1;
+              renderWmbPartsList();
+              updateWmbPreview();
+            }
           })
           .catch(function () { alert('Failed to load weapon model'); });
       });
@@ -2938,6 +2995,212 @@
   }
 
   window._refreshWmbLoadList = refreshWmbLoadList;
+
+  // ========================
+  // WMB GLTF IMPORT
+  // ========================
+
+  var _wmbGltfMode = false;
+  var _wmbGltfFilename = null;
+  var _wmbGltfScene = null;
+  var _wmbGltfScale = 1;
+  var _wmbGltfRotation = [0, 0, 0];
+  var _wmbGltfOffset = [0, 0, 0];
+
+  function enterGltfMode(filename, gltfScene) {
+    _wmbGltfMode = true;
+    _wmbGltfFilename = filename;
+    _wmbGltfScene = gltfScene;
+    _wmbGltfScale = 1;
+    _wmbGltfRotation = [0, 0, 0];
+    _wmbGltfOffset = [0, 0, 0];
+
+    // Hide parts UI, show GLTF info
+    var partsList = document.getElementById('wmbPartsList');
+    var addBoxBtn = document.getElementById('wmbAddBox');
+    var addCylBtn = document.getElementById('wmbAddCyl');
+    var gltfInfo = document.getElementById('wmbGltfInfo');
+    var gltfFilenameEl = document.getElementById('wmbGltfFilename');
+
+    if (partsList) partsList.classList.add('hidden');
+    if (addBoxBtn) addBoxBtn.classList.add('hidden');
+    if (addCylBtn) addCylBtn.classList.add('hidden');
+    if (gltfInfo) gltfInfo.classList.remove('hidden');
+    if (gltfFilenameEl) gltfFilenameEl.textContent = filename;
+
+    // Auto-fill model name from filename (without extension)
+    var nameInput = document.getElementById('wmbName');
+    if (nameInput && !nameInput.value) {
+      nameInput.value = filename.replace(/\.(glb|gltf)$/i, '');
+    }
+
+    // Reset inputs
+    var scaleInp = document.getElementById('wmbGltfScale');
+    var rotXInp = document.getElementById('wmbGltfRotX');
+    var rotYInp = document.getElementById('wmbGltfRotY');
+    var rotZInp = document.getElementById('wmbGltfRotZ');
+    var offXInp = document.getElementById('wmbGltfOffX');
+    var offYInp = document.getElementById('wmbGltfOffY');
+    var offZInp = document.getElementById('wmbGltfOffZ');
+    if (scaleInp) scaleInp.value = '1';
+    if (rotXInp) rotXInp.value = '0';
+    if (rotYInp) rotYInp.value = '0';
+    if (rotZInp) rotZInp.value = '0';
+    if (offXInp) offXInp.value = '0';
+    if (offYInp) offYInp.value = '0';
+    if (offZInp) offZInp.value = '0';
+
+    // Clear interaction handles
+    if (_wmbInteractionCtrl) _wmbInteractionCtrl.clearHandles();
+
+    // Show GLTF right panel info
+    var rightPanel = document.getElementById('wmbRightPanelContent');
+    if (rightPanel) {
+      rightPanel.innerHTML = '<p style="color:#00ff88;font-size:12px;padding:8px;">GLTF model loaded. Adjust scale, rotation, and offset in the sidebar.</p>';
+    }
+
+    updateWmbGltfPreview();
+  }
+
+  function exitGltfMode() {
+    _wmbGltfMode = false;
+    _wmbGltfFilename = null;
+    _wmbGltfScene = null;
+
+    // Show parts UI, hide GLTF info
+    var partsList = document.getElementById('wmbPartsList');
+    var addBoxBtn = document.getElementById('wmbAddBox');
+    var addCylBtn = document.getElementById('wmbAddCyl');
+    var gltfInfo = document.getElementById('wmbGltfInfo');
+
+    if (partsList) partsList.classList.remove('hidden');
+    if (addBoxBtn) addBoxBtn.classList.remove('hidden');
+    if (addCylBtn) addCylBtn.classList.remove('hidden');
+    if (gltfInfo) gltfInfo.classList.add('hidden');
+
+    // Restore parts preview
+    updateWmbPreview();
+    syncWmbRightPanel();
+  }
+
+  function updateWmbGltfPreview() {
+    if (!_wmbPreviewGroup || !_wmbGltfScene) return;
+
+    // Clear old preview
+    while (_wmbPreviewGroup.children.length > 0) {
+      var child = _wmbPreviewGroup.children[0];
+      _wmbPreviewGroup.remove(child);
+      // Don't dispose GLTF geometry/materials (they belong to the cached scene)
+    }
+    _wmbPreviewMeshes = [];
+
+    var clone = _wmbGltfScene.clone(true);
+    var s = _wmbGltfScale;
+    clone.scale.set(s, s, s);
+    clone.rotation.set(_wmbGltfRotation[0], _wmbGltfRotation[1], _wmbGltfRotation[2]);
+    clone.position.set(_wmbGltfOffset[0], _wmbGltfOffset[1], _wmbGltfOffset[2]);
+
+    _wmbPreviewGroup.add(clone);
+  }
+
+  // Override getWmbModelDef to return GLTF format when in GLTF mode
+  var _origGetWmbModelDef = getWmbModelDef;
+  getWmbModelDef = function () {
+    if (_wmbGltfMode && _wmbGltfFilename) {
+      return {
+        modelType: document.getElementById('wmbName').value || 'custom_model',
+        source: 'gltf',
+        gltfFile: _wmbGltfFilename,
+        scale: [_wmbGltfScale, _wmbGltfScale, _wmbGltfScale],
+        rotation: [_wmbGltfRotation[0], _wmbGltfRotation[1], _wmbGltfRotation[2]],
+        offset: [_wmbGltfOffset[0], _wmbGltfOffset[1], _wmbGltfOffset[2]]
+      };
+    }
+    return _origGetWmbModelDef();
+  };
+
+  // Wire GLTF import button
+  (function wireGltfImport() {
+    var importBtn = document.getElementById('wmbImportGlb');
+    if (importBtn) {
+      importBtn.addEventListener('click', function () {
+        var input = document.createElement('input');
+        input.type = 'file';
+        input.accept = '.glb,.gltf';
+        input.addEventListener('change', function () {
+          if (!input.files || !input.files[0]) return;
+          var file = input.files[0];
+          var filename = file.name.replace(/[^a-zA-Z0-9_\-.]/g, '_');
+
+          var reader = new FileReader();
+          reader.onload = function () {
+            var arrayBuffer = reader.result;
+
+            // Upload to server as base64
+            var base64 = btoa(
+              new Uint8Array(arrayBuffer).reduce(function (data, byte) {
+                return data + String.fromCharCode(byte);
+              }, '')
+            );
+
+            fetch('/api/weapon-model-files/' + encodeURIComponent(filename), {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ data: base64 })
+            }).then(function (r) { return r.json(); }).then(function (result) {
+              if (result.error) {
+                alert('Upload failed: ' + result.error);
+                return;
+              }
+
+              // Parse with GLTFLoader
+              if (!THREE.GLTFLoader) {
+                alert('GLTFLoader not available');
+                return;
+              }
+              var loader = new THREE.GLTFLoader();
+              loader.parse(arrayBuffer, '', function (gltf) {
+                enterGltfMode(filename, gltf.scene);
+              }, function (err) {
+                alert('Failed to parse GLTF: ' + (err.message || err));
+              });
+            }).catch(function (err) {
+              alert('Upload failed: ' + err.message);
+            });
+          };
+          reader.readAsArrayBuffer(file);
+        });
+        input.click();
+      });
+    }
+
+    // Remove GLTF button
+    var removeBtn = document.getElementById('wmbGltfRemove');
+    if (removeBtn) {
+      removeBtn.addEventListener('click', function () {
+        exitGltfMode();
+      });
+    }
+
+    // GLTF scale/rotation/offset inputs
+    function wireGltfInput(id, setter) {
+      var inp = document.getElementById(id);
+      if (inp) {
+        inp.addEventListener('input', function () {
+          setter(parseFloat(inp.value) || 0);
+          updateWmbGltfPreview();
+        });
+      }
+    }
+
+    wireGltfInput('wmbGltfScale', function (v) { _wmbGltfScale = v; });
+    wireGltfInput('wmbGltfRotX', function (v) { _wmbGltfRotation[0] = v; });
+    wireGltfInput('wmbGltfRotY', function (v) { _wmbGltfRotation[1] = v; });
+    wireGltfInput('wmbGltfRotZ', function (v) { _wmbGltfRotation[2] = v; });
+    wireGltfInput('wmbGltfOffX', function (v) { _wmbGltfOffset[0] = v; });
+    wireGltfInput('wmbGltfOffY', function (v) { _wmbGltfOffset[1] = v; });
+    wireGltfInput('wmbGltfOffZ', function (v) { _wmbGltfOffset[2] = v; });
+  })();
 
   // Expose view mode reapplication for devApp.js panel switching
   window._applyHeroViewMode = function () { setViewMode(_viewMode); };
@@ -3173,14 +3436,20 @@
       window._applyHeroViewMode();
     }
 
-    // Select the hero in the dropdown and trigger change
+    // Select the hero in the dropdown
     if (typeof populateHeroDropdown === 'function') {
       populateHeroDropdown('heHeroSelect');
     }
     var heSelect = document.getElementById('heHeroSelect');
     if (heSelect) {
       heSelect.value = heroId;
-      heSelect.dispatchEvent(new Event('change'));
+    }
+
+    // Directly load hero data (don't rely on dropdown change event)
+    var hero = (typeof getHeroById === 'function') ? getHeroById(heroId) : null;
+    if (hero) {
+      setFormFromHeroConfig(hero);
+      updateHeroPreview();
     }
   }
 
