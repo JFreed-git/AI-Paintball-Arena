@@ -339,6 +339,20 @@ app.post('/api/heroes/:id', function (req, res) {
   }
 });
 
+// Delete a hero
+app.delete('/api/heroes/:id', function (req, res) {
+  var name = sanitizeMapName(req.params.id);
+  if (!name) return res.status(400).json({ error: 'Invalid hero id' });
+  var filePath = path.join(HEROES_DIR, name + '.json');
+  if (!fs.existsSync(filePath)) return res.status(404).json({ error: 'Hero not found' });
+  try {
+    fs.unlinkSync(filePath);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to delete hero' });
+  }
+});
+
 // roomId -> { hostId, players: Set, settings, playerNames: Map, readyState: Map }
 const rooms = new Map();
 

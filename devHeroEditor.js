@@ -139,6 +139,7 @@
 
   // Body parts state
   var _bodyParts = [];
+  var _originalHeroId = null;
   var _bodyPartGroup = null;
   var _bodyPartPreviewMeshes = [];
   var _bodyInteractionCtrl = null;
@@ -1483,6 +1484,7 @@
   function setFormFromHeroConfig(hero) {
     if (!hero) return;
 
+    _originalHeroId = hero.id || null;
     document.getElementById('heId').value = hero.id || '';
     document.getElementById('heName').value = hero.name || '';
     document.getElementById('heDesc').value = hero.description || '';
@@ -1997,30 +1999,6 @@
       fpViewBtn.addEventListener('click', function () { toggleFPView(); });
     }
 
-    // Camera preset buttons (orbit around different target points)
-    // GROUND_Y = -1, EYE_HEIGHT = 2.0, so feet=-1, head≈1.0, eye≈1.0
-    var camPresets = {
-      heCamDefault: { targetY: 1.5, pitch: 0.3, dist: 6 },
-      heCamHead:    { targetY: 1.0, pitch: 0.1, dist: 2.5 },
-      heCamFull:    { targetY: 0.0, pitch: 0.15, dist: 8 }
-    };
-    var camBtns = document.querySelectorAll('.he-cam-btn');
-    camBtns.forEach(function (btn) {
-      btn.addEventListener('click', function () {
-        if (_fpViewActive) toggleFPView(); // exit FP view first
-        var preset = camPresets[btn.id];
-        if (preset && _heroOrbitCtrl) {
-          _heroOrbitCtrl.setState({
-            target: { x: 0, y: preset.targetY, z: 0 },
-            pitch: preset.pitch,
-            dist: preset.dist
-          });
-        }
-        camBtns.forEach(function (b) { b.classList.remove('active'); });
-        btn.classList.add('active');
-      });
-    });
-
     // View mode buttons
     var modeButtons = document.querySelectorAll('.he-mode-btn');
     modeButtons.forEach(function (btn) {
@@ -2092,25 +2070,42 @@
         var id = config.id;
         if (!id) { alert('Hero ID is required'); return; }
 
+        var oldId = _originalHeroId;
+        var renamed = oldId && oldId !== id;
+
         fetch('/api/heroes/' + encodeURIComponent(id), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(config)
         }).then(function (r) { return r.json(); }).then(function (data) {
           if (data.ok) {
-            var heroes = window.HEROES || [];
-            var existing = false;
-            for (var i = 0; i < heroes.length; i++) {
-              if (heroes[i].id === id) {
-                heroes[i] = config;
-                existing = true;
-                break;
+            // If ID was renamed, delete old hero file from server
+            var deleteOld = renamed
+              ? fetch('/api/heroes/' + encodeURIComponent(oldId), { method: 'DELETE' })
+                  .catch(function () { /* best effort */ })
+              : Promise.resolve();
+
+            return deleteOld.then(function () {
+              var heroes = window.HEROES || [];
+              // Remove old entry if renamed
+              if (renamed) {
+                heroes = heroes.filter(function (h) { return h.id !== oldId; });
               }
-            }
-            if (!existing) heroes.push(config);
-            window.HEROES = heroes;
-            window.dispatchEvent(new Event('heroesUpdated'));
-            alert('Hero saved: ' + id);
+              // Update or add new entry
+              var existing = false;
+              for (var i = 0; i < heroes.length; i++) {
+                if (heroes[i].id === id) {
+                  heroes[i] = config;
+                  existing = true;
+                  break;
+                }
+              }
+              if (!existing) heroes.push(config);
+              window.HEROES = heroes;
+              _originalHeroId = id;
+              window.dispatchEvent(new Event('heroesUpdated'));
+              alert('Hero saved: ' + id);
+            });
           }
         }).catch(function (err) {
           alert('Failed to save hero: ' + err.message);
@@ -2122,6 +2117,7 @@
     var newBtn = document.getElementById('heNew');
     if (newBtn) {
       newBtn.addEventListener('click', function () {
+        _originalHeroId = null;
         document.getElementById('heId').value = 'custom_' + Date.now();
         document.getElementById('heName').value = 'New Hero';
         document.getElementById('heDesc').value = '';
