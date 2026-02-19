@@ -58,8 +58,9 @@
   window.sharedStartReload = function (weapon, now) {
     if (weapon.reloading || weapon.ammo >= weapon.magSize) return false;
     weapon.reloading = true;
-    weapon.reloadEnd = now + (weapon.reloadTimeSec || 2.5) * 1000;
-    if (typeof playGameSound === 'function') playGameSound('reload_start');
+    var reloadSec = weapon.reloadTimeSec || 2.5;
+    weapon.reloadEnd = now + reloadSec * 1000;
+    if (typeof playGameSound === 'function') playGameSound('reload_start', { _duration: reloadSec });
     return true;
   };
 

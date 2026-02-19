@@ -311,9 +311,24 @@ function getPanelElementId(panelId) {
     var sidebar = document.getElementById('devSidebar');
     var viewport = document.getElementById('devViewport');
 
+    // Return hero gallery to its panel
+    var heroGallery = document.getElementById('heroGalleryView');
+    var heroPanel = document.getElementById('panelHeroEditor');
+    if (heroGallery && heroPanel && heroGallery.classList.contains('viewport-mode')) {
+      heroGallery.classList.remove('viewport-mode');
+      heroPanel.insertBefore(heroGallery, heroPanel.firstChild);
+    }
+
+    // Return map gallery to its panel
+    var mapGallery = document.getElementById('mapGalleryView');
+    var mapPanel = document.getElementById('panelMapEditor');
+    if (mapGallery && mapPanel && mapGallery.classList.contains('viewport-mode')) {
+      mapGallery.classList.remove('viewport-mode');
+      mapPanel.insertBefore(mapGallery, mapPanel.firstChild);
+    }
+
     // Return hero preview container to its panel
     var heroContainer = document.getElementById('heroPreviewContainer');
-    var heroPanel = document.getElementById('panelHeroEditor');
     if (heroContainer && heroPanel && heroContainer.classList.contains('viewport-mode')) {
       heroContainer.classList.remove('viewport-mode');
       heroPanel.appendChild(heroContainer);
@@ -427,10 +442,8 @@ function getPanelElementId(panelId) {
       }
     }
 
-    // Collapse previous expanded layout
-    if (_prevExpandedPanel) {
-      collapseEditorLayout();
-    }
+    // Collapse previous expanded layout (always clean up galleries/viewports)
+    collapseEditorLayout();
 
     _activePanel = panelId;
 
@@ -446,8 +459,8 @@ function getPanelElementId(panelId) {
       p.classList.toggle('active', p.id === targetId);
     });
 
-    // Expand layout for editor panels
-    if (panelId === 'heroEditor' || panelId === 'weaponModelBuilder' || panelId === 'menuBuilder' || panelId === 'audioManager') {
+    // Expand layout for editor panels (but NOT heroEditor in gallery mode)
+    if (panelId === 'weaponModelBuilder' || panelId === 'menuBuilder' || panelId === 'audioManager') {
       expandEditorLayout(panelId);
     }
 
@@ -469,19 +482,13 @@ function getPanelElementId(panelId) {
     if (mbPropsContent) mbPropsContent.classList.add('hidden');
 
     if (panelId === 'heroEditor') {
-      if (rightPanel) {
-        rightPanel.classList.remove('hidden');
-        if (rightExpandTab) rightExpandTab.classList.toggle('hidden', !rightPanel.classList.contains('collapsed'));
-      }
-      if (heToolbar) heToolbar.classList.remove('hidden');
+      // Show gallery first (don't expand sidebar or show right panel/toolbar)
+      if (rightPanel) rightPanel.classList.add('hidden');
+      if (heToolbar) heToolbar.classList.add('hidden');
       if (mbToolbar) mbToolbar.classList.add('hidden');
-      // Apply current view mode (sets correct right panel content + toolbar buttons)
-      if (typeof window._applyHeroViewMode === 'function') {
-        window._applyHeroViewMode();
-      } else {
-        // Fallback if not yet loaded
-        if (hePropsContent) hePropsContent.classList.remove('hidden');
-        if (rightTitle) rightTitle.textContent = 'Hitbox Segments';
+      if (rightExpandTab) rightExpandTab.classList.add('hidden');
+      if (typeof window._showHeroGallery === 'function') {
+        window._showHeroGallery();
       }
     } else if (panelId === 'weaponModelBuilder') {
       if (rightPanel) {
@@ -513,23 +520,14 @@ function getPanelElementId(panelId) {
       if (typeof window._initAudioManager === 'function') window._initAudioManager();
     }
 
-    if (panelId === 'splitScreen' || panelId === 'heroEditor') {
+    if (panelId === 'splitScreen') {
       populateAllDropdowns();
-      // Auto-load the first hero when opening the hero editor
-      if (panelId === 'heroEditor') {
-        var heSelect = document.getElementById('heHeroSelect');
-        if (heSelect && heSelect.options.length > 0) {
-          heSelect.selectedIndex = 0;
-          heSelect.dispatchEvent(new Event('change'));
-        }
-      }
     }
 
-    // Auto-open map editor when switching to that panel
+    // Show map gallery when switching to map editor panel
     if (panelId === 'mapEditor') {
-      var meOpenBtn = document.getElementById('meOpen');
-      if (meOpenBtn) {
-        setTimeout(function () { meOpenBtn.click(); }, 50);
+      if (typeof window._showMapGallery === 'function') {
+        window._showMapGallery();
       }
     }
 
@@ -691,6 +689,33 @@ function registerCustomWeaponModel(modelDef) {
 window.registerCustomWeaponModel = registerCustomWeaponModel;
 
 // ------- Map Editor Integration -------
+
+// Shared: hook the editor Exit button to restore sidebar + show gallery
+function ensureMapEditorExitHook() {
+  var origEditorExit = document.getElementById('editorExit');
+  if (origEditorExit && !origEditorExit._devHooked) {
+    origEditorExit._devHooked = true;
+    origEditorExit.addEventListener('click', function () {
+      var sidebar = document.getElementById('devSidebar');
+      if (sidebar) {
+        sidebar.classList.remove('hidden');
+        var expandTab = document.getElementById('devSidebarExpand');
+        if (expandTab) expandTab.classList.toggle('hidden', !sidebar.classList.contains('collapsed'));
+      }
+      _mapEditorWasOpen = false;
+      // Show map gallery if we're still on the map editor panel
+      if (_activePanel === 'mapEditor' && typeof window._showMapGallery === 'function') {
+        setTimeout(function () {
+          window._showMapGallery();
+          resizeRenderer();
+        }, 50);
+      } else {
+        setTimeout(resizeRenderer, 50);
+      }
+    });
+  }
+}
+
 (function () {
   var meOpenBtn = document.getElementById('meOpen');
   if (meOpenBtn) {
@@ -701,25 +726,269 @@ window.registerCustomWeaponModel = registerCustomWeaponModel;
         resizeRenderer();
         startMapEditor();
         _mapEditorWasOpen = true;
-
-        // Override editor exit to restore sidebar
-        var origEditorExit = document.getElementById('editorExit');
-        if (origEditorExit && !origEditorExit._devHooked) {
-          origEditorExit._devHooked = true;
-          origEditorExit.addEventListener('click', function () {
-            var sidebar = document.getElementById('devSidebar');
-            if (sidebar) {
-              sidebar.classList.remove('hidden');
-              var expandTab = document.getElementById('devSidebarExpand');
-              if (expandTab) expandTab.classList.toggle('hidden', !sidebar.classList.contains('collapsed'));
-            }
-            _mapEditorWasOpen = false;
-            setTimeout(resizeRenderer, 50);
-          });
-        }
+        ensureMapEditorExitHook();
       }
     });
   }
+})();
+
+// ------- Map Gallery -------
+(function () {
+  function showMapGallery() {
+    var galleryView = document.getElementById('mapGalleryView');
+    if (!galleryView) return;
+    galleryView.classList.remove('hidden');
+
+    // Move gallery to viewport for full-size display
+    var viewport = document.getElementById('devViewport');
+    if (viewport) {
+      viewport.appendChild(galleryView);
+      galleryView.classList.add('viewport-mode');
+    }
+
+    populateMapGallery();
+  }
+
+  function populateMapGallery() {
+    var grid = document.getElementById('mapGalleryGrid');
+    if (!grid) return;
+    grid.innerHTML = '<div class="gallery-empty">Loading maps...</div>';
+
+    if (typeof fetchMapList !== 'function') {
+      grid.innerHTML = '<div class="gallery-empty">Map API not available.</div>';
+      return;
+    }
+
+    fetchMapList().then(function (names) {
+      if (!names || names.length === 0) {
+        grid.innerHTML = '<div class="gallery-empty">No maps yet. Click "Create New Map" to get started.</div>';
+        return;
+      }
+
+      // Fetch metadata for each map
+      var promises = names.map(function (name) {
+        return fetchMapData(name).then(function (data) {
+          return { name: name, data: data };
+        }).catch(function () {
+          return { name: name, data: null };
+        });
+      });
+
+      Promise.all(promises).then(function (maps) {
+        grid.innerHTML = '';
+        maps.forEach(function (entry) {
+          var card = createMapCard(entry.name, entry.data);
+          grid.appendChild(card);
+        });
+      });
+    }).catch(function () {
+      grid.innerHTML = '<div class="gallery-empty">Failed to load maps.</div>';
+    });
+  }
+
+  function createMapCard(mapName, mapData) {
+    var card = document.createElement('div');
+    card.className = 'gallery-card';
+    card.setAttribute('data-map-name', mapName);
+
+    // Thumbnail placeholder
+    var thumb = document.createElement('div');
+    thumb.className = 'gallery-card-thumb';
+    thumb.textContent = '\u25A6'; // grid icon placeholder
+    card.appendChild(thumb);
+
+    var body = document.createElement('div');
+    body.className = 'gallery-card-body';
+
+    var nameEl = document.createElement('div');
+    nameEl.className = 'gallery-card-name';
+    nameEl.textContent = mapName;
+    body.appendChild(nameEl);
+
+    // Meta badges
+    var meta = document.createElement('div');
+    meta.className = 'gallery-card-meta';
+
+    if (mapData) {
+      // Count spawns
+      var spawns = mapData.spawns || {};
+      var ffaSpawns = Array.isArray(spawns) ? spawns : (spawns.ffa || []);
+      var spawnCount = ffaSpawns.length;
+      if (spawnCount > 0) {
+        var spawnBadge = document.createElement('span');
+        spawnBadge.className = 'gallery-badge';
+        spawnBadge.textContent = spawnCount + ' spawns';
+        meta.appendChild(spawnBadge);
+      }
+
+      // Arena size
+      if (mapData.arena) {
+        var sizeBadge = document.createElement('span');
+        sizeBadge.className = 'gallery-badge';
+        sizeBadge.textContent = (mapData.arena.width || 60) + 'x' + (mapData.arena.length || 90);
+        meta.appendChild(sizeBadge);
+      }
+
+      // Object count
+      var objCount = (mapData.objects || []).length;
+      if (objCount > 0) {
+        var objBadge = document.createElement('span');
+        objBadge.className = 'gallery-badge';
+        objBadge.textContent = objCount + ' objects';
+        meta.appendChild(objBadge);
+      }
+
+      // Enabled modes
+      if (mapData.modes) {
+        if (mapData.modes.ffa) { var b = document.createElement('span'); b.className = 'gallery-badge'; b.textContent = 'FFA'; meta.appendChild(b); }
+        if (mapData.modes.tdm) { var b2 = document.createElement('span'); b2.className = 'gallery-badge'; b2.textContent = 'TDM'; meta.appendChild(b2); }
+        if (mapData.modes.ctf) { var b3 = document.createElement('span'); b3.className = 'gallery-badge'; b3.textContent = 'CTF'; meta.appendChild(b3); }
+      }
+    }
+
+    body.appendChild(meta);
+    card.appendChild(body);
+
+    // Action buttons
+    var actions = document.createElement('div');
+    actions.className = 'gallery-card-actions';
+
+    var renameBtn = document.createElement('button');
+    renameBtn.className = 'gallery-action-btn';
+    renameBtn.title = 'Rename';
+    renameBtn.innerHTML = '&#9998;';
+    renameBtn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      startMapInlineRename(card, mapName, mapData);
+    });
+    actions.appendChild(renameBtn);
+
+    var deleteBtn = document.createElement('button');
+    deleteBtn.className = 'gallery-action-btn gallery-delete-btn';
+    deleteBtn.title = 'Delete';
+    deleteBtn.innerHTML = '&#10005;';
+    deleteBtn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      deleteMapFromGallery(mapName);
+    });
+    actions.appendChild(deleteBtn);
+
+    card.appendChild(actions);
+
+    // Click card to open map editor with this map
+    card.addEventListener('click', function () {
+      openMapFromGallery(mapName);
+    });
+
+    return card;
+  }
+
+  function startMapInlineRename(card, oldName, mapData) {
+    var nameEl = card.querySelector('.gallery-card-name');
+    if (!nameEl) return;
+
+    var input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'gallery-rename-input';
+    input.value = oldName;
+    nameEl.textContent = '';
+    nameEl.appendChild(input);
+    input.focus();
+    input.select();
+
+    function commit() {
+      var newName = input.value.trim();
+      if (!newName || newName === oldName) {
+        nameEl.textContent = oldName;
+        return;
+      }
+      // Save under new name, then delete old name
+      if (!mapData) {
+        nameEl.textContent = oldName;
+        return;
+      }
+      mapData.name = newName;
+      saveMapToServer(newName, mapData).then(function () {
+        return deleteMapFromServer(oldName);
+      }).then(function () {
+        nameEl.textContent = newName;
+        card.setAttribute('data-map-name', newName);
+        // Refresh gallery to get clean state
+        populateMapGallery();
+      }).catch(function () {
+        nameEl.textContent = oldName;
+        alert('Failed to rename map');
+      });
+    }
+
+    input.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') { input.blur(); }
+      if (e.key === 'Escape') { nameEl.textContent = oldName; }
+    });
+    input.addEventListener('blur', commit);
+  }
+
+  function deleteMapFromGallery(mapName) {
+    if (!confirm('Delete map "' + mapName + '"? This cannot be undone.')) return;
+
+    if (typeof deleteMapFromServer !== 'function') {
+      alert('Delete API not available');
+      return;
+    }
+
+    deleteMapFromServer(mapName).then(function () {
+      populateMapGallery();
+    }).catch(function () {
+      alert('Failed to delete map');
+    });
+  }
+
+  function openMapFromGallery(mapName) {
+    var galleryView = document.getElementById('mapGalleryView');
+    var mapPanel = document.getElementById('panelMapEditor');
+
+    // Move gallery back to panel
+    if (galleryView && mapPanel) {
+      mapPanel.insertBefore(galleryView, mapPanel.firstChild);
+      galleryView.classList.remove('viewport-mode');
+    }
+    if (galleryView) galleryView.classList.add('hidden');
+
+    // Launch map editor with the specified map
+    if (typeof startMapEditor === 'function') {
+      hideGameModeUI();
+      resizeRenderer();
+      startMapEditor(mapName);
+      _mapEditorWasOpen = true;
+      ensureMapEditorExitHook();
+    }
+  }
+
+  // Create New Map button
+  var mapNewBtn = document.getElementById('mapGalleryNew');
+  if (mapNewBtn) {
+    mapNewBtn.addEventListener('click', function () {
+      var galleryView = document.getElementById('mapGalleryView');
+      var mapPanel = document.getElementById('panelMapEditor');
+
+      // Move gallery back to panel
+      if (galleryView && mapPanel) {
+        mapPanel.insertBefore(galleryView, mapPanel.firstChild);
+        galleryView.classList.remove('viewport-mode');
+      }
+      if (galleryView) galleryView.classList.add('hidden');
+
+      // Launch map editor with blank map (no mapName)
+      var meOpenBtn = document.getElementById('meOpen');
+      if (meOpenBtn) {
+        meOpenBtn.click();
+      }
+    });
+  }
+
+  // Expose gallery functions
+  window._showMapGallery = showMapGallery;
+  window._populateMapGallery = populateMapGallery;
 })();
 
 // ------- Launch Game -------
@@ -828,8 +1097,9 @@ window.registerCustomWeaponModel = registerCustomWeaponModel;
       if (expandTab) expandTab.classList.toggle('hidden', !sidebar.classList.contains('collapsed'));
     }
 
-    // Restore right panel if editor panel is active
-    if (_activePanel === 'heroEditor' || _activePanel === 'weaponModelBuilder' || _activePanel === 'menuBuilder') {
+    // Restore right panel if editor panel is active (not gallery mode)
+    var heroInGallery = _activePanel === 'heroEditor' && document.getElementById('heroEditorView') && document.getElementById('heroEditorView').classList.contains('hidden');
+    if ((_activePanel === 'heroEditor' && !heroInGallery) || _activePanel === 'weaponModelBuilder' || _activePanel === 'menuBuilder') {
       var rightPanel = document.getElementById('devRightPanel');
       var rightExpandTab = document.getElementById('devRightPanelExpand');
       if (rightPanel) {
@@ -878,8 +1148,9 @@ window.registerCustomWeaponModel = registerCustomWeaponModel;
         var expandTab = document.getElementById('devSidebarExpand');
         if (expandTab) expandTab.classList.toggle('hidden', !sidebar.classList.contains('collapsed'));
       }
-      // Restore right panel and toolbar if hero editor, WMB, or menu builder is active
-      if (_activePanel === 'heroEditor' || _activePanel === 'weaponModelBuilder' || _activePanel === 'menuBuilder') {
+      // Restore right panel and toolbar if hero editor (not gallery), WMB, or menu builder is active
+      var heroEditorInGallery = _activePanel === 'heroEditor' && document.getElementById('heroEditorView') && document.getElementById('heroEditorView').classList.contains('hidden');
+      if ((_activePanel === 'heroEditor' && !heroEditorInGallery) || _activePanel === 'weaponModelBuilder' || _activePanel === 'menuBuilder') {
         var rightPanel = document.getElementById('devRightPanel');
         var rightExpandTab = document.getElementById('devRightPanelExpand');
         if (rightPanel) {

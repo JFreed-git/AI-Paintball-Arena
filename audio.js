@@ -494,7 +494,16 @@
     for (var i = 0; i < entries.length; i++) {
       var entry = entries[i];
       if (matchesFilter(entry.filter, context)) {
-        _synthesize(entry.sound.synthesis, worldPos);
+        var synth = entry.sound.synthesis;
+        // Override duration for dynamic-duration sounds (e.g. reload hum)
+        if (synth.dynamicDuration && typeof context._duration === 'number') {
+          var copy = {};
+          var sk = Object.keys(synth);
+          for (var j = 0; j < sk.length; j++) copy[sk[j]] = synth[sk[j]];
+          copy.duration = context._duration;
+          synth = copy;
+        }
+        _synthesize(synth, worldPos);
       }
     }
   };

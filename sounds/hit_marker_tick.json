@@ -1,14 +1,17 @@
 {
   "id": "hit_marker_tick",
-  "name": "Hit Marker Headshot",
+  "name": "Headshot Sizzle",
   "synthesis": {
-    "type": "tone",
-    "waveform": "triangle",
-    "frequency": 2200,
-    "duration": 0.045,
-    "volume": 0.22,
+    "type": "fm",
+    "carrierFreq": 1800,
+    "carrierWaveform": "square",
+    "modFreq": 2400,
+    "modDepth": 600,
+    "modWaveform": "sine",
+    "duration": 0.06,
+    "volume": 0.25,
     "attack": 0.001,
-    "decay": 0.044
+    "decay": 0.059
   },
   "bindings": [
     { "event": "hit_marker", "filter": { "headshot": true } }

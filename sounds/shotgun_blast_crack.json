@@ -1,16 +1,18 @@
 {
   "id": "shotgun_blast_crack",
-  "name": "Shotgun Blast Tail",
+  "name": "Shotgun Ring-Out",
   "synthesis": {
-    "type": "sweep",
+    "type": "filtered_osc",
     "waveform": "sawtooth",
-    "startFreq": 250,
-    "endFreq": 50,
-    "duration": 0.2,
-    "volume": 0.25,
+    "frequency": 150,
+    "filterType": "lowpass",
+    "filterFreq": 1200,
+    "filterEndFreq": 80,
+    "filterQ": 4,
+    "duration": 0.3,
+    "volume": 0.2,
     "attack": 0.002,
-    "decay": 0.198,
-    "noiseAmount": 0.6
+    "decay": 0.298
   },
   "bindings": [
     { "event": "weapon_fire", "filter": { "weaponModelType": "shotgun" } }

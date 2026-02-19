@@ -1,15 +1,17 @@
 {
   "id": "sniper_shot_boom",
-  "name": "Sniper Shot Boom",
+  "name": "Sniper Beam Core",
   "synthesis": {
-    "type": "noise_burst",
-    "frequency": 150,
-    "filterType": "lowpass",
-    "filterQ": 0.5,
-    "duration": 0.3,
-    "volume": 0.6,
+    "type": "fm",
+    "carrierFreq": 100,
+    "carrierWaveform": "sawtooth",
+    "modFreq": 200,
+    "modDepth": 500,
+    "modWaveform": "sine",
+    "duration": 0.5,
+    "volume": 0.55,
     "attack": 0.001,
-    "decay": 0.299
+    "decay": 0.499
   },
   "bindings": [
     { "event": "weapon_fire", "filter": { "weaponModelType": "sniper" } }

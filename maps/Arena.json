@@ -92,7 +92,7 @@
       "position": [
         0,
         0,
-        -40
+        -40.375
       ],
       "rotation": 0,
       "color": "#6b5b4f",
@@ -110,7 +110,7 @@
       "position": [
         0,
         0,
-        40
+        40.375
       ],
       "rotation": 0,
       "color": "#6B5B4F",
@@ -129,14 +129,14 @@
       "position": [
         16,
         0,
-        -45
+        -44.375
       ],
       "rotation": 180,
       "color": "#6b5b4f",
       "size": [
         2,
         3,
-        12
+        10.75
       ],
       "mirrorPairId": "mp_5",
       "mirrorAxis": "z"
@@ -147,14 +147,14 @@
       "position": [
         16,
         0,
-        45
+        44.375
       ],
       "rotation": 180,
       "color": "#6B5B4F",
       "size": [
         2,
         3,
-        12
+        10.75
       ],
       "mirrorPairId": "mp_5",
       "mirrorAxis": "z",
@@ -166,14 +166,14 @@
       "position": [
         -16,
         0,
-        -45
+        -44.375
       ],
       "rotation": 180,
       "color": "#6b5b4f",
       "size": [
         2,
         3,
-        12
+        10.75
       ],
       "mirrorPairId": "mp_6",
       "mirrorAxis": "z"
@@ -184,14 +184,14 @@
       "position": [
         -16,
         0,
-        45
+        44.375
       ],
       "rotation": 180,
       "color": "#6B5B4F",
       "size": [
         2,
         3,
-        12
+        10.75
       ],
       "mirrorPairId": "mp_6",
       "mirrorAxis": "z",

@@ -1,16 +1,18 @@
 {
   "id": "sniper_shot_rumble",
-  "name": "Sniper Shot Rumble",
+  "name": "Sniper Reverb Tail",
   "synthesis": {
-    "type": "sweep",
+    "type": "filtered_osc",
     "waveform": "sawtooth",
-    "startFreq": 200,
-    "endFreq": 40,
-    "duration": 0.35,
-    "volume": 0.3,
-    "attack": 0.002,
-    "decay": 0.348,
-    "noiseAmount": 0.7
+    "frequency": 80,
+    "filterType": "lowpass",
+    "filterFreq": 3000,
+    "filterEndFreq": 40,
+    "filterQ": 8,
+    "duration": 0.7,
+    "volume": 0.25,
+    "attack": 0.005,
+    "decay": 0.695
   },
   "bindings": [
     { "event": "weapon_fire", "filter": { "weaponModelType": "sniper" } }

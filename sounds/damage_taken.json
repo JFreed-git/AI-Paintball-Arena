@@ -1,16 +1,16 @@
 {
   "id": "damage_taken",
-  "name": "Damage Taken",
+  "name": "Energy Slam",
   "synthesis": {
-    "type": "sweep",
-    "waveform": "square",
-    "startFreq": 200,
-    "endFreq": 60,
-    "duration": 0.18,
-    "volume": 0.3,
-    "attack": 0.002,
-    "decay": 0.178,
-    "noiseAmount": 0.4
+    "type": "impact",
+    "bodyFreq": 80,
+    "bodyDecay": 0.15,
+    "noiseFreq": 200,
+    "noiseFilterType": "lowpass",
+    "noiseFilterQ": 1.2,
+    "noiseDuration": 0.1,
+    "mix": 0.65,
+    "volume": 0.35
   },
   "bindings": [
     { "event": "damage_taken", "filter": {} }

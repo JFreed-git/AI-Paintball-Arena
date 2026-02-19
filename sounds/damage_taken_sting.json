@@ -1,14 +1,17 @@
 {
   "id": "damage_taken_sting",
-  "name": "Damage Taken Sting",
+  "name": "Energy Crackle",
   "synthesis": {
-    "type": "tone",
-    "waveform": "square",
-    "frequency": 2800,
-    "duration": 0.05,
-    "volume": 0.2,
+    "type": "fm",
+    "carrierFreq": 2000,
+    "carrierWaveform": "square",
+    "modFreq": 150,
+    "modDepth": 800,
+    "modWaveform": "sine",
+    "duration": 0.08,
+    "volume": 0.24,
     "attack": 0.001,
-    "decay": 0.049
+    "decay": 0.079
   },
   "bindings": [
     { "event": "damage_taken", "filter": {} }

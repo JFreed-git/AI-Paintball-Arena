@@ -358,7 +358,7 @@
 
   window.stopMapEditor = stopEditor;
 
-  window.startMapEditor = function () {
+  window.startMapEditor = function (optMapName) {
     if (editorActive) return;
 
     if (window.ffaActive && typeof stopFFAInternal === 'function') stopFFAInternal();
@@ -418,6 +418,24 @@
     updateSnapButton();
     updateStatusBar();
     editorRenderLoop();
+
+    // If a map name was provided, load it after init
+    if (optMapName) {
+      fetchMapData(optMapName).then(function (data) {
+        mapData = data;
+        mapData.spawns = normalizeSpawns(mapData.spawns);
+        recalcNextId();
+        recalcNextMirrorPairId();
+        recalcNextQuadGroupId();
+        recalcNextSpawnId();
+        recalcNextSpawnMirrorIds();
+        document.getElementById('esMapName').value = optMapName;
+        rebuildEditorScene();
+        syncSettingsUI();
+      }).catch(function () {
+        console.warn('mapEditor: failed to load map "' + optMapName + '"');
+      });
+    }
   };
 
   function stopEditor() {

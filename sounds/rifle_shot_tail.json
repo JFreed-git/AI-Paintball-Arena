@@ -1,16 +1,16 @@
 {
   "id": "rifle_shot_tail",
-  "name": "Rifle Shot Tail",
+  "name": "Rifle Zap Tail",
   "synthesis": {
     "type": "sweep",
-    "waveform": "sawtooth",
-    "startFreq": 500,
-    "endFreq": 120,
-    "duration": 0.08,
-    "volume": 0.22,
-    "attack": 0.002,
-    "decay": 0.078,
-    "noiseAmount": 0.5
+    "waveform": "square",
+    "startFreq": 1800,
+    "endFreq": 600,
+    "duration": 0.06,
+    "volume": 0.24,
+    "attack": 0.001,
+    "decay": 0.059,
+    "noiseAmount": 0.1
   },
   "bindings": [
     { "event": "weapon_fire", "filter": { "weaponModelType": "rifle" } }

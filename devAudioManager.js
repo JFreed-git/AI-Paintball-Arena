@@ -16,6 +16,7 @@
   var _soundCache = {};      // name → full sound data
   var _isPlaying = false;
   var _waveformAnimFrame = 0;
+  var _expandedGroups = {};    // groupKey → boolean
 
   // --- DOM refs ---
   var _elName, _elId, _elType;
@@ -178,53 +179,201 @@
 
   // --- Sound Table ---
 
-  function renderSoundTable() {
-    if (!_elSoundTable) return;
+  var GROUP_DISPLAY_NAMES = {
+    'weapon_fire|weaponModelType=rifle': 'Rifle Fire',
+    'weapon_fire|weaponModelType=shotgun': 'Shotgun Fire',
+    'weapon_fire|weaponModelType=sniper': 'Sniper Fire',
+    'hit_marker|': 'Hit Marker',
+    'hit_marker|headshot=true': 'Headshot Hit Marker',
+    'elimination|': 'Elimination',
+    'damage_taken|': 'Damage Taken',
+    'own_death|': 'Death',
+    'melee_swing|': 'Melee Swing',
+    'melee_hit|': 'Melee Hit',
+    'footstep|': 'Footstep',
+    'jump|': 'Jump',
+    'land|': 'Land',
+    'reload_start|': 'Reload Start',
+    'reload_end|': 'Reload End',
+    'ui_click|': 'UI Click',
+    'countdown_tick|': 'Countdown Tick',
+    'countdown_go|': 'Countdown Go',
+    'respawn|': 'Respawn',
+    'dry_fire|': 'Dry Fire'
+  };
 
-    var html = '<table class="am-table"><thead><tr>' +
-      '<th>Name</th><th>Type</th><th>Event</th><th>Filters</th>' +
-      '<th>Duration</th><th>Volume</th><th></th>' +
-      '</tr></thead><tbody>';
-
+  function buildSoundGroups() {
+    var groups = {};
+    var order = [];
     for (var i = 0; i < _soundList.length; i++) {
       var name = _soundList[i];
       var data = _soundCache[name];
       if (!data) continue;
 
-      var syn = data.synthesis || {};
-      var type = syn.type || '?';
       var evt = '';
-      var filters = '';
+      var filter = {};
       if (data.bindings && data.bindings.length > 0) {
         evt = data.bindings[0].event || '';
-        var filterObj = data.bindings[0].filter || {};
-        var filterKeys = Object.keys(filterObj);
-        for (var f = 0; f < filterKeys.length; f++) {
-          filters += '<span class="am-filter-pill">' + filterKeys[f] + ':' + filterObj[filterKeys[f]] + '</span>';
-        }
+        filter = data.bindings[0].filter || {};
       }
 
-      var dur = (typeof syn.duration === 'number') ? syn.duration.toFixed(3) : '-';
-      var vol = (typeof syn.volume === 'number') ? syn.volume.toFixed(2) : '-';
-      var selected = (_currentSoundId === name) ? ' am-row-selected' : '';
+      var filterParts = Object.keys(filter).sort().map(function (k) {
+        return k + '=' + filter[k];
+      });
+      var key = evt + '|' + filterParts.join(',');
 
-      html += '<tr class="am-sound-row' + selected + '" data-name="' + name + '">' +
-        '<td>' + (data.name || name) + '</td>' +
-        '<td><span class="am-type-badge ' + type + '">' + type + '</span></td>' +
-        '<td>' + evt + '</td>' +
-        '<td>' + (filters || '<span style="color:#555">none</span>') + '</td>' +
-        '<td>' + dur + 's</td>' +
-        '<td>' + vol + '</td>' +
-        '<td><button class="am-table-btn am-play-btn" data-name="' + name + '" title="Play">&#9654;</button></td>' +
-        '</tr>';
+      if (!groups[key]) {
+        groups[key] = { key: key, event: evt, filter: filter, sounds: [] };
+        order.push(key);
+      }
+      groups[key].sounds.push(name);
+    }
+    return order.map(function (k) { return groups[k]; });
+  }
+
+  function getGroupDisplayName(group) {
+    if (GROUP_DISPLAY_NAMES[group.key]) return GROUP_DISPLAY_NAMES[group.key];
+    var evt = group.event || 'Unknown';
+    return evt.replace(/_/g, ' ').replace(/\b\w/g, function (c) { return c.toUpperCase(); });
+  }
+
+  function renderSoundTable() {
+    if (!_elSoundTable) return;
+
+    var groups = buildSoundGroups();
+    var html = '<table class="am-table"><thead><tr>' +
+      '<th>Name</th><th>Type</th><th>Event</th><th>Filters</th>' +
+      '<th>Duration</th><th>Volume</th><th></th>' +
+      '</tr></thead><tbody>';
+
+    for (var g = 0; g < groups.length; g++) {
+      var group = groups[g];
+      var isMulti = group.sounds.length > 1;
+      var isExpanded = !!_expandedGroups[group.key];
+      var escKey = group.key.replace(/"/g, '&quot;');
+
+      if (isMulti) {
+        // Compute max duration
+        var maxDur = 0;
+        for (var s = 0; s < group.sounds.length; s++) {
+          var sd = _soundCache[group.sounds[s]];
+          if (sd && sd.synthesis && typeof sd.synthesis.duration === 'number') {
+            maxDur = Math.max(maxDur, sd.synthesis.duration);
+          }
+        }
+
+        // Build filter pills
+        var filterPills = '';
+        var filterObj = group.filter || {};
+        var filterKeys = Object.keys(filterObj);
+        for (var f = 0; f < filterKeys.length; f++) {
+          filterPills += '<span class="am-filter-pill">' + filterKeys[f] + ':' + filterObj[filterKeys[f]] + '</span>';
+        }
+
+        // Group header row
+        html += '<tr class="am-group-row' + (isExpanded ? ' am-expanded' : '') + '" data-group-key="' + escKey + '">' +
+          '<td><span class="am-expand-icon">' + (isExpanded ? '&#9660;' : '&#9654;') + '</span> ' +
+          '<span class="am-group-name">' + getGroupDisplayName(group) + '</span></td>' +
+          '<td><span class="am-layer-count">' + group.sounds.length + ' layers</span></td>' +
+          '<td>' + group.event + '</td>' +
+          '<td>' + (filterPills || '<span style="color:#555">none</span>') + '</td>' +
+          '<td>' + maxDur.toFixed(3) + 's</td>' +
+          '<td></td>' +
+          '<td><button class="am-table-btn am-play-all-btn" data-group-key="' + escKey + '" title="Play All Layers">&#9654; All</button></td>' +
+          '</tr>';
+
+        // Layer rows
+        for (var s = 0; s < group.sounds.length; s++) {
+          var lName = group.sounds[s];
+          var lData = _soundCache[lName];
+          if (!lData) continue;
+
+          var lSyn = lData.synthesis || {};
+          var lType = lSyn.type || '?';
+          var lDur = (typeof lSyn.duration === 'number') ? lSyn.duration.toFixed(3) : '-';
+          var lVol = (typeof lSyn.volume === 'number') ? lSyn.volume.toFixed(2) : '-';
+          var lSel = (_currentSoundId === lName) ? ' am-row-selected' : '';
+          var lHid = isExpanded ? '' : ' hidden';
+
+          html += '<tr class="am-layer-row' + lSel + lHid + '" data-group-key="' + escKey + '" data-name="' + lName + '">' +
+            '<td class="am-layer-indent">' + (lData.name || lName) + '</td>' +
+            '<td><span class="am-type-badge ' + lType + '">' + lType + '</span></td>' +
+            '<td></td><td></td>' +
+            '<td>' + lDur + 's</td>' +
+            '<td>' + lVol + '</td>' +
+            '<td><button class="am-table-btn am-play-btn" data-name="' + lName + '" title="Play">&#9654;</button></td>' +
+            '</tr>';
+        }
+      } else {
+        // Single-layer: render as simple row
+        var name = group.sounds[0];
+        var data = _soundCache[name];
+        if (!data) continue;
+
+        var syn = data.synthesis || {};
+        var type = syn.type || '?';
+        var dur = (typeof syn.duration === 'number') ? syn.duration.toFixed(3) : '-';
+        var vol = (typeof syn.volume === 'number') ? syn.volume.toFixed(2) : '-';
+        var selected = (_currentSoundId === name) ? ' am-row-selected' : '';
+
+        var filterPills = '';
+        var filterObj = group.filter || {};
+        var filterKeys = Object.keys(filterObj);
+        for (var f = 0; f < filterKeys.length; f++) {
+          filterPills += '<span class="am-filter-pill">' + filterKeys[f] + ':' + filterObj[filterKeys[f]] + '</span>';
+        }
+
+        html += '<tr class="am-sound-row' + selected + '" data-name="' + name + '">' +
+          '<td>' + (data.name || name) + '</td>' +
+          '<td><span class="am-type-badge ' + type + '">' + type + '</span></td>' +
+          '<td>' + group.event + '</td>' +
+          '<td>' + (filterPills || '<span style="color:#555">none</span>') + '</td>' +
+          '<td>' + dur + 's</td>' +
+          '<td>' + vol + '</td>' +
+          '<td><button class="am-table-btn am-play-btn" data-name="' + name + '" title="Play">&#9654;</button></td>' +
+          '</tr>';
+      }
     }
 
     html += '</tbody></table>';
     _elSoundTable.innerHTML = html;
+    wireTableEvents();
+  }
 
-    // Wire table row clicks
-    var rows = _elSoundTable.querySelectorAll('.am-sound-row');
+  function highlightTableRow(name) {
+    if (!_elSoundTable) return;
+    var rows = _elSoundTable.querySelectorAll('.am-sound-row, .am-layer-row');
     rows.forEach(function (row) {
+      row.classList.toggle('am-row-selected', row.getAttribute('data-name') === name);
+    });
+  }
+
+  function wireTableEvents() {
+    if (!_elSoundTable) return;
+
+    // Group row clicks → toggle expand
+    var groupRows = _elSoundTable.querySelectorAll('.am-group-row');
+    groupRows.forEach(function (row) {
+      row.addEventListener('click', function (e) {
+        if (e.target.classList.contains('am-play-all-btn') || e.target.closest('.am-play-all-btn')) return;
+        var key = row.getAttribute('data-group-key');
+        toggleGroup(key);
+      });
+    });
+
+    // Play All buttons
+    var playAllBtns = _elSoundTable.querySelectorAll('.am-play-all-btn');
+    playAllBtns.forEach(function (btn) {
+      btn.addEventListener('click', function (e) {
+        e.stopPropagation();
+        var key = btn.getAttribute('data-group-key');
+        playAllLayers(key);
+      });
+    });
+
+    // Single-row and layer-row clicks → select sound
+    var soundRows = _elSoundTable.querySelectorAll('.am-sound-row, .am-layer-row');
+    soundRows.forEach(function (row) {
       row.addEventListener('click', function (e) {
         if (e.target.classList.contains('am-play-btn') || e.target.closest('.am-play-btn')) return;
         var name = row.getAttribute('data-name');
@@ -232,7 +381,7 @@
       });
     });
 
-    // Wire play buttons
+    // Individual play buttons
     var playBtns = _elSoundTable.querySelectorAll('.am-play-btn');
     playBtns.forEach(function (btn) {
       btn.addEventListener('click', function (e) {
@@ -247,12 +396,42 @@
     });
   }
 
-  function highlightTableRow(name) {
-    if (!_elSoundTable) return;
-    var rows = _elSoundTable.querySelectorAll('.am-sound-row');
-    rows.forEach(function (row) {
-      row.classList.toggle('am-row-selected', row.getAttribute('data-name') === name);
+  function toggleGroup(groupKey) {
+    _expandedGroups[groupKey] = !_expandedGroups[groupKey];
+    var isExpanded = _expandedGroups[groupKey];
+
+    var allRows = _elSoundTable.querySelectorAll('tr[data-group-key]');
+    allRows.forEach(function (row) {
+      if (row.getAttribute('data-group-key') !== groupKey) return;
+
+      if (row.classList.contains('am-group-row')) {
+        row.classList.toggle('am-expanded', isExpanded);
+        var icon = row.querySelector('.am-expand-icon');
+        if (icon) icon.innerHTML = isExpanded ? '&#9660;' : '&#9654;';
+      } else if (row.classList.contains('am-layer-row')) {
+        row.classList.toggle('hidden', !isExpanded);
+      }
     });
+  }
+
+  function playAllLayers(groupKey) {
+    var groups = buildSoundGroups();
+    var group = null;
+    for (var i = 0; i < groups.length; i++) {
+      if (groups[i].key === groupKey) { group = groups[i]; break; }
+    }
+    if (!group) return;
+
+    var maxDuration = 0;
+    for (var s = 0; s < group.sounds.length; s++) {
+      var data = _soundCache[group.sounds[s]];
+      if (data && data.synthesis) {
+        if (typeof playRawSound === 'function') playRawSound(data.synthesis);
+        var dur = data.synthesis.duration || 0;
+        if (dur > maxDuration) maxDuration = dur;
+      }
+    }
+    startWaveformAnimation(maxDuration);
   }
 
   function selectSound(name) {
@@ -806,11 +985,12 @@
 
   // --- Waveform Visualization ---
 
-  function startWaveformAnimation() {
+  function startWaveformAnimation(overrideDuration) {
     _isPlaying = true;
     if (_waveformAnimFrame) cancelAnimationFrame(_waveformAnimFrame);
 
-    var duration = parseFloat(_elDuration ? _elDuration.value : 0.06) || 0.06;
+    var duration = (typeof overrideDuration === 'number') ? overrideDuration :
+      (parseFloat(_elDuration ? _elDuration.value : 0.06) || 0.06);
     var startTime = performance.now();
     // Keep animating for duration + buffer
     var totalMs = (duration + 0.2) * 1000;

@@ -1,18 +1,18 @@
 {
   "id": "own_death_ring",
-  "name": "Own Death Ring",
+  "name": "Death Power-Down",
   "synthesis": {
     "type": "filtered_osc",
-    "waveform": "sawtooth",
-    "frequency": 200,
+    "waveform": "square",
+    "frequency": 300,
     "filterType": "lowpass",
-    "filterFreq": 2000,
-    "filterEndFreq": 100,
-    "filterQ": 6,
-    "duration": 0.6,
-    "volume": 0.12,
-    "attack": 0.005,
-    "decay": 0.595
+    "filterFreq": 3000,
+    "filterEndFreq": 50,
+    "filterQ": 8,
+    "duration": 0.8,
+    "volume": 0.22,
+    "attack": 0.01,
+    "decay": 0.79
   },
   "bindings": [
     { "event": "own_death", "filter": {} }

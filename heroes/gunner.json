@@ -1,0 +1,124 @@
+{
+  "id": "gunner",
+  "name": "Gunner",
+  "description": "minigun.",
+  "color": 10879231,
+  "maxHealth": 300,
+  "walkSpeed": 0.5,
+  "sprintSpeed": 6,
+  "jumpVelocity": 8.5,
+  "hitbox": [
+    {
+      "name": "head",
+      "shape": "cylinder",
+      "offsetX": 0,
+      "offsetY": 1.95,
+      "offsetZ": 0,
+      "damageMultiplier": 2,
+      "radius": 0.55,
+      "height": 0.4
+    },
+    {
+      "name": "torso",
+      "shape": "box",
+      "offsetX": 0,
+      "offsetY": 0.93,
+      "offsetZ": 0,
+      "damageMultiplier": 1,
+      "width": 1.5,
+      "height": 1.85,
+      "depth": 1.5
+    },
+    {
+      "name": "segment",
+      "shape": "cylinder",
+      "offsetX": 0,
+      "offsetY": 2.25,
+      "offsetZ": 0,
+      "damageMultiplier": 1,
+      "radius": 0.4,
+      "height": 0.2
+    }
+  ],
+  "modelType": "standard",
+  "weapon": {
+    "cooldownMs": 10,
+    "magSize": 500,
+    "reloadTimeSec": 2.5,
+    "damage": 3,
+    "spreadRad": 0.1,
+    "sprintSpreadRad": 10,
+    "maxRange": 200,
+    "pellets": 1,
+    "projectileSpeed": 120,
+    "projectileGravity": 0,
+    "splashRadius": 0,
+    "meleeOnly": false,
+    "meleeDamage": 30,
+    "meleeRange": 2.5,
+    "meleeCooldownMs": 600,
+    "meleeSwingMs": 350,
+    "meleeUseHitMultiplier": true,
+    "scope": null,
+    "modelType": "shotgun",
+    "tracerColor": 6750156,
+    "crosshair": {
+      "style": "circle",
+      "baseSpreadPx": 8,
+      "sprintSpreadPx": 20,
+      "color": "#a600ff"
+    },
+    "abilities": [],
+    "fpOffset": {
+      "x": 0.28,
+      "y": -0.22,
+      "z": -0.45
+    },
+    "fpRotation": {
+      "x": 0.05,
+      "y": -0.15,
+      "z": 0
+    }
+  },
+  "passives": [],
+  "abilities": [],
+  "bodyParts": [
+    {
+      "name": "part",
+      "shape": "box",
+      "offsetX": 0,
+      "offsetY": 1,
+      "offsetZ": 0,
+      "rotationX": 0,
+      "rotationY": 0,
+      "rotationZ": 0,
+      "width": 0.75,
+      "height": 0.925,
+      "depth": 0.75
+    },
+    {
+      "name": "part",
+      "shape": "cylinder",
+      "offsetX": 0,
+      "offsetY": 1.5375,
+      "offsetZ": 0,
+      "rotationX": 0,
+      "rotationY": 0,
+      "rotationZ": 0,
+      "radius": 0.275,
+      "height": 0.15
+    },
+    {
+      "name": "part",
+      "shape": "cylinder",
+      "offsetX": 0,
+      "offsetY": 1.6625,
+      "offsetZ": 0,
+      "rotationX": 0,
+      "rotationY": 0,
+      "rotationZ": 0,
+      "radius": 0.2,
+      "height": 0.1
+    }
+  ]
+}

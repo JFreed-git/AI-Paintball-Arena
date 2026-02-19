@@ -1,15 +1,16 @@
 {
   "id": "sniper_shot_crack",
-  "name": "Sniper Shot Crack",
+  "name": "Sniper Beam Ignition",
   "synthesis": {
-    "type": "noise_burst",
-    "frequency": 1000,
-    "filterType": "bandpass",
-    "filterQ": 1.5,
-    "duration": 0.04,
+    "type": "sweep",
+    "waveform": "square",
+    "startFreq": 4000,
+    "endFreq": 800,
+    "duration": 0.06,
     "volume": 0.4,
     "attack": 0.001,
-    "decay": 0.039
+    "decay": 0.059,
+    "noiseAmount": 0.05
   },
   "bindings": [
     { "event": "weapon_fire", "filter": { "weaponModelType": "sniper" } }

@@ -1,14 +1,16 @@
 {
   "id": "hit_marker",
-  "name": "Hit Marker",
+  "name": "Hit Donk",
   "synthesis": {
-    "type": "tone",
-    "waveform": "triangle",
-    "frequency": 800,
-    "duration": 0.03,
-    "volume": 0.12,
-    "attack": 0.001,
-    "decay": 0.029
+    "type": "impact",
+    "bodyFreq": 350,
+    "bodyDecay": 0.04,
+    "noiseFreq": 1200,
+    "noiseFilterType": "bandpass",
+    "noiseFilterQ": 2,
+    "noiseDuration": 0.02,
+    "mix": 0.7,
+    "volume": 0.18
   },
   "bindings": [
     { "event": "hit_marker", "filter": {} }

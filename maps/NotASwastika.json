@@ -628,15 +628,15 @@
       "type": "box",
       "position": [
         -43.5,
-        8.5,
-        23.5
+        8,
+        23.625
       ],
       "rotation": 0,
       "color": "#6B5B4F",
       "size": [
         2.5,
         0.5,
-        2
+        4.75
       ],
       "quadGroupId": "qg_12",
       "quadRole": "original"
@@ -645,8 +645,8 @@
       "id": "obj_48",
       "type": "box",
       "position": [
-        -23.5,
-        8.5,
+        -23.625,
+        8,
         -43.5
       ],
       "rotation": 270,
@@ -654,7 +654,7 @@
       "size": [
         2.5,
         0.5,
-        2
+        4.75
       ],
       "quadGroupId": "qg_12",
       "quadRole": "rot90"
@@ -664,15 +664,15 @@
       "type": "box",
       "position": [
         43.5,
-        8.5,
-        -23.5
+        8,
+        -23.625
       ],
       "rotation": 180,
       "color": "#6B5B4F",
       "size": [
         2.5,
         0.5,
-        2
+        4.75
       ],
       "quadGroupId": "qg_12",
       "quadRole": "rot180"
@@ -681,8 +681,8 @@
       "id": "obj_50",
       "type": "box",
       "position": [
-        23.5,
-        8.5,
+        23.625,
+        8,
         43.5
       ],
       "rotation": 90,
@@ -690,7 +690,7 @@
       "size": [
         2.5,
         0.5,
-        2
+        4.75
       ],
       "quadGroupId": "qg_12",
       "quadRole": "rot270"
@@ -700,7 +700,7 @@
       "type": "box",
       "position": [
         -43.5,
-        7.5,
+        6.5,
         28.5
       ],
       "rotation": 0,
@@ -718,7 +718,7 @@
       "type": "box",
       "position": [
         -28.5,
-        7.5,
+        6.5,
         -43.5
       ],
       "rotation": 270,
@@ -736,7 +736,7 @@
       "type": "box",
       "position": [
         43.5,
-        7.5,
+        6.5,
         -28.5
       ],
       "rotation": 180,
@@ -754,7 +754,7 @@
       "type": "box",
       "position": [
         28.5,
-        7.5,
+        6.5,
         43.5
       ],
       "rotation": 90,

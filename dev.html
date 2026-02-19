@@ -37,6 +37,17 @@
 
             <!-- Hero Editor Panel -->
             <div id="panelHeroEditor" class="dev-panel">
+                <!-- Gallery View (shown by default) -->
+                <div id="heroGalleryView">
+                    <div class="gallery-header">
+                        <h3>Heroes</h3>
+                        <button id="heroGalleryNew" class="dev-btn-primary gallery-create-btn">+ Create New Hero</button>
+                    </div>
+                    <div id="heroGalleryGrid" class="gallery-grid"></div>
+                </div>
+                <!-- Editor View (hidden by default) -->
+                <div id="heroEditorView" class="hidden">
+                <button id="heroBackToGallery" class="gallery-back-btn">&larr; Back to Heroes</button>
                 <h3>Hero Editor</h3>
                 <div id="heroEditorList">
                     <div class="dev-field">
@@ -148,6 +159,7 @@
                 <div id="heroPreviewContainer">
                     <canvas id="heroPreviewCanvas" width="280" height="260"></canvas>
                 </div>
+                </div><!-- /heroEditorView -->
             </div>
 
             <!-- Weapon Model Builder Panel -->
@@ -182,8 +194,16 @@
                 </div>
             </div>
 
-            <!-- Map Editor Panel (auto-opens via switchPanel, button hidden) -->
+            <!-- Map Editor Panel -->
             <div id="panelMapEditor" class="dev-panel">
+                <!-- Gallery View (shown by default) -->
+                <div id="mapGalleryView">
+                    <div class="gallery-header">
+                        <h3>Maps</h3>
+                        <button id="mapGalleryNew" class="dev-btn-primary gallery-create-btn">+ Create New Map</button>
+                    </div>
+                    <div id="mapGalleryGrid" class="gallery-grid"></div>
+                </div>
                 <button id="meOpen" class="dev-btn-primary" style="display:none">Open Map Editor</button>
             </div>
 

@@ -2785,4 +2785,331 @@
   // Expose view mode reapplication for devApp.js panel switching
   window._applyHeroViewMode = function () { setViewMode(_viewMode); };
 
+  // ========================
+  // HERO GALLERY
+  // ========================
+
+  function showHeroGallery() {
+    var galleryView = document.getElementById('heroGalleryView');
+    var editorView = document.getElementById('heroEditorView');
+    if (galleryView) galleryView.classList.remove('hidden');
+    if (editorView) editorView.classList.add('hidden');
+
+    // Move gallery to viewport for full-size display
+    var viewport = document.getElementById('devViewport');
+    if (galleryView && viewport) {
+      viewport.appendChild(galleryView);
+      galleryView.classList.add('viewport-mode');
+    }
+
+    populateHeroGallery();
+  }
+
+  function populateHeroGallery() {
+    var grid = document.getElementById('heroGalleryGrid');
+    if (!grid) return;
+    grid.innerHTML = '';
+
+    var heroes = window.HEROES || [];
+    if (heroes.length === 0) {
+      var empty = document.createElement('div');
+      empty.className = 'gallery-empty';
+      empty.textContent = 'No heroes yet. Click "Create New Hero" to get started.';
+      grid.appendChild(empty);
+      return;
+    }
+
+    heroes.forEach(function (hero) {
+      var card = document.createElement('div');
+      card.className = 'gallery-card';
+      card.setAttribute('data-hero-id', hero.id);
+
+      var colorBar = document.createElement('div');
+      colorBar.className = 'gallery-card-color';
+      colorBar.style.background = hero.color || '#66ffcc';
+      card.appendChild(colorBar);
+
+      var body = document.createElement('div');
+      body.className = 'gallery-card-body';
+
+      var nameEl = document.createElement('div');
+      nameEl.className = 'gallery-card-name';
+      nameEl.textContent = hero.name || hero.id;
+      body.appendChild(nameEl);
+
+      if (hero.description) {
+        var descEl = document.createElement('div');
+        descEl.className = 'gallery-card-desc';
+        descEl.textContent = hero.description;
+        body.appendChild(descEl);
+      }
+
+      // Meta badges
+      var meta = document.createElement('div');
+      meta.className = 'gallery-card-meta';
+
+      var hpBadge = document.createElement('span');
+      hpBadge.className = 'gallery-badge';
+      hpBadge.textContent = (hero.maxHealth || 100) + ' HP';
+      meta.appendChild(hpBadge);
+
+      if (hero.weapon) {
+        var wepBadge = document.createElement('span');
+        wepBadge.className = 'gallery-badge';
+        wepBadge.textContent = hero.weapon.meleeOnly ? 'Melee' : 'Ranged';
+        meta.appendChild(wepBadge);
+      }
+
+      body.appendChild(meta);
+      card.appendChild(body);
+
+      // Action buttons
+      var actions = document.createElement('div');
+      actions.className = 'gallery-card-actions';
+
+      var renameBtn = document.createElement('button');
+      renameBtn.className = 'gallery-action-btn';
+      renameBtn.title = 'Rename';
+      renameBtn.innerHTML = '&#9998;'; // pencil
+      renameBtn.addEventListener('click', function (e) {
+        e.stopPropagation();
+        startInlineRename(card, hero);
+      });
+      actions.appendChild(renameBtn);
+
+      var deleteBtn = document.createElement('button');
+      deleteBtn.className = 'gallery-action-btn gallery-delete-btn';
+      deleteBtn.title = 'Delete';
+      deleteBtn.innerHTML = '&#10005;'; // X
+      deleteBtn.addEventListener('click', function (e) {
+        e.stopPropagation();
+        deleteHeroFromGallery(hero.id, hero.name || hero.id);
+      });
+      actions.appendChild(deleteBtn);
+
+      card.appendChild(actions);
+
+      // Click card to open editor
+      card.addEventListener('click', function () {
+        openHeroEditor(hero.id);
+      });
+
+      grid.appendChild(card);
+    });
+  }
+
+  function startInlineRename(card, hero) {
+    var nameEl = card.querySelector('.gallery-card-name');
+    if (!nameEl) return;
+    var currentName = hero.name || hero.id;
+
+    var input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'gallery-rename-input';
+    input.value = currentName;
+    nameEl.textContent = '';
+    nameEl.appendChild(input);
+    input.focus();
+    input.select();
+
+    function commit() {
+      var newName = input.value.trim();
+      if (!newName || newName === currentName) {
+        nameEl.textContent = currentName;
+        return;
+      }
+      renameHero(hero.id, newName).then(function () {
+        hero.name = newName;
+        nameEl.textContent = newName;
+      }).catch(function () {
+        nameEl.textContent = currentName;
+      });
+    }
+
+    input.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') { input.blur(); }
+      if (e.key === 'Escape') { nameEl.textContent = currentName; }
+    });
+    input.addEventListener('blur', commit);
+  }
+
+  function renameHero(heroId, newName) {
+    // Fetch hero, update name, save back
+    return fetch('/api/heroes/' + encodeURIComponent(heroId))
+      .then(function (r) { return r.json(); })
+      .then(function (config) {
+        config.name = newName;
+        return fetch('/api/heroes/' + encodeURIComponent(heroId), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(config)
+        });
+      })
+      .then(function (r) { return r.json(); })
+      .then(function () {
+        // Update in-memory
+        var heroes = window.HEROES || [];
+        for (var i = 0; i < heroes.length; i++) {
+          if (heroes[i].id === heroId) {
+            heroes[i].name = newName;
+            break;
+          }
+        }
+        window.dispatchEvent(new Event('heroesUpdated'));
+      });
+  }
+
+  function deleteHeroFromGallery(heroId, heroName) {
+    if (!confirm('Delete hero "' + heroName + '"?')) return;
+
+    fetch('/api/heroes/' + encodeURIComponent(heroId), { method: 'DELETE' })
+      .then(function (r) { return r.json(); })
+      .then(function () {
+        window.HEROES = (window.HEROES || []).filter(function (h) { return h.id !== heroId; });
+        window.dispatchEvent(new Event('heroesUpdated'));
+        populateHeroGallery();
+      })
+      .catch(function () { alert('Failed to delete hero'); });
+  }
+
+  function openHeroEditor(heroId) {
+    var galleryView = document.getElementById('heroGalleryView');
+    var editorView = document.getElementById('heroEditorView');
+
+    // Move gallery back to panel (out of viewport)
+    var panel = document.getElementById('panelHeroEditor');
+    if (galleryView && panel) {
+      panel.insertBefore(galleryView, panel.firstChild);
+      galleryView.classList.remove('viewport-mode');
+    }
+    if (galleryView) galleryView.classList.add('hidden');
+    if (editorView) editorView.classList.remove('hidden');
+
+    // Expand sidebar and show right panel/toolbar (existing hero editor layout)
+    var sidebar = document.getElementById('devSidebar');
+    if (sidebar) sidebar.classList.add('expanded');
+
+    var heroContainer = document.getElementById('heroPreviewContainer');
+    var viewport = document.getElementById('devViewport');
+    if (heroContainer && viewport) {
+      viewport.appendChild(heroContainer);
+      heroContainer.classList.add('viewport-mode');
+      setTimeout(function () {
+        if (typeof window._resizeHeroEditorPreview === 'function') {
+          window._resizeHeroEditorPreview();
+        }
+      }, 50);
+    }
+
+    // Show right panel and toolbar
+    var rightPanel = document.getElementById('devRightPanel');
+    var rightExpandTab = document.getElementById('devRightPanelExpand');
+    if (rightPanel) {
+      rightPanel.classList.remove('hidden');
+      if (rightExpandTab) rightExpandTab.classList.toggle('hidden', !rightPanel.classList.contains('collapsed'));
+    }
+    var heToolbar = document.getElementById('heViewportToolbar');
+    if (heToolbar) heToolbar.classList.remove('hidden');
+
+    // Apply view mode (sets correct right panel content)
+    if (typeof window._applyHeroViewMode === 'function') {
+      window._applyHeroViewMode();
+    }
+
+    // Select the hero in the dropdown and trigger change
+    if (typeof populateHeroDropdown === 'function') {
+      populateHeroDropdown('heHeroSelect');
+    }
+    var heSelect = document.getElementById('heHeroSelect');
+    if (heSelect) {
+      heSelect.value = heroId;
+      heSelect.dispatchEvent(new Event('change'));
+    }
+  }
+
+  function backToHeroGallery() {
+    var galleryView = document.getElementById('heroGalleryView');
+    var editorView = document.getElementById('heroEditorView');
+    if (editorView) editorView.classList.add('hidden');
+
+    // Collapse editor layout — return preview to panel, hide right panel/toolbar
+    var heroContainer = document.getElementById('heroPreviewContainer');
+    var heroPanel = document.getElementById('panelHeroEditor');
+    if (heroContainer && heroPanel && heroContainer.classList.contains('viewport-mode')) {
+      heroContainer.classList.remove('viewport-mode');
+      heroPanel.appendChild(heroContainer);
+    }
+
+    var sidebar = document.getElementById('devSidebar');
+    if (sidebar) sidebar.classList.remove('expanded');
+
+    var rightPanel = document.getElementById('devRightPanel');
+    if (rightPanel) rightPanel.classList.add('hidden');
+    var rightExpandTab = document.getElementById('devRightPanelExpand');
+    if (rightExpandTab) rightExpandTab.classList.add('hidden');
+    var heToolbar = document.getElementById('heViewportToolbar');
+    if (heToolbar) heToolbar.classList.add('hidden');
+
+    showHeroGallery();
+    if (typeof resizeRenderer === 'function') setTimeout(resizeRenderer, 50);
+  }
+
+  // Wire gallery buttons
+  var heroGalleryNewBtn = document.getElementById('heroGalleryNew');
+  if (heroGalleryNewBtn) {
+    heroGalleryNewBtn.addEventListener('click', function () {
+      // Create a new hero with defaults, then open editor
+      var newId = 'custom_' + Date.now();
+      var defaultConfig = {
+        id: newId,
+        name: 'New Hero',
+        description: '',
+        color: '#66ffcc',
+        maxHealth: 100,
+        walkSpeed: 4.5,
+        sprintSpeed: 8.5,
+        jumpVelocity: 8.5,
+        weapon: {
+          cooldownMs: 166,
+          magSize: 6,
+          reloadTimeSec: 2.5,
+          damage: 20,
+          spreadRad: 0,
+          sprintSpreadRad: 0.012,
+          maxRange: 200,
+          pellets: 1,
+          projectileSpeed: 120,
+          projectileGravity: 0
+        }
+      };
+
+      // Save to server first so it persists
+      fetch('/api/heroes/' + encodeURIComponent(newId), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(defaultConfig)
+      }).then(function (r) { return r.json(); }).then(function () {
+        var heroes = window.HEROES || [];
+        heroes.push(defaultConfig);
+        window.HEROES = heroes;
+        window.dispatchEvent(new Event('heroesUpdated'));
+        openHeroEditor(newId);
+      }).catch(function () {
+        alert('Failed to create hero');
+      });
+    });
+  }
+
+  var heroBackBtn = document.getElementById('heroBackToGallery');
+  if (heroBackBtn) {
+    heroBackBtn.addEventListener('click', function () {
+      backToHeroGallery();
+    });
+  }
+
+  // Expose gallery functions for devApp.js
+  window._showHeroGallery = showHeroGallery;
+  window._backToHeroGallery = backToHeroGallery;
+  window._openHeroEditor = openHeroEditor;
+
 })();

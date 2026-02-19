@@ -1,15 +1,17 @@
 {
   "id": "shotgun_blast_body",
-  "name": "Shotgun Blast Body",
+  "name": "Shotgun Warp",
   "synthesis": {
-    "type": "noise_burst",
-    "frequency": 700,
-    "filterType": "bandpass",
-    "filterQ": 0.8,
-    "duration": 0.06,
-    "volume": 0.3,
+    "type": "fm",
+    "carrierFreq": 180,
+    "carrierWaveform": "sawtooth",
+    "modFreq": 90,
+    "modDepth": 400,
+    "modWaveform": "sine",
+    "duration": 0.15,
+    "volume": 0.35,
     "attack": 0.001,
-    "decay": 0.059
+    "decay": 0.149
   },
   "bindings": [
     { "event": "weapon_fire", "filter": { "weaponModelType": "shotgun" } }

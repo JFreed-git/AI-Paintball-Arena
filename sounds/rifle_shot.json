@@ -1,15 +1,17 @@
 {
   "id": "rifle_shot",
-  "name": "Rifle Shot",
+  "name": "Rifle Zap",
   "synthesis": {
-    "type": "noise_burst",
-    "frequency": 800,
-    "filterType": "bandpass",
-    "filterQ": 1.0,
-    "duration": 0.05,
+    "type": "fm",
+    "carrierFreq": 1200,
+    "carrierWaveform": "square",
+    "modFreq": 3000,
+    "modDepth": 800,
+    "modWaveform": "sine",
+    "duration": 0.04,
     "volume": 0.35,
     "attack": 0.001,
-    "decay": 0.049
+    "decay": 0.039
   },
   "bindings": [
     { "event": "weapon_fire", "filter": { "weaponModelType": "rifle" } }

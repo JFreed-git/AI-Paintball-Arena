@@ -1,16 +1,16 @@
 {
   "id": "own_death",
-  "name": "Own Death Impact",
+  "name": "Death Implosion",
   "synthesis": {
     "type": "impact",
-    "bodyFreq": 50,
-    "bodyDecay": 0.2,
-    "noiseFreq": 80,
+    "bodyFreq": 35,
+    "bodyDecay": 0.3,
+    "noiseFreq": 60,
     "noiseFilterType": "lowpass",
-    "noiseFilterQ": 0.8,
-    "noiseDuration": 0.15,
-    "mix": 0.6,
-    "volume": 0.45
+    "noiseFilterQ": 1,
+    "noiseDuration": 0.2,
+    "mix": 0.7,
+    "volume": 0.5
   },
   "bindings": [
     { "event": "own_death", "filter": {} }
