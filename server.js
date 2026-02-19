@@ -367,6 +367,19 @@ function buildPlayerList(room) {
       isHost: id === room.hostId
     });
   });
+  // Append AI bot entries so all clients can see them
+  if (room.aiSlots && room.aiSlots.length > 0) {
+    for (var i = 0; i < room.aiSlots.length; i++) {
+      var ai = room.aiSlots[i];
+      list.push({
+        id: 'ai-slot-' + i,
+        name: 'AI Bot ' + (i + 1),
+        isBot: true,
+        hero: ai.hero || 'random',
+        difficulty: ai.difficulty || 'Medium'
+      });
+    }
+  }
   return list;
 }
 
@@ -387,7 +400,7 @@ io.on('connection', (socket) => {
     var hostName = (settings && typeof settings.playerName === 'string') ? settings.playerName.substring(0, 30) : 'Host';
     playerNames.set(socket.id, hostName);
     readyState.set(socket.id, true); // host is always ready
-    rooms.set(roomId, { hostId: socket.id, players: new Set([socket.id]), settings: sanitized, playerNames: playerNames, readyState: readyState });
+    rooms.set(roomId, { hostId: socket.id, players: new Set([socket.id]), settings: sanitized, playerNames: playerNames, readyState: readyState, aiSlots: [] });
     socket.join(roomId);
     currentRoom = roomId;
     io.to(roomId).emit('playerList', buildPlayerList(rooms.get(roomId)));
@@ -437,6 +450,24 @@ io.on('connection', (socket) => {
     const room = rooms.get(currentRoom);
     if (!room || socket.id !== room.hostId) return;
     socket.to(currentRoom).emit('snapshot', payload);
+  });
+
+  // Host updates AI bot slots — store and broadcast to all players
+  socket.on('updateAISlots', (slots) => {
+    const room = rooms.get(currentRoom);
+    if (!room || socket.id !== room.hostId) return;
+    // Sanitize: only allow array of { hero, difficulty }
+    room.aiSlots = [];
+    if (Array.isArray(slots)) {
+      for (var i = 0; i < slots.length && i < 7; i++) {
+        var s = slots[i];
+        room.aiSlots.push({
+          hero: (s && typeof s.hero === 'string') ? s.hero.substring(0, 50) : 'random',
+          difficulty: (s && typeof s.difficulty === 'string') ? s.difficulty.substring(0, 10) : 'Medium'
+        });
+      }
+    }
+    io.to(currentRoom).emit('playerList', buildPlayerList(room));
   });
 
   // Optional: host can update settings mid-room and notify client
@@ -541,13 +572,21 @@ io.on('connection', (socket) => {
     room.readyState.delete(socket.id);
 
     if (socket.id === room.hostId) {
-      // Host left: close room
-      io.to(currentRoom).emit('roomClosed');
-      rooms.delete(currentRoom);
+      // Host left: transfer to next player or close room
+      if (room.players.size > 0) {
+        // Promote first remaining player to host
+        const newHostId = room.players.values().next().value;
+        room.hostId = newHostId;
+        const newHostName = room.playerNames.get(newHostId) || 'Player';
+        io.to(currentRoom).emit('hostTransfer', { newHostId: newHostId, newHostName: newHostName });
+        io.to(currentRoom).emit('playerList', buildPlayerList(room));
+      } else {
+        // No players left: silently delete room
+        rooms.delete(currentRoom);
+      }
     } else {
-      // Client left
+      // Client left: notify host and broadcast updated player list
       io.to(room.hostId).emit('clientLeft', { clientId: socket.id });
-      // Broadcast updated player list to remaining players
       io.to(currentRoom).emit('playerList', buildPlayerList(room));
     }
     currentRoom = null;

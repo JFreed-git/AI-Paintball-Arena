@@ -641,20 +641,46 @@ function lobbyRenderSlots() {
 
   container.innerHTML = '';
 
-  // Map players: slot 0 = host, rest = remote players in order
-  var slotPlayers = {};
+  // Separate human players and bot entries from playerList
+  var humanPlayers = [];
+  var serverBots = [];
   for (var p = 0; p < playerList.length; p++) {
-    if (playerList[p].isHost) {
-      slotPlayers[0] = playerList[p];
+    if (playerList[p].isBot) {
+      serverBots.push(playerList[p]);
+    } else {
+      humanPlayers.push(playerList[p]);
+    }
+  }
+
+  // Map human players: slot 0 = host, rest = remote players in order
+  var slotPlayers = {};
+  for (var hp = 0; hp < humanPlayers.length; hp++) {
+    if (humanPlayers[hp].isHost) {
+      slotPlayers[0] = humanPlayers[hp];
     }
   }
   var nextSlot = 1;
-  for (var p2 = 0; p2 < playerList.length; p2++) {
-    if (!playerList[p2].isHost) {
+  for (var hp2 = 0; hp2 < humanPlayers.length; hp2++) {
+    if (!humanPlayers[hp2].isHost) {
       // Bump AI from this slot if needed
       if (aiSlots[nextSlot]) delete aiSlots[nextSlot];
-      slotPlayers[nextSlot] = playerList[p2];
+      slotPlayers[nextSlot] = humanPlayers[hp2];
       nextSlot++;
+    }
+  }
+
+  // For non-host clients, populate aiSlots from server bot entries
+  if (!isHost) {
+    // Clear any stale bot entries from previous renders
+    aiSlots = {};
+    if (serverBots.length > 0) {
+      var botSlot = nextSlot;
+      for (var sb = 0; sb < serverBots.length; sb++) {
+        while (botSlot < maxPlayers && slotPlayers[botSlot]) botSlot++;
+        if (botSlot >= maxPlayers) break;
+        aiSlots[botSlot] = { hero: serverBots[sb].hero || 'random', difficulty: serverBots[sb].difficulty || 'Medium' };
+        botSlot++;
+      }
     }
   }
 
@@ -751,6 +777,7 @@ function lobbyRenderAISlot(row, slotIndex, aiConfig, isHost) {
       var idx = parseInt(this.getAttribute('data-slot'), 10);
       if (window._lobbyState && window._lobbyState.aiSlots[idx]) {
         window._lobbyState.aiSlots[idx].hero = this.value;
+        lobbySyncAISlotsToServer();
       }
     });
     row.appendChild(heroSel);
@@ -772,6 +799,7 @@ function lobbyRenderAISlot(row, slotIndex, aiConfig, isHost) {
       var idx = parseInt(this.getAttribute('data-slot'), 10);
       if (window._lobbyState && window._lobbyState.aiSlots[idx]) {
         window._lobbyState.aiSlots[idx].difficulty = this.value;
+        lobbySyncAISlotsToServer();
       }
     });
     row.appendChild(diffSel);
@@ -787,24 +815,54 @@ function lobbyRenderAISlot(row, slotIndex, aiConfig, isHost) {
     });
     row.appendChild(removeBtn);
   } else {
-    var infoSpan = document.createElement('span');
-    infoSpan.className = 'player-ready';
-    infoSpan.textContent = (aiConfig.difficulty || 'Medium') + ' AI';
-    infoSpan.style.color = '#55bbff';
-    row.appendChild(infoSpan);
+    // Non-host: read-only bot display with hero name and difficulty
+    var heroName = aiConfig.hero || 'random';
+    if (heroName !== 'random') {
+      var heroes = lobbyGetHeroNames();
+      for (var hi = 0; hi < heroes.length; hi++) {
+        if (heroes[hi].id === heroName) { heroName = heroes[hi].name; break; }
+      }
+    } else {
+      heroName = 'Random';
+    }
+    var heroSpan = document.createElement('span');
+    heroSpan.className = 'player-ready';
+    heroSpan.textContent = heroName + ' / ' + (aiConfig.difficulty || 'Medium');
+    heroSpan.style.color = '#55bbff';
+    row.appendChild(heroSpan);
+
+    var botBadge = document.createElement('span');
+    botBadge.className = 'player-ready host-badge';
+    botBadge.textContent = 'BOT';
+    botBadge.style.color = '#55bbff';
+    row.appendChild(botBadge);
   }
 }
 
 function lobbyAddAI(slotIndex) {
   if (!window._lobbyState || !window._lobbyState.isHost) return;
   window._lobbyState.aiSlots[slotIndex] = { hero: 'random', difficulty: 'Medium' };
+  lobbySyncAISlotsToServer();
   lobbyRenderSlots();
 }
 
 function lobbyRemoveAI(slotIndex) {
   if (!window._lobbyState || !window._lobbyState.isHost) return;
   delete window._lobbyState.aiSlots[slotIndex];
+  lobbySyncAISlotsToServer();
   lobbyRenderSlots();
+}
+
+// Send current AI slot configs to the server so all clients see them
+function lobbySyncAISlotsToServer() {
+  if (!window._lobbySocket || !window._lobbyState || !window._lobbyState.isHost) return;
+  var slots = [];
+  var keys = Object.keys(window._lobbyState.aiSlots || {});
+  for (var i = 0; i < keys.length; i++) {
+    var ai = window._lobbyState.aiSlots[keys[i]];
+    slots.push({ hero: ai.hero || 'random', difficulty: ai.difficulty || 'Medium' });
+  }
+  window._lobbySocket.emit('updateAISlots', slots);
 }
 
 // Collect all slot configs for game start

@@ -1775,6 +1775,18 @@
     socket.on('startRound', function (data) {
       if (!state || state.isHost) return;
       window._roundTransition = false;
+      // If hero select is still open, auto-confirm current hero before starting round
+      if (window._heroSelectOpen && typeof window.closePreRoundHeroSelect === 'function') {
+        var localEntry = state.players[state.localId];
+        var curHero = (typeof window.getCurrentHeroId === 'function') ? window.getCurrentHeroId() : 'marksman';
+        if (localEntry) {
+          applyHeroWeapon(localEntry.entity, curHero);
+          localEntry.heroId = curHero;
+          sharedSetMeleeOnlyHUD(!!localEntry.entity.weapon.meleeOnly, state.hud.ammoDisplay, state.hud.reloadIndicator, state.hud.meleeCooldown);
+        }
+        if (socket) socket.emit('heroSelect', { heroId: curHero, clientId: state.localId });
+        window.closePreRoundHeroSelect();
+      }
       var secs = (data && data.seconds) || COUNTDOWN_SECONDS;
       resetAllPlayersForRound();
       updateHUDForLocalPlayer();
