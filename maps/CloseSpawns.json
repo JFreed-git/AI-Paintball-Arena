@@ -6,25 +6,27 @@
     "length": 20,
     "wallHeight": 3.5
   },
-  "spawns": [
-    {
-      "id": "spawn_1",
-      "position": [
-        1,
-        0,
-        -6
-      ],
-      "team": "A"
-    },
-    {
-      "id": "spawn_2",
-      "position": [
-        1,
-        0,
-        6
-      ],
-      "team": "B"
-    }
-  ],
+  "spawns": {
+    "ffa": [
+      {
+        "id": "spawn_1",
+        "position": [
+          1,
+          0,
+          -6
+        ],
+        "team": 1
+      },
+      {
+        "id": "spawn_2",
+        "position": [
+          1,
+          0,
+          6
+        ],
+        "team": 2
+      }
+    ]
+  },
   "objects": []
 }
