@@ -78,31 +78,48 @@ function computeMoveDirXZ(moveZ, moveX) {
 
 // Raycast downward to find the highest walkable surface at a given XZ position.
 // Returns the Y of the ground surface (top of geometry), or GROUND_Y if nothing found.
+// Uses multiple rays at foot corners to avoid missing block edges.
 // pos: THREE.Vector3 (XZ used), solids: array of THREE.Mesh, feetY: current feet Y,
 // grounded: boolean (when airborne, accept any surface below feetY; when grounded, limit to step height)
-function getGroundHeight(pos, solids, feetY, grounded) {
+// radius: optional player radius for multi-ray spread (defaults to 0.3)
+function getGroundHeight(pos, solids, feetY, grounded, radius) {
   if (!solids || solids.length === 0) return GROUND_Y;
 
   var currentFeetY = (typeof feetY === 'number') ? feetY : GROUND_Y;
+  var r = (typeof radius === 'number') ? radius : 0.3;
   var rc = new THREE.Raycaster();
-  // Cast from well above the player downward
-  var origin = new THREE.Vector3(pos.x, currentFeetY + EYE_HEIGHT + 5, pos.z);
-  rc.set(origin, new THREE.Vector3(0, -1, 0));
-  rc.far = origin.y - GROUND_Y + 10;
+  var downDir = new THREE.Vector3(0, -1, 0);
+  var originY = currentFeetY + EYE_HEIGHT + 5;
+  var farDist = originY - GROUND_Y + 10;
 
-  var hits = rc.intersectObjects(solids, true);
+  // Cast from center + 4 foot corners to reliably detect ground at block edges
+  var offsets = [
+    [0, 0],
+    [r * 0.7, 0], [-r * 0.7, 0],
+    [0, r * 0.7], [0, -r * 0.7]
+  ];
+
   var bestY = GROUND_Y;
-  for (var i = 0; i < hits.length; i++) {
-    var hitY = hits[i].point.y;
-    if (grounded) {
-      // When grounded, only accept surfaces within step tolerance above current feet
-      if (hitY > bestY && hitY <= currentFeetY + MAX_STEP_HEIGHT + 0.1) {
-        bestY = hitY;
-      }
-    } else {
-      // When airborne/falling, accept any surface at or below current feet position
-      if (hitY > bestY && hitY <= currentFeetY) {
-        bestY = hitY;
+  for (var o = 0; o < offsets.length; o++) {
+    rc.set(
+      new THREE.Vector3(pos.x + offsets[o][0], originY, pos.z + offsets[o][1]),
+      downDir
+    );
+    rc.far = farDist;
+
+    var hits = rc.intersectObjects(solids, true);
+    for (var i = 0; i < hits.length; i++) {
+      var hitY = hits[i].point.y;
+      if (grounded) {
+        // When grounded, only accept surfaces within step tolerance above current feet
+        if (hitY > bestY && hitY <= currentFeetY + MAX_STEP_HEIGHT + 0.1) {
+          bestY = hitY;
+        }
+      } else {
+        // When airborne/falling, accept any surface at or below current feet position
+        if (hitY > bestY && hitY <= currentFeetY) {
+          bestY = hitY;
+        }
       }
     }
   }
@@ -240,6 +257,17 @@ function resolveCollisions3D(state, colliders) {
       var penDown = headY - box.min.y;          // push down (ceiling hit)
       var penUp = box.max.y - feetY;            // push up (land on top)
 
+      // Surface-snap bias: when feet are close to a block's top surface,
+      // prefer snapping up onto it rather than pushing in X/Z (prevents
+      // edge-of-block oscillation where two adjacent blocks fight each other)
+      if (penUp <= MAX_STEP_HEIGHT && penUp < penDown) {
+        state.feetY = box.max.y;
+        state.verticalVelocity = 0;
+        state.grounded = true;
+        resolved = true;
+        continue;
+      }
+
       // Find minimum penetration
       var minPen = Math.min(penPosX, penNegX, penPosZ, penNegZ, penDown, penUp);
 
@@ -293,15 +321,20 @@ function updateFullPhysics(state, input, arena, dt) {
     state.position.z += dir.z * speed * dt;
   }
 
-  // 3. Detect ground height at new XZ
+  // 3. Detect ground height at new XZ (multi-ray for edge robustness)
   var solids = (arena && arena.solids) ? arena.solids : [];
-  var groundH = getGroundHeight(state.position, solids, state.feetY, state.grounded);
+  var pRadius = state.radius || 0.3;
+  var groundH = getGroundHeight(state.position, solids, state.feetY, state.grounded, pRadius);
 
   // 4. Jump (use per-hero _jumpVelocity if available, else global JUMP_VELOCITY)
   if (input.jump && state.grounded) {
     state.verticalVelocity = (state._jumpVelocity != null) ? state._jumpVelocity : JUMP_VELOCITY;
     state.grounded = false;
   }
+
+  // Drop threshold: use hysteresis — require a larger gap before becoming airborne
+  // to prevent oscillation at block edges where ground detection may flicker
+  var dropThreshold = MAX_STEP_HEIGHT + 0.15;
 
   // 5. Apply gravity when not grounded
   if (!state.grounded) {
@@ -316,7 +349,7 @@ function updateFullPhysics(state, input, arena, dt) {
     }
   } else {
     // 6. Grounded: snap to ground, detect drops
-    if (groundH < state.feetY - MAX_STEP_HEIGHT) {
+    if (groundH < state.feetY - dropThreshold) {
       // Ground dropped away — start falling
       state.grounded = false;
       state.verticalVelocity = 0;
@@ -332,9 +365,9 @@ function updateFullPhysics(state, input, arena, dt) {
   }
 
   // 8. Recheck ground after collision push-out (may have been pushed to different XZ)
-  var groundH2 = getGroundHeight(state.position, solids, state.feetY, state.grounded);
+  var groundH2 = getGroundHeight(state.position, solids, state.feetY, state.grounded, pRadius);
   if (state.grounded) {
-    if (groundH2 < state.feetY - MAX_STEP_HEIGHT) {
+    if (groundH2 < state.feetY - dropThreshold) {
       state.grounded = false;
       state.verticalVelocity = 0;
     } else {
