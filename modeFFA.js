@@ -904,7 +904,7 @@
   function handleReload(id, now) {
     var entry = state.players[id];
     if (!entry || !entry.entity) return;
-    if (sharedHandleReload(entry.entity.weapon, now)) {
+    if (sharedHandleReload(entry.entity.weapon, now, entry.heroId)) {
       if (id === state.localId) sharedSetReloadingUI(false, state.hud.reloadIndicator);
     }
   }
@@ -978,10 +978,10 @@
     ms.swinging = true;
     ms.swingEnd = now + w.meleeSwingMs;
     if (id === state.localId) {
-      if (typeof playGameSound === 'function') playGameSound('melee_swing');
+      if (typeof playGameSound === 'function') playGameSound('melee_swing', { heroId: entry.heroId || undefined });
       if (typeof window.triggerFPMeleeSwing === 'function') window.triggerFPMeleeSwing(w.meleeSwingMs);
     } else {
-      if (typeof playGameSound === 'function') playGameSound('melee_swing', { _worldPos: entry.entity.position });
+      if (typeof playGameSound === 'function') playGameSound('melee_swing', { heroId: entry.heroId || undefined, _worldPos: entry.entity.position });
     }
     if (entry.entity.triggerMeleeSwing) entry.entity.triggerMeleeSwing(w.meleeSwingMs);
 
@@ -1001,7 +1001,7 @@
     var inp = entry.entity.input;
 
     if (inp.reloadPressed) {
-      if (sharedStartReload(w, now)) {
+      if (sharedStartReload(w, now, entry.heroId)) {
         if (id === state.localId) sharedSetReloadingUI(true, state.hud.reloadIndicator);
       }
       inp.reloadPressed = false;
@@ -1012,7 +1012,7 @@
     if ((now - w.lastShotTime) < w.cooldownMs) return;
     if (w.ammo <= 0) {
       if (id === state.localId && typeof playGameSound === 'function') playGameSound('dry_fire');
-      if (sharedStartReload(w, now)) {
+      if (sharedStartReload(w, now, entry.heroId)) {
         if (id === state.localId) sharedSetReloadingUI(true, state.hud.reloadIndicator);
       }
       return;
@@ -1028,6 +1028,7 @@
 
     var result = sharedFireWeapon(w, origin, dir, {
       sprinting: !!inp.sprint,
+      heroId: entry.heroId || undefined,
       solids: state.arena.solids,
       targets: hitInfo.targets,
       projectileTargetEntities: hitInfo.entities,
@@ -1087,7 +1088,7 @@
 
     if (id === state.localId) updateHUDForLocalPlayer();
     if (result.magazineEmpty) {
-      if (sharedStartReload(w, now)) {
+      if (sharedStartReload(w, now, entry.heroId)) {
         if (id === state.localId) sharedSetReloadingUI(true, state.hud.reloadIndicator);
       }
     }
@@ -1151,11 +1152,12 @@
 
         // Movement sounds
         if (typeof playGameSound === 'function') {
-          if (prevGrounded && !entry.entity.grounded) playGameSound('jump');
-          if (!prevGrounded && entry.entity.grounded) playGameSound('land');
+          var _hid = entry.heroId || undefined;
+          if (prevGrounded && !entry.entity.grounded) playGameSound('jump', { heroId: _hid });
+          if (!prevGrounded && entry.entity.grounded) playGameSound('land', { heroId: _hid });
           var moving = (entry.entity.input.moveX !== 0 || entry.entity.input.moveZ !== 0);
           if (moving && entry.entity.grounded && typeof playFootstepIfDue === 'function') {
-            playFootstepIfDue(!!entry.entity.input.sprint, null, now);
+            playFootstepIfDue(!!entry.entity.input.sprint, entry.heroId, now);
           }
         }
       } else {
@@ -1209,11 +1211,12 @@
         // Movement sounds for remote players (spatial)
         if (typeof playGameSound === 'function') {
           var remotePos = entry.entity.position;
-          if (prevGroundedRemote && !entry.entity.grounded) playGameSound('jump', { _worldPos: remotePos });
-          if (!prevGroundedRemote && entry.entity.grounded) playGameSound('land', { _worldPos: remotePos });
+          var _rhid = entry.heroId || undefined;
+          if (prevGroundedRemote && !entry.entity.grounded) playGameSound('jump', { heroId: _rhid, _worldPos: remotePos });
+          if (!prevGroundedRemote && entry.entity.grounded) playGameSound('land', { heroId: _rhid, _worldPos: remotePos });
           var remoteMoving = (entry.entity.input.moveX !== 0 || entry.entity.input.moveZ !== 0);
           if (remoteMoving && entry.entity.grounded && typeof playFootstepIfDue === 'function') {
-            playFootstepIfDue(!!entry.entity.input.sprint, null, now, remotePos);
+            playFootstepIfDue(!!entry.entity.input.sprint, entry.heroId, now, remotePos);
           }
         }
 
@@ -1369,23 +1372,24 @@
       p.syncCameraFromPlayer();
 
       if (typeof playGameSound === 'function') {
-        if (prevGrounded && !p.grounded) playGameSound('jump');
-        if (!prevGrounded && p.grounded) playGameSound('land');
+        var _chid = localEntry.heroId || undefined;
+        if (prevGrounded && !p.grounded) playGameSound('jump', { heroId: _chid });
+        if (!prevGrounded && p.grounded) playGameSound('land', { heroId: _chid });
         var moving = (p.input.moveX !== 0 || p.input.moveZ !== 0);
         if (moving && p.grounded && typeof playFootstepIfDue === 'function') {
-          playFootstepIfDue(!!p.input.sprint, null, now);
+          playFootstepIfDue(!!p.input.sprint, localEntry.heroId, now);
         }
       }
     }
 
     // Handle local reload completion
     if (p.weapon.reloading && now >= p.weapon.reloadEnd) {
-      if (sharedHandleReload(p.weapon, now)) {
+      if (sharedHandleReload(p.weapon, now, localEntry.heroId)) {
         sharedSetReloadingUI(false, state.hud.reloadIndicator);
       }
     }
     if (p.input.reloadPressed && !p.weapon.reloading) {
-      if (sharedStartReload(p.weapon, now)) {
+      if (sharedStartReload(p.weapon, now, localEntry.heroId)) {
         sharedSetReloadingUI(true, state.hud.reloadIndicator);
       }
       p.input.reloadPressed = false;
@@ -1404,7 +1408,7 @@
         clientMs.swinging = true;
         clientMs.swingEnd = now + w.meleeSwingMs;
         w.lastMeleeTime = now;
-        if (typeof playGameSound === 'function') playGameSound('melee_swing');
+        if (typeof playGameSound === 'function') playGameSound('melee_swing', { heroId: localEntry.heroId || undefined });
         if (typeof window.triggerFPMeleeSwing === 'function') window.triggerFPMeleeSwing(w.meleeSwingMs);
         if (p.triggerMeleeSwing) p.triggerMeleeSwing(w.meleeSwingMs);
       }
@@ -1792,7 +1796,7 @@
       if (entry && entry.entity && entry.entity.triggerMeleeSwing) {
         entry.entity.triggerMeleeSwing(data.swingMs || 300);
       }
-      if (typeof playGameSound === 'function') playGameSound('melee_swing', { _worldPos: (entry && entry.entity) ? entry.entity.position : null });
+      if (typeof playGameSound === 'function') playGameSound('melee_swing', { heroId: (entry && entry.heroId) || undefined, _worldPos: (entry && entry.entity) ? entry.entity.position : null });
     });
 
     // Between-round hero re-selection (clients)
@@ -2044,7 +2048,7 @@
     if (lobbyPlayers) {
       for (var lp = 0; lp < lobbyPlayers.length; lp++) {
         var lpId = lobbyPlayers[lp].id;
-        if (lpId && lpId !== state.localId && !state.players[lpId]) {
+        if (lpId && lpId !== state.localId && !lobbyPlayers[lp].isBot && !state.players[lpId]) {
           addRemotePlayer(lpId);
         }
       }
