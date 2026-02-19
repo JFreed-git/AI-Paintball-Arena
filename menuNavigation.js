@@ -524,6 +524,68 @@ function lobbyGetMaxPlayers() {
   return 6;
 }
 
+// Get available team numbers from map spawn data
+function lobbyGetAvailableTeams() {
+  var cfg = window.gameSetupConfig || {};
+  var mapData = cfg.mapData;
+  if (!mapData || !mapData.spawns) return [];
+  var spawns = window.normalizeSpawns ? window.normalizeSpawns(mapData.spawns) : mapData.spawns;
+  var mode = cfg.mode || 'ffa';
+  var spawnList = (spawns && spawns[mode]) || (spawns && spawns.ffa) || [];
+  if (Array.isArray(spawns)) spawnList = spawns;
+  var teamSet = {};
+  for (var i = 0; i < spawnList.length; i++) {
+    var t = spawnList[i].team;
+    if (t > 0) teamSet[t] = true;
+  }
+  var teams = Object.keys(teamSet).map(function (k) { return parseInt(k, 10); });
+  teams.sort();
+  return teams;
+}
+
+// Team label names
+var TEAM_LABELS = { 0: 'Auto', 1: 'Team 1', 2: 'Team 2', 3: 'Team 3', 4: 'Team 4' };
+
+// Create a team selector element for a player/AI in the lobby
+function lobbyCreateTeamSelector(playerId, currentTeam, availableTeams, isHost) {
+  if (!availableTeams || availableTeams.length === 0) return null;
+  if (isHost) {
+    var sel = document.createElement('select');
+    sel.className = 'lobby-team-select';
+    sel.setAttribute('data-player-id', playerId);
+    var autoOpt = document.createElement('option');
+    autoOpt.value = '0';
+    autoOpt.textContent = 'Auto';
+    sel.appendChild(autoOpt);
+    for (var t = 0; t < availableTeams.length; t++) {
+      var opt = document.createElement('option');
+      opt.value = String(availableTeams[t]);
+      opt.textContent = TEAM_LABELS[availableTeams[t]] || ('Team ' + availableTeams[t]);
+      sel.appendChild(opt);
+    }
+    sel.value = String(currentTeam || 0);
+    sel.addEventListener('change', function () {
+      var pid = this.getAttribute('data-player-id');
+      var team = parseInt(this.value, 10);
+      if (window._lobbyState) {
+        window._lobbyState.teamAssignments[pid] = team;
+      }
+      if (window._lobbySocket) {
+        window._lobbySocket.emit('setPlayerTeam', pid, team);
+      }
+    });
+    return sel;
+  } else {
+    if (currentTeam && currentTeam > 0) {
+      var label = document.createElement('span');
+      label.className = 'lobby-team-label';
+      label.textContent = TEAM_LABELS[currentTeam] || ('Team ' + currentTeam);
+      return label;
+    }
+    return null;
+  }
+}
+
 // Get hero names for AI dropdown
 function lobbyGetHeroNames() {
   var heroes = window.HEROES || [];
@@ -547,6 +609,7 @@ function lobbyShowAsHost() {
     ready: true,
     playerList: [],
     aiSlots: {},
+    teamAssignments: {},
     maxPlayers: maxPlayers,
     joinedFrom: 'gameSetupMenu'
   };
@@ -609,6 +672,7 @@ window.lobbyJoinRoom = function (roomId, onError) {
     ready: false,
     playerList: [],
     aiSlots: {},
+    teamAssignments: {},
     maxPlayers: 6,
     joinedFrom: 'startGameMenu'
   };
@@ -658,6 +722,7 @@ function lobbyRenderSlots() {
   var playerList = ls.playerList || [];
   var aiSlots = ls.aiSlots || {};
   var isHost = ls.isHost;
+  var availableTeams = lobbyGetAvailableTeams();
 
   container.innerHTML = '';
 
@@ -725,6 +790,12 @@ function lobbyRenderSlots() {
       hostBadge.className = 'player-ready host-badge';
       hostBadge.textContent = 'HOST';
       row.appendChild(hostBadge);
+
+      // Team selector for host
+      var hostId = (slotPlayers[0] && slotPlayers[0].id) || 'host';
+      var hostTeam = (ls.teamAssignments && ls.teamAssignments[hostId]) || (slotPlayers[0] && slotPlayers[0].team) || 0;
+      var hostTeamEl = lobbyCreateTeamSelector(hostId, hostTeam, availableTeams, true);
+      if (hostTeamEl) row.appendChild(hostTeamEl);
     } else if (player) {
       // Remote player
       row.classList.toggle('is-ready', !!player.ready);
@@ -738,6 +809,11 @@ function lobbyRenderSlots() {
       pStatus.textContent = player.ready ? 'READY' : '';
       if (player.ready) pStatus.classList.add('is-ready');
       row.appendChild(pStatus);
+
+      // Team selector for remote player
+      var pTeam = (ls.teamAssignments && ls.teamAssignments[player.id]) || player.team || 0;
+      var pTeamEl = lobbyCreateTeamSelector(player.id, pTeam, availableTeams, isHost);
+      if (pTeamEl) row.appendChild(pTeamEl);
     } else if (ai) {
       // AI slot
       row.classList.add('ai-slot');

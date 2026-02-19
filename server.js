@@ -360,12 +360,16 @@ const rooms = new Map();
 function buildPlayerList(room) {
   var list = [];
   room.players.forEach(function (id) {
-    list.push({
+    var entry = {
       id: id,
       name: room.playerNames.get(id) || 'Player',
       ready: room.readyState.get(id) || false,
       isHost: id === room.hostId
-    });
+    };
+    if (room.teamAssignments && room.teamAssignments.has(id)) {
+      entry.team = room.teamAssignments.get(id);
+    }
+    list.push(entry);
   });
   // Append AI bot entries so all clients can see them
   if (room.aiSlots && room.aiSlots.length > 0) {
@@ -400,7 +404,7 @@ io.on('connection', (socket) => {
     var hostName = (settings && typeof settings.playerName === 'string') ? settings.playerName.substring(0, 30) : 'Host';
     playerNames.set(socket.id, hostName);
     readyState.set(socket.id, true); // host is always ready
-    rooms.set(roomId, { hostId: socket.id, players: new Set([socket.id]), settings: sanitized, playerNames: playerNames, readyState: readyState, aiSlots: [] });
+    rooms.set(roomId, { hostId: socket.id, players: new Set([socket.id]), settings: sanitized, playerNames: playerNames, readyState: readyState, aiSlots: [], teamAssignments: new Map() });
     socket.join(roomId);
     currentRoom = roomId;
     io.to(roomId).emit('playerList', buildPlayerList(rooms.get(roomId)));
@@ -507,6 +511,20 @@ io.on('connection', (socket) => {
     if (!room || !room.players.has(socket.id)) return;
     room.readyState.set(socket.id, !!ready);
     io.to(roomId || currentRoom).emit('playerList', buildPlayerList(room));
+  });
+
+  // Host assigns a team to a player
+  socket.on('setPlayerTeam', (targetId, team) => {
+    const room = rooms.get(currentRoom);
+    if (!room || socket.id !== room.hostId) return;
+    if (typeof team === 'number' && team >= 0) {
+      if (team === 0) {
+        room.teamAssignments.delete(targetId);
+      } else {
+        room.teamAssignments.set(targetId, team);
+      }
+    }
+    io.to(currentRoom).emit('playerList', buildPlayerList(room));
   });
 
   // Host starts the game — solo start allowed (AI bots are client-side)
