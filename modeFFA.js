@@ -926,8 +926,21 @@
     if (w.reloading) return true;
     if ((now - w.lastMeleeTime) < w.meleeCooldownMs) return true;
 
-    var dir = getPlayerDirection(id);
-    var origin = getPlayerOrigin(id);
+    // For remote (non-host, non-AI) players, use precise aim data sent with melee input
+    var dir, origin;
+    var pending = (id !== state.localId && !entry.isAI) ? state._remoteInputPending[id] : null;
+    if (pending && pending.meleeOrigin) {
+      origin = new THREE.Vector3(pending.meleeOrigin[0], pending.meleeOrigin[1], pending.meleeOrigin[2]);
+    } else {
+      origin = getPlayerOrigin(id);
+    }
+    if (pending && pending.meleeDir) {
+      dir = new THREE.Vector3(pending.meleeDir[0], pending.meleeDir[1], pending.meleeDir[2]).normalize();
+    } else {
+      dir = getPlayerDirection(id);
+    }
+    // Clear melee aim data after use
+    if (pending) { pending.meleeOrigin = null; pending.meleeDir = null; }
     var hitInfo = buildHitTargets(id);
 
     sharedMeleeAttack(w, origin, dir, {
@@ -1378,6 +1391,9 @@
       p.input.reloadPressed = false;
     }
 
+    // Capture melee intent before prediction consumes it (needed for host input send)
+    var meleeIntent = !!p.input.meleeDown;
+
     // Client-side melee prediction (animation + sound + HUD only, no damage)
     var clientMs = state._meleeSwingState[state.localId];
     if (!clientMs) { clientMs = { swinging: false, swingEnd: 0 }; state._meleeSwingState[state.localId] = clientMs; }
@@ -1425,16 +1441,22 @@
     if (socket && entry.alive) {
       var dir = new THREE.Vector3();
       camera.getWorldDirection(dir);
-      socket.emit('input', {
+      var inputPacket = {
         moveX: p.input.moveX,
         moveZ: p.input.moveZ,
         sprint: p.input.sprint,
         jump: enabled && !!rawInput.jump,
         fireDown: p.input.fireDown,
         reloadPressed: enabled && !!rawInput.reloadPressed,
-        meleeDown: p.input.meleeDown,
+        meleeDown: meleeIntent,
         forward: [dir.x, dir.y, dir.z]
-      });
+      };
+      // Include precise aim data with melee so host can use client's exact position/direction
+      if (meleeIntent) {
+        inputPacket.meleeOrigin = [camera.position.x, camera.position.y, camera.position.z];
+        inputPacket.meleeDir = [dir.x, dir.y, dir.z];
+      }
+      socket.emit('input', inputPacket);
     }
 
     updateHUDForLocalPlayer();
@@ -1680,7 +1702,12 @@
       if (!state._remoteInputPending[cid]) state._remoteInputPending[cid] = { jump: false, reload: false, melee: false };
       if (payload.jump) state._remoteInputPending[cid].jump = true;
       if (payload.reloadPressed) state._remoteInputPending[cid].reload = true;
-      if (payload.meleeDown) state._remoteInputPending[cid].melee = true;
+      if (payload.meleeDown) {
+        state._remoteInputPending[cid].melee = true;
+        // Store precise aim data from client for melee hit detection
+        if (payload.meleeOrigin) state._remoteInputPending[cid].meleeOrigin = payload.meleeOrigin;
+        if (payload.meleeDir) state._remoteInputPending[cid].meleeDir = payload.meleeDir;
+      }
       state._remoteInputs[cid] = payload;
     });
 
