@@ -2546,12 +2546,29 @@
   }
 
   function onDeleteMap() {
-    var sel = document.getElementById('editorLoadSelect');
-    var name = sel.value;
+    var name = mapData.name;
     if (!name) return;
-    if (!confirm('Delete map "' + name + '"?')) return;
+    if (!confirm('Delete map "' + name + '"? This cannot be undone.')) return;
     deleteMapFromServer(name).then(function () {
-      onLoadOpen();
+      // Reset to a fresh map (same as onNew but without the confirm)
+      mapData = {
+        name: 'new-map',
+        version: 2,
+        arena: { width: 60, length: 90, wallHeight: 3.5 },
+        spawns: { ffa: [
+          { id: 'spawn_1', position: [0, 0, -37], team: 0 },
+          { id: 'spawn_2', position: [0, 0, 37], team: 0 }
+        ]},
+        objects: []
+      };
+      _currentSpawnMode = 'ffa';
+      _nextId = 1;
+      _nextMirrorPairId = 1;
+      _nextQuadGroupId = 1;
+      _nextSpawnId = 3;
+      document.getElementById('esMapName').value = 'new-map';
+      rebuildEditorScene();
+      settingsPanel.classList.add('hidden');
       showEditorToast('Deleted: ' + name);
     }).catch(function () { alert('Failed to delete.'); });
   }
