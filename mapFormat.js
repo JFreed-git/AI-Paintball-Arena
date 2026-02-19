@@ -430,11 +430,27 @@
     group.add(floorMesh);
     solids.push(floorMesh);
 
-    // Perimeter walls
-    addSolidBox(0, wallHeight / 2 + GROUND_Y, -halfL, halfW * 2, wallHeight, 0.5, wallMat);
-    addSolidBox(0, wallHeight / 2 + GROUND_Y,  halfL, halfW * 2, wallHeight, 0.5, wallMat);
-    addSolidBox(-halfW, wallHeight / 2 + GROUND_Y, 0, 0.5, wallHeight, halfL * 2, wallMat);
-    addSolidBox( halfW, wallHeight / 2 + GROUND_Y, 0, 0.5, wallHeight, halfL * 2, wallMat);
+    // Perimeter walls — visual mesh uses wallHeight, collider uses infinite height (9999)
+    // so players can never escape the map by jumping over walls
+    var WALL_COLLIDER_HEIGHT = 9999;
+    function addPerimeterWall(x, z, sx, sz) {
+      // Visual mesh at normal wallHeight
+      var geom = new THREE.BoxGeometry(sx, wallHeight, sz);
+      var mesh = new THREE.Mesh(geom, wallMat);
+      mesh.position.set(x, wallHeight / 2 + GROUND_Y, z);
+      group.add(mesh);
+      solids.push(mesh);
+      // Collider extends from ground to effectively infinite height
+      var box = new THREE.Box3(
+        new THREE.Vector3(x - sx / 2, GROUND_Y, z - sz / 2),
+        new THREE.Vector3(x + sx / 2, GROUND_Y + WALL_COLLIDER_HEIGHT, z + sz / 2)
+      );
+      colliders.push(box);
+    }
+    addPerimeterWall(0, -halfL, halfW * 2, 0.5);
+    addPerimeterWall(0,  halfL, halfW * 2, 0.5);
+    addPerimeterWall(-halfW, 0, 0.5, halfL * 2);
+    addPerimeterWall( halfW, 0, 0.5, halfL * 2);
 
     // Build objects from map data
     var objs = mapData.objects || [];
