@@ -1618,7 +1618,7 @@
       }
       // Prefer pre-loaded mapData from game setup (avoids re-fetch + silent fallback)
       if (preloadedMapData) {
-        doStartLobby(preloadedMapData);
+        try { doStartLobby(preloadedMapData); } catch (err) { console.error('FFA session start failed:', err); }
       } else if (mapName && mapName !== '__default__' && typeof fetchMapData === 'function') {
         fetchMapData(mapName).then(doStartLobby).catch(function (err) { console.error('Map fetch failed, using default:', err); doStartLobby(null); });
       } else {
@@ -1637,7 +1637,7 @@
 
     // Prefer pre-loaded mapData from game setup
     if (preloadedMapData) {
-      doHost(preloadedMapData);
+      try { doHost(preloadedMapData); } catch (err) { console.error('FFA host start failed:', err); }
     } else if (mapName && mapName !== '__default__' && typeof fetchMapData === 'function') {
       fetchMapData(mapName).then(doHost).catch(function (err) { console.error('Map fetch failed, using default:', err); doHost(null); });
     } else {
@@ -1975,7 +1975,7 @@
     }
 
     // Spawn AI bots from lobby slots
-    spawnAIPlayers();
+    try { spawnAIPlayers(); } catch (aiErr) { console.error('Failed to spawn AI players:', aiErr); }
 
     // Add remote human players already in the lobby (clientJoined fires during
     // lobby phase before FFA handlers are attached, so those events are missed)
