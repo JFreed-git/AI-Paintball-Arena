@@ -1650,10 +1650,27 @@
     _handlersAttached = true;
 
     socket.on('roomClosed', function () {
-      alert('Host left. Room closed.');
       stopFFAInternal();
       showOnlyMenu('mainMenu');
       setHUDVisible(false);
+    });
+
+    socket.on('hostTransfer', function (payload) {
+      if (!state || !payload) return;
+      // Remove the old host's player entity
+      if (payload.oldHostId && state.players[payload.oldHostId]) {
+        removePlayer(payload.oldHostId);
+      }
+      if (payload.newHostId === state.localId) {
+        // This client is the new host
+        state.isHost = true;
+        showRoundBanner('You are now the host', 3000);
+        if (window._lobbyState) {
+          window._lobbyState.isHost = true;
+        }
+      } else {
+        showRoundBanner('Host transferred', 2000);
+      }
     });
 
     // Remote player input (host receives)

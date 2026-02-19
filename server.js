@@ -578,7 +578,7 @@ io.on('connection', (socket) => {
         const newHostId = room.players.values().next().value;
         room.hostId = newHostId;
         const newHostName = room.playerNames.get(newHostId) || 'Player';
-        io.to(currentRoom).emit('hostTransfer', { newHostId: newHostId, newHostName: newHostName });
+        io.to(currentRoom).emit('hostTransfer', { newHostId: newHostId, newHostName: newHostName, oldHostId: socket.id });
         io.to(currentRoom).emit('playerList', buildPlayerList(room));
       } else {
         // No players left: silently delete room
