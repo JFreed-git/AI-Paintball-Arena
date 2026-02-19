@@ -167,10 +167,11 @@ function onGlobalKeyDown(e) {
     return;
   }
 
-  // Tab key: show FFA scoreboard while held
+  // Tab key: show FFA scoreboard while held (during gameplay or lobby)
   if (e.code === 'Tab') {
     e.preventDefault();
-    if (window.ffaActive) {
+    var hasRoom = window._lobbyState && window._lobbyState.roomId;
+    if (window.ffaActive || hasRoom) {
       var sb = document.getElementById('scoreboardOverlay');
       if (sb) sb.classList.remove('hidden');
       if (typeof window.updateFFAScoreboard === 'function') window.updateFFAScoreboard();

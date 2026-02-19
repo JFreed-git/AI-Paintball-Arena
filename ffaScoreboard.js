@@ -114,6 +114,13 @@
     if (!rows) return;
     var entries = buildSortedScoreList();
     renderRows(rows, entries);
+
+    // Show room ID if in a lobby/game with a room
+    var roomIdEl = document.getElementById('scoreboardRoomId');
+    if (roomIdEl) {
+      var roomId = window._lobbyState && window._lobbyState.roomId;
+      roomIdEl.textContent = roomId ? 'Room: ' + roomId : '';
+    }
   };
 
   // ── Public: show post-match results ──
