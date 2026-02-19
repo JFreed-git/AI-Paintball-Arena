@@ -1911,7 +1911,8 @@
 
   function addRemotePlayer(clientId) {
     if (!state || state.players[clientId]) return;
-    var team = assignTeam();
+    var lobbyTeam = state._lobbyTeamAssignments && state._lobbyTeamAssignments[clientId];
+    var team = (lobbyTeam && lobbyTeam > 0) ? lobbyTeam : assignTeam();
     var spawnPos = getTeamSpawnPosition(team);
     var p = createPlayerInstance({
       position: spawnPos,
@@ -2001,9 +2002,13 @@
       ];
     }
 
+    // Store lobby team assignments for use during player creation
+    state._lobbyTeamAssignments = (settings && settings.teamAssignments) || {};
+
     // Create host player with team assignment
     _colorIdx = 0;
-    var hostTeam = assignTeam(); // Will be team 1 (first player)
+    var lobbyHostTeam = state._lobbyTeamAssignments[state.localId];
+    var hostTeam = (lobbyHostTeam && lobbyHostTeam > 0) ? lobbyHostTeam : assignTeam();
     var hostSpawn = getTeamSpawnPosition(hostTeam);
     var hostPlayer = createPlayerInstance({
       position: hostSpawn,

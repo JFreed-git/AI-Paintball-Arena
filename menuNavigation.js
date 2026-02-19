@@ -476,13 +476,33 @@ function lobbyEnsureSocket() {
   sock.on('playerList', function (list) {
     if (!window._lobbyState) return;
     window._lobbyState.playerList = list;
+    // Sync team assignments from server data
+    if (!window._lobbyState.isHost) {
+      var ta = {};
+      for (var i = 0; i < list.length; i++) {
+        if (list[i].team) ta[list[i].id] = list[i].team;
+      }
+      window._lobbyState.teamAssignments = ta;
+    }
     lobbyRenderSlots();
   });
 
   sock.on('roomClosed', function () {
-    alert('Host left. Room closed.');
     lobbyCleanup();
     showOnlyMenu('gameSetupMenu');
+  });
+
+  sock.on('hostTransfer', function (payload) {
+    if (!window._lobbyState || !payload) return;
+    if (payload.newHostId === sock.id) {
+      window._lobbyState.isHost = true;
+      // Show start button, hide ready button
+      var readyBtn = document.getElementById('lobbyReadyBtn');
+      var startBtn = document.getElementById('lobbyStartBtn');
+      if (readyBtn) readyBtn.classList.add('hidden');
+      if (startBtn) startBtn.classList.remove('hidden');
+    }
+    lobbyRenderSlots();
   });
 
   sock.on('gameStarted', function (payload) {
@@ -896,7 +916,8 @@ function launchFFAFromLobby() {
       mode: cfg.mode || 'ffa',
       rounds: cfg.rounds || 3,
       noRespawns: !!cfg.noRespawns,
-      aiConfigs: slotData.aiConfigs
+      aiConfigs: slotData.aiConfigs,
+      teamAssignments: ls.teamAssignments || {}
     };
     if (typeof window.startFFAHost === 'function') {
       window.startFFAHost(ls.roomId, settings, lobbySock);

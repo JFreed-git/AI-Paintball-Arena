@@ -496,6 +496,27 @@ body {
     outline: none;
 }
 
+.lobby-team-select {
+    padding: 2px 4px;
+    background: #1a1a1a;
+    color: #ccc;
+    border: 1px solid #444;
+    border-radius: 4px;
+    font-size: 11px;
+    outline: none;
+    margin-left: auto;
+}
+
+.lobby-team-label {
+    font-size: 11px;
+    color: #88ccff;
+    margin-left: auto;
+    padding: 1px 6px;
+    border: 1px solid #335;
+    border-radius: 3px;
+    background: rgba(80, 130, 200, 0.15);
+}
+
 .ai-remove-btn {
     background: transparent;
     border: 1px solid #555;
