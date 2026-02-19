@@ -287,6 +287,85 @@
     applyPlayerMeshVisibility(_modelVisible);
   }
 
+  // --- Hitbox/Body-Part linking helpers ---
+
+  function getBaseName(name) {
+    return (name || '').replace(/_hitbox$|_visual$|_part$/, '');
+  }
+
+  function findLinkedBodyPartIndices(hitboxSeg) {
+    var result = [];
+    for (var i = 0; i < _bodyParts.length; i++) {
+      if (_bodyParts[i].linkedTo === hitboxSeg.name) result.push(i);
+    }
+    return result;
+  }
+
+  function findLinkedHitboxSegment(bodyPart) {
+    if (!bodyPart.linkedTo) return -1;
+    for (var i = 0; i < _hitboxSegments.length; i++) {
+      if (_hitboxSegments[i].name === bodyPart.linkedTo) return i;
+    }
+    return -1;
+  }
+
+  function autoLinkByName() {
+    for (var i = 0; i < _bodyParts.length; i++) {
+      if (_bodyParts[i].linkedTo) continue;
+      var baseName = getBaseName(_bodyParts[i].name);
+      if (!baseName || baseName === 'part' || baseName === 'segment') continue;
+      for (var j = 0; j < _hitboxSegments.length; j++) {
+        if (getBaseName(_hitboxSegments[j].name) === baseName) {
+          _bodyParts[i].linkedTo = _hitboxSegments[j].name;
+          break;
+        }
+      }
+    }
+  }
+
+  function syncBodyPartToHitbox(hitboxIndex) {
+    var seg = _hitboxSegments[hitboxIndex];
+    if (!seg) return;
+    var linkedIndices = findLinkedBodyPartIndices(seg);
+    if (linkedIndices.length === 0) return;
+    var feetY = getPreviewFeetY();
+    var mfo = computeBodyPartsMfo();
+    for (var k = 0; k < linkedIndices.length; k++) {
+      var pi = linkedIndices[k];
+      var part = _bodyParts[pi];
+      part.offsetX = Math.round((seg.offsetX / 2) * 100) / 100;
+      part.offsetY = Math.max(0, Math.round(((seg.offsetY - mfo) / 2) * 100) / 100);
+      part.offsetZ = Math.round((seg.offsetZ / 2) * 100) / 100;
+      var mesh = _bodyPartPreviewMeshes[pi];
+      if (mesh) {
+        mesh.position.set(
+          (part.offsetX || 0) * 2,
+          feetY + mfo + (part.offsetY || 0) * 2,
+          (part.offsetZ || 0) * 2
+        );
+      }
+    }
+    syncBodyPartFormFromData();
+  }
+
+  function syncHitboxToBodyPart(bodyPartIndex) {
+    var part = _bodyParts[bodyPartIndex];
+    if (!part || !part.linkedTo) return;
+    var segIndex = findLinkedHitboxSegment(part);
+    if (segIndex < 0) return;
+    var seg = _hitboxSegments[segIndex];
+    var feetY = getPreviewFeetY();
+    var mfo = computeBodyPartsMfo();
+    seg.offsetX = Math.round((part.offsetX * 2) * 100) / 100;
+    seg.offsetY = Math.max(0, Math.round((part.offsetY * 2 + mfo) * 100) / 100);
+    seg.offsetZ = Math.round((part.offsetZ * 2) * 100) / 100;
+    var mesh = _hitboxPreviewMeshes[segIndex];
+    if (mesh) {
+      mesh.position.set(seg.offsetX || 0, feetY + seg.offsetY, seg.offsetZ || 0);
+    }
+    syncFormFromSegments();
+  }
+
   // --- Hitbox move callback (called by interaction engine) ---
 
   function onHitboxMove(index, newPos) {
@@ -323,6 +402,9 @@
 
     // Sync form fields
     syncFormFromSegments();
+
+    // Sync linked body parts
+    syncBodyPartToHitbox(index);
   }
 
   // --- Hitbox resize callback (called by interaction engine) ---
@@ -475,6 +557,10 @@
       },
       onMoveStart: function (index) {
         pushUndo();
+        if (index >= 0 && index < _hitboxSegments.length &&
+            findLinkedBodyPartIndices(_hitboxSegments[index]).length > 0) {
+          pushBodyPartUndo();
+        }
       },
       onMove: function (index, newPos) {
         onHitboxMove(index, newPos);
@@ -513,7 +599,12 @@
       getObjects: function () { return _bodyPartPreviewMeshes; },
       getHandleParent: function () { return _bodyPartGroup; },
       onSelect: function (index) { selectBodyPart(index); },
-      onMoveStart: function () { pushBodyPartUndo(); },
+      onMoveStart: function (index) {
+        pushBodyPartUndo();
+        if (index >= 0 && index < _bodyParts.length && _bodyParts[index].linkedTo) {
+          pushUndo();
+        }
+      },
       onMove: function (index, newPos) { onBodyPartMove(index, newPos); },
       onMoveEnd: function () {},
       getHandleDefs: function (index) { return getBodyPartHandleDefs(index); },
@@ -696,6 +787,9 @@
     var mesh = _bodyPartPreviewMeshes[index];
     if (mesh) mesh.position.set(newPos.x, newPos.y, newPos.z);
     syncBodyPartFormFromData();
+
+    // Sync linked hitbox segment
+    syncHitboxToBodyPart(index);
   }
 
   function onBodyPartResizeStart(index) {
@@ -812,11 +906,47 @@
 
       var header = document.createElement('div');
       header.className = 'wmb-part-header';
-      header.innerHTML = '<span>' + (part.name || 'part').toUpperCase() + ' #' + (i + 1) + '</span>';
+      var isLinked = !!part.linkedTo;
+      var linkLabel = isLinked
+        ? ' <span style="color:#44ddff;font-size:11px;font-weight:normal">[linked: ' + part.linkedTo + ']</span>'
+        : '';
+      header.innerHTML = '<span>' + (part.name || 'part').toUpperCase() + ' #' + (i + 1) + linkLabel + '</span>';
       var removeBtn = document.createElement('button');
       removeBtn.className = 'wmb-part-remove';
       removeBtn.textContent = 'Remove';
       removeBtn.addEventListener('click', function () { removeBodyPart(i); });
+      var linkBtn = document.createElement('button');
+      linkBtn.className = 'wmb-part-remove';
+      linkBtn.style.marginRight = '4px';
+      linkBtn.textContent = isLinked ? 'Unlink' : 'Link';
+      linkBtn.title = isLinked
+        ? 'Unlink from hitbox segment "' + part.linkedTo + '"'
+        : 'Link to a hitbox segment by matching name';
+      (function (idx, linked) {
+        linkBtn.addEventListener('click', function () {
+          if (linked) {
+            _bodyParts[idx].linkedTo = null;
+          } else {
+            var baseName = getBaseName(_bodyParts[idx].name);
+            var found = false;
+            if (baseName && baseName !== 'part' && baseName !== 'segment') {
+              for (var j = 0; j < _hitboxSegments.length; j++) {
+                if (getBaseName(_hitboxSegments[j].name) === baseName) {
+                  _bodyParts[idx].linkedTo = _hitboxSegments[j].name;
+                  found = true;
+                  break;
+                }
+              }
+            }
+            if (!found && idx < _hitboxSegments.length) {
+              _bodyParts[idx].linkedTo = _hitboxSegments[idx].name;
+            }
+          }
+          renderBodyPartList();
+          renderHitboxSegmentList();
+        });
+      })(i, isLinked);
+      header.insertBefore(linkBtn, removeBtn);
       header.appendChild(removeBtn);
       div.appendChild(header);
 
@@ -877,6 +1007,9 @@
             part[f.key] = inputVal;
           }
           updateBodyPartPreview();
+          if (f.key === 'offsetX' || f.key === 'offsetY' || f.key === 'offsetZ') {
+            syncHitboxToBodyPart(i);
+          }
         });
         row.appendChild(lbl);
         row.appendChild(inp);
@@ -1461,6 +1594,7 @@
           rotationZ: p.rotationZ || 0
         };
         if (p.color) out.color = p.color;
+        if (p.linkedTo) out.linkedTo = p.linkedTo;
         var shape = p.shape || 'box';
         if (shape === 'sphere') out.radius = p.radius || 0.25;
         else if (shape === 'cylinder' || shape === 'capsule') { out.radius = p.radius || 0.3; out.height = p.height || 0.5; }
@@ -1546,12 +1680,14 @@
           rotationX: p.rotationX || 0,
           rotationY: p.rotationY || 0,
           rotationZ: p.rotationZ || 0,
-          color: p.color || null
+          color: p.color || null,
+          linkedTo: p.linkedTo || null
         };
       });
     } else {
       _bodyParts = [];
     }
+    autoLinkByName();
     _selectedBodyPartIndex = -1;
     if (_bodyInteractionCtrl) _bodyInteractionCtrl.clearHandles();
 
@@ -1780,6 +1916,12 @@
 
   function removeHitboxSegment(index) {
     pushUndo();
+    var seg = _hitboxSegments[index];
+    if (seg) {
+      for (var i = 0; i < _bodyParts.length; i++) {
+        if (_bodyParts[i].linkedTo === seg.name) _bodyParts[i].linkedTo = null;
+      }
+    }
     if (index === _selectedHitboxIndex) {
       _selectedHitboxIndex = -1;
       if (_hitboxInteractionCtrl) _hitboxInteractionCtrl.clearHandles();
@@ -1832,7 +1974,11 @@
 
       var header = document.createElement('div');
       header.className = 'wmb-part-header';
-      header.innerHTML = '<span>' + (seg.name || 'segment').toUpperCase() + ' #' + (i + 1) + '</span>';
+      var linkedParts = findLinkedBodyPartIndices(seg);
+      var linkLabel = linkedParts.length > 0
+        ? ' <span style="color:#44ddff;font-size:11px;font-weight:normal">[linked]</span>'
+        : '';
+      header.innerHTML = '<span>' + (seg.name || 'segment').toUpperCase() + ' #' + (i + 1) + linkLabel + '</span>';
       var removeBtn = document.createElement('button');
       removeBtn.className = 'wmb-part-remove';
       removeBtn.textContent = 'Remove';
@@ -1903,7 +2049,19 @@
         inp.addEventListener('input', function () {
           pushUndoForFormInput();
           if (f.type === 'text') {
-            seg[f.key] = inp.value;
+            if (f.key === 'name') {
+              var oldName = seg.name;
+              seg[f.key] = inp.value;
+              if (oldName !== inp.value) {
+                for (var li = 0; li < _bodyParts.length; li++) {
+                  if (_bodyParts[li].linkedTo === oldName) {
+                    _bodyParts[li].linkedTo = inp.value;
+                  }
+                }
+              }
+            } else {
+              seg[f.key] = inp.value;
+            }
           } else {
             seg[f.key] = parseFloat(inp.value) || 0;
           }
@@ -1914,6 +2072,9 @@
             }
           }
           updateHeroPreview();
+          if (f.key === 'offsetX' || f.key === 'offsetY' || f.key === 'offsetZ') {
+            syncBodyPartToHitbox(i);
+          }
         });
         row.appendChild(lbl);
         row.appendChild(inp);

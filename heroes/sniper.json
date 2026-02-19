@@ -85,6 +85,7 @@
       "rotationX": 0,
       "rotationY": 0,
       "rotationZ": 0,
+      "linkedTo": "head",
       "radius": 0.15
     },
     {
@@ -96,6 +97,7 @@
       "rotationX": 0,
       "rotationY": 0,
       "rotationZ": 0,
+      "linkedTo": "torso",
       "radius": 0.165,
       "height": 1
     }

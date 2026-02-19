@@ -80,6 +80,7 @@
       "rotationY": 0,
       "rotationZ": 0,
       "color": "#50d7aa",
+      "linkedTo": "head",
       "radius": 0.2
     },
     {
@@ -92,6 +93,7 @@
       "rotationY": 0,
       "rotationZ": 0,
       "color": "#22a076",
+      "linkedTo": "torso",
       "radius": 0.225,
       "height": 0.75
     }

@@ -87,6 +87,7 @@
       "rotationX": 0,
       "rotationY": 0,
       "rotationZ": 0,
+      "linkedTo": "head_hitbox",
       "width": 0.5,
       "height": 0.3,
       "depth": 0.5
@@ -101,6 +102,7 @@
       "rotationY": 0,
       "rotationZ": 0,
       "color": "#ff670f",
+      "linkedTo": "torso_hitbox",
       "width": 0.6,
       "height": 0.9,
       "depth": 0.6

@@ -82,6 +82,7 @@
       "rotationY": 0,
       "rotationZ": 0,
       "color": "#007a00",
+      "linkedTo": "body_hitbox",
       "width": 0.25,
       "height": 0.75,
       "depth": 0.25
@@ -96,6 +97,7 @@
       "rotationY": 0,
       "rotationZ": 0,
       "color": "#00fe00",
+      "linkedTo": "head_hitbox",
       "radius": 0.15
     }
   ],
