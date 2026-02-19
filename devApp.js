@@ -39,7 +39,13 @@ window.setFirstPersonWeapon = function (modelType, fpOffset, fpRotation) {
     camera.remove(_fpWeaponGroup);
     _fpWeaponGroup.traverse(function (c) {
       if (c.geometry) c.geometry.dispose();
-      if (c.material) c.material.dispose();
+      if (c.material) {
+        if (Array.isArray(c.material)) {
+          c.material.forEach(function (m) { m.dispose(); });
+        } else {
+          c.material.dispose();
+        }
+      }
     });
     _fpWeaponGroup = null;
   }
@@ -58,9 +64,18 @@ window.setFirstPersonWeapon = function (modelType, fpOffset, fpRotation) {
 
   _fpWeaponGroup.traverse(function (c) {
     if (c.isMesh && c.material) {
-      c.material = c.material.clone();
-      c.material.depthTest = false;
-      c.material.depthWrite = false;
+      if (Array.isArray(c.material)) {
+        c.material = c.material.map(function (m) {
+          var cl = m.clone();
+          cl.depthTest = false;
+          cl.depthWrite = false;
+          return cl;
+        });
+      } else {
+        c.material = c.material.clone();
+        c.material.depthTest = false;
+        c.material.depthWrite = false;
+      }
       c.renderOrder = 999;
     }
   });
@@ -589,6 +604,58 @@ function populateAllDropdowns() {
  * heroes from filesystem into window.HEROES.
  */
 function loadAllHeroes() {
+  // Try direct filesystem read first (Electron only — much more reliable)
+  if (window.devAPI && typeof window.devAPI.listHeroes === 'function') {
+    _loadHeroesDirect();
+    return;
+  }
+
+  // Fallback: fetch-based loading (server mode)
+  _loadHeroesFetch();
+}
+
+function _loadHeroesDirect() {
+  var builtins = window.BUILTIN_HEROES || [];
+
+  // Seed built-in heroes if not already on disk
+  builtins.forEach(function (hero) {
+    try {
+      var res = window.devAPI.readHero(hero.id);
+      if (res.status === 404) {
+        window.devAPI.writeHero(hero.id, hero);
+      }
+    } catch (e) {
+      console.error('[loadAllHeroes] seed error for', hero.id, e);
+    }
+  });
+
+  // Read all heroes from filesystem
+  try {
+    var names = window.devAPI.listHeroes();
+    var heroes = [];
+    names.forEach(function (name) {
+      try {
+        var res = window.devAPI.readHero(name);
+        if (res.data && res.data.id) {
+          heroes.push(res.data);
+        } else if (res.status === 200 && res.id) {
+          // readHero might return the hero directly in some formats
+          heroes.push(res);
+        }
+      } catch (e) {
+        console.error('[loadAllHeroes] failed to read hero:', name, e);
+      }
+    });
+    if (heroes.length) {
+      window.HEROES = heroes;
+    }
+  } catch (e) {
+    console.error('[loadAllHeroes] failed to list/read heroes:', e);
+  }
+  populateAllDropdowns();
+}
+
+function _loadHeroesFetch() {
   var builtins = window.BUILTIN_HEROES || [];
 
   // Seed: write each built-in hero if it doesn't already exist
@@ -601,45 +668,46 @@ function loadAllHeroes() {
           body: JSON.stringify(hero)
         });
       }
-    }).catch(function () {});
+    }).catch(function (err) {
+      console.error('[loadAllHeroes] seed error for', hero.id, err);
+    });
   });
 
   // After seeding, load all heroes from filesystem
   Promise.all(seedPromises).then(function () {
     return fetch('/api/heroes').then(function (r) { return r.json(); });
   }).then(function (names) {
+    if (!Array.isArray(names)) {
+      console.error('[loadAllHeroes] /api/heroes returned non-array:', names);
+      names = [];
+    }
     var promises = names.map(function (name) {
       return fetch('/api/heroes/' + encodeURIComponent(name)).then(function (r) { return r.json(); });
     });
     return Promise.all(promises);
   }).then(function (heroes) {
     if (heroes && heroes.length) {
-      window.HEROES = heroes;
+      var valid = heroes.filter(function (h) { return h && h.id; });
+      if (valid.length) {
+        window.HEROES = valid;
+      }
     }
     populateAllDropdowns();
-  }).catch(function () {
+  }).catch(function (err) {
+    console.error('[loadAllHeroes] failed to load heroes:', err);
     populateAllDropdowns();
   });
 }
 
 function loadCustomWeaponModels() {
-  fetch('/api/weapon-models').then(function (r) { return r.json(); }).then(function (names) {
-    var promises = names.map(function (name) {
-      return fetch('/api/weapon-models/' + encodeURIComponent(name)).then(function (r) { return r.json(); });
-    });
-    return Promise.all(promises);
-  }).then(function (models) {
-    (models || []).forEach(function (modelDef) {
-      if (modelDef && modelDef.modelType) {
-        registerCustomWeaponModel(modelDef);
+  if (typeof window.loadCustomWeaponModelsFromServer === 'function') {
+    window.loadCustomWeaponModelsFromServer().then(function () {
+      populateModelTypeDropdown('heModelType');
+      if (typeof window._refreshWmbLoadList === 'function') {
+        window._refreshWmbLoadList();
       }
     });
-    populateModelTypeDropdown('heModelType');
-    // Also populate weapon model builder load dropdown
-    if (typeof window._refreshWmbLoadList === 'function') {
-      window._refreshWmbLoadList();
-    }
-  }).catch(function () {});
+  }
 }
 
 /**
