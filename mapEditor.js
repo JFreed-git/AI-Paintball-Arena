@@ -396,10 +396,10 @@
 
     var aspect = window.innerWidth / window.innerHeight;
     editorCamera = new THREE.PerspectiveCamera(75, aspect, 0.1, 500);
-    // Position above first spawn
+    // Position camera above map looking toward center
     var currentSpawns = getCurrentSpawns();
     var firstSpawn = currentSpawns[0];
-    var camZ = firstSpawn ? firstSpawn.position[2] - 15 : -52;
+    var camZ = firstSpawn ? firstSpawn.position[2] + 15 : 52;
     var camX = firstSpawn ? firstSpawn.position[0] : 0;
     editorCamera.position.set(camX, 25, camZ);
     flyYaw = 0;
@@ -432,6 +432,15 @@
         document.getElementById('esMapName').value = optMapName;
         rebuildEditorScene();
         syncSettingsUI();
+        // Reposition camera to face loaded map
+        var loadedSpawns = getCurrentSpawns();
+        var ls = loadedSpawns[0];
+        var lz = ls ? ls.position[2] + 15 : 52;
+        var lx = ls ? ls.position[0] : 0;
+        editorCamera.position.set(lx, 25, lz);
+        flyYaw = 0;
+        flyPitch = -0.6;
+        editorCamera.rotation.set(flyPitch, flyYaw, 0);
       }).catch(function () {
         console.warn('mapEditor: failed to load map "' + optMapName + '"');
       });
