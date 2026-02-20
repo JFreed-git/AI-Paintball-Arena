@@ -244,8 +244,8 @@
         var quat;
         if (window.camera && player.cameraAttached) {
           quat = window.camera.quaternion;
-        } else if (player.mesh) {
-          quat = player.mesh.quaternion;
+        } else if (player._meshGroup) {
+          quat = player._meshGroup.quaternion;
         }
         if (quat) {
           dir = new THREE.Vector3(0, 0, -1).applyQuaternion(quat);
