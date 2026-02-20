@@ -183,6 +183,8 @@
     } else {
       state.player.weapon = new Weapon(hero.weapon);
     }
+    if (typeof window.resetScopeADS === 'function') window.resetScopeADS();
+    if (typeof window.sharedClearBursts === 'function') window.sharedClearBursts();
     updateWeaponNameDisplay();
     sharedSetMeleeOnlyHUD(!!state.player.weapon.meleeOnly, state.hud.ammoDisplay, state.hud.reloadIndicator, state.hud.meleeCooldown);
     updateHUD();
@@ -256,6 +258,8 @@
 
   // ── Shooting ──
 
+  var _trainingScopeResult = { adsActive: false, spreadMultiplier: 1.0 };
+
   function handlePlayerShooting(input, now) {
     var w = state.player.weapon;
     if (w.meleeOnly) return; // No gun shooting for melee-only weapons
@@ -275,9 +279,6 @@
     }
 
     if (input.fireDown && sharedCanShoot(w, now, w.cooldownMs)) {
-      var dir = new THREE.Vector3();
-      camera.getWorldDirection(dir);
-
       // Build multi-target array from static targets and bots
       var allTargets = [];
       var allEntities = [];
@@ -295,31 +296,43 @@
         }
       }
 
-      var result = sharedFireWeapon(w, camera.position.clone(), dir, {
-        sprinting: !!input.sprint,
+      // Compute effective spread (scope reduces spread)
+      var effectiveSpread = w.spreadRad;
+      if (input.sprint) effectiveSpread = w.sprintSpreadRad;
+      if (_trainingScopeResult.adsActive) effectiveSpread *= _trainingScopeResult.spreadMultiplier;
+
+      var fireOpts = {
+        spreadOverride: effectiveSpread,
         heroId: state.currentHeroId || undefined,
         solids: state.arena.solids,
         targets: allTargets,
         projectileTargetEntities: allEntities,
         tracerColor: state.tracerColor,
         onHit: function (target, point, dist, pelletIdx, damageMultiplier) {
-          // Hitscan path: target is wrapper with .type
           if (target.type === 'target') {
             target.entity.onHit();
           } else if (target.type === 'bot') {
             target.entity.takeDamage(w.damage * (damageMultiplier || 1.0));
-          }
-          // Projectile path: target is entity directly
-          else if (typeof target.takeDamage === 'function') {
+          } else if (typeof target.takeDamage === 'function') {
             target.takeDamage(w.damage * (damageMultiplier || 1.0));
           }
           if (typeof playGameSound === 'function') playGameSound('hit_marker', { heroId: state.currentHeroId || undefined, headshot: (damageMultiplier || 1) > 1 });
           state.stats.hits++;
         }
-      });
+      };
+
+      var result;
+      if (w.burst && window.sharedStartBurst) {
+        var originFn = function () { return camera.position.clone(); };
+        var dirFn = function () { var d = new THREE.Vector3(); camera.getWorldDirection(d); return d; };
+        result = window.sharedStartBurst(w, originFn, dirFn, fireOpts);
+      } else {
+        var dir = new THREE.Vector3();
+        camera.getWorldDirection(dir);
+        result = sharedFireWeapon(w, camera.position.clone(), dir, fireOpts);
+      }
 
       state.stats.shots++;
-      // Check bot kills
       for (var i = 0; i < state.bots.length; i++) {
         if (!state.bots[i].alive && !state.bots[i]._countedKill) {
           state.stats.kills++;
@@ -415,6 +428,21 @@
       }
     }
 
+    // Scope/ADS: if hero has weapon.scope and no ability consumed secondaryDown
+    _trainingScopeResult = { adsActive: false, spreadMultiplier: 1.0 };
+    var hasSecondaryAbility = false;
+    if (state.player.abilityManager) {
+      var hudState = state.player.abilityManager.getHUDState();
+      for (var si = 0; si < hudState.length; si++) {
+        if (hudState[si].key === 'secondaryDown') { hasSecondaryAbility = true; break; }
+      }
+    }
+    if (!hasSecondaryAbility && window.updateScopeADS && state.player.weapon) {
+      _trainingScopeResult = window.updateScopeADS(state.player.weapon, !!input.secondaryDown, dt);
+    } else if (window.updateScopeADS) {
+      window.updateScopeADS(state.player.weapon, false, dt);
+    }
+
     // Melee + Shooting
     var now = performance.now();
     // Melee-only weapons: left-click triggers melee swing, not fire
@@ -422,12 +450,19 @@
       input.meleePressed = true;
       input.fireDown = false;
     }
+    // Sprint lockout: heroes with sprintLockout passive can't fire while sprinting
+    var sprintLocked = input.sprint && state.player.abilityManager && state.player.abilityManager.hasPassive('sprintLockout');
+    if (sprintLocked) {
+      input.fireDown = false;
+      input.meleePressed = false;
+    }
     handleMelee(input, now);
     if (!_meleeSwinging) handlePlayerShooting(input, now);
     updateReload(now);
 
     // Update live projectiles (all entity hitboxes are now fresh)
     if (typeof updateProjectiles === 'function') updateProjectiles(dt);
+    if (typeof window.sharedUpdateBursts === 'function') window.sharedUpdateBursts(performance.now());
 
     // Update hitbox visualization after all positions are current
     if (window.devShowHitboxes && window.updateHitboxVisuals) window.updateHitboxVisuals();
@@ -586,6 +621,8 @@
     if (state) showTrainingHUD(false);
 
     if (typeof clearAllProjectiles === 'function') clearAllProjectiles();
+    if (typeof window.sharedClearBursts === 'function') window.sharedClearBursts();
+    if (typeof window.resetScopeADS === 'function') window.resetScopeADS();
     setCrosshairDimmed(false);
     setCrosshairSpread(0);
     if (typeof clearFirstPersonWeapon === 'function') clearFirstPersonWeapon();

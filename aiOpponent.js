@@ -592,7 +592,7 @@ class AIOpponent {
         aiTargets.push({ position: ctx.playerPos, radius: ctx.playerRadius || 0.35 });
       }
       var spread = sprinting ? (this.weapon.sprintSpreadRad || this.weapon.spreadRad) : this.weapon.spreadRad;
-      var result = sharedFireWeapon(this.weapon, origin, aimDir, {
+      var fireOpts = {
         spreadOverride: spread,
         solids: this.arena.solids,
         targets: aiTargets,
@@ -602,7 +602,15 @@ class AIOpponent {
         onHit: function (target, point, dist, pelletIdx, damageMultiplier) {
           if (ctx.onPlayerHit) ctx.onPlayerHit(self.weapon.damage * (damageMultiplier || 1.0), ctx.playerEntity);
         }
-      });
+      };
+      var result;
+      if (this.weapon.burst && window.sharedStartBurst) {
+        var originFn = function () { return origin.clone(); };
+        var dirFn = function () { return aimDir.clone(); };
+        result = window.sharedStartBurst(self.weapon, originFn, dirFn, fireOpts);
+      } else {
+        result = sharedFireWeapon(this.weapon, origin, aimDir, fireOpts);
+      }
       if (result.magazineEmpty) {
         this.weapon.reloading = true;
         this.weapon.reloadEnd = now + this.weapon.reloadTimeSec * 1000;

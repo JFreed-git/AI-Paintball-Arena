@@ -264,6 +264,8 @@
       player.weapon = new Weapon(hero.weapon);
     }
     player.weapon.reset();
+    if (typeof window.resetScopeADS === 'function') window.resetScopeADS();
+    if (typeof window.sharedClearBursts === 'function') window.sharedClearBursts();
   }
 
   function createPlayerInstance(opts) {
@@ -577,6 +579,10 @@
       state._meleeSwingState[id] = { swinging: false, swingEnd: 0 };
     }
 
+    // Reset scope/bursts for new round
+    if (typeof window.resetScopeADS === 'function') window.resetScopeADS();
+    if (typeof window.sharedClearBursts === 'function') window.sharedClearBursts();
+
     // Sync local player camera
     var local = state.players[state.localId];
     if (local && local.entity) {
@@ -601,6 +607,8 @@
     }
 
     if (id === state.localId) {
+      if (typeof window.resetScopeADS === 'function') window.resetScopeADS();
+      if (typeof window.sharedClearBursts === 'function') window.sharedClearBursts();
       entry.entity.syncCameraFromPlayer();
       camera.rotation.set(0, 0, 0, 'YXZ');
       updateHUDForLocalPlayer();
@@ -763,6 +771,8 @@
     hideRespawnHeroPrompt();
     window._roundTransition = true;
     if (typeof clearAllProjectiles === 'function') clearAllProjectiles();
+    if (typeof window.sharedClearBursts === 'function') window.sharedClearBursts();
+    if (typeof window.resetScopeADS === 'function') window.resetScopeADS();
     if (typeof playGameSound === 'function') playGameSound('elimination');
 
     // Track round win by team
@@ -1054,22 +1064,24 @@
       return;
     }
 
-    var dir = getPlayerDirection(id);
-    var origin = getPlayerOrigin(id);
-    // Offset origin slightly forward and down (gun barrel position)
-    origin.add(dir.clone().multiplyScalar(0.2)).add(new THREE.Vector3(0, -0.05, 0));
-
     var hitInfo = buildHitTargets(id);
     var tracerColor = (id === state.localId) ? 0x66ffcc : 0x66aaff;
 
-    var result = sharedFireWeapon(w, origin, dir, {
-      sprinting: !!inp.sprint,
+    // Compute effective spread (scope reduces spread for local player)
+    var effectiveSpread = w.spreadRad;
+    if (inp.sprint) effectiveSpread = w.sprintSpreadRad;
+    if (id === state.localId && state._scopeResult && state._scopeResult.adsActive) {
+      effectiveSpread *= state._scopeResult.spreadMultiplier;
+    }
+
+    var fireOpts = {
+      spreadOverride: effectiveSpread,
       heroId: entry.heroId || undefined,
       solids: state.arena.solids,
       targets: hitInfo.targets,
       projectileTargetEntities: hitInfo.entities,
       tracerColor: tracerColor,
-      worldPos: (id !== state.localId) ? origin : null,
+      worldPos: (id !== state.localId) ? getPlayerOrigin(id) : null,
       onHit: function (target, point, dist, pelletIdx, damageMultiplier) {
         var victimId = null;
         var victimEntry = null;
@@ -1100,9 +1112,11 @@
       onPelletFired: function (pelletResult) {
         if (state.isHost && socket) {
           try {
+            var shotOrigin = getPlayerOrigin(id);
+            shotOrigin.add(getPlayerDirection(id).multiplyScalar(0.2)).add(new THREE.Vector3(0, -0.05, 0));
             if (w.projectileSpeed && w.projectileSpeed > 0) {
               socket.emit('shot', {
-                o: [origin.x, origin.y, origin.z],
+                o: [shotOrigin.x, shotOrigin.y, shotOrigin.z],
                 d: pelletResult.dir ? [pelletResult.dir.x, pelletResult.dir.y, pelletResult.dir.z] : [0, 0, -1],
                 c: tracerColor,
                 s: w.projectileSpeed,
@@ -1111,7 +1125,7 @@
               });
             } else if (pelletResult && pelletResult.point) {
               socket.emit('shot', {
-                o: [origin.x, origin.y, origin.z],
+                o: [shotOrigin.x, shotOrigin.y, shotOrigin.z],
                 e: [pelletResult.point.x, pelletResult.point.y, pelletResult.point.z],
                 c: tracerColor,
                 w: w.modelType
@@ -1120,7 +1134,24 @@
           } catch (e) { console.warn('ffa: shot emit failed:', e); }
         }
       }
-    });
+    };
+
+    var result;
+    if (w.burst && window.sharedStartBurst) {
+      var _id = id;
+      var originFn = function () {
+        var o = getPlayerOrigin(_id);
+        o.add(getPlayerDirection(_id).multiplyScalar(0.2)).add(new THREE.Vector3(0, -0.05, 0));
+        return o;
+      };
+      var dirFn = function () { return getPlayerDirection(_id); };
+      result = window.sharedStartBurst(w, originFn, dirFn, fireOpts);
+    } else {
+      var dir = getPlayerDirection(id);
+      var origin = getPlayerOrigin(id);
+      origin.add(dir.clone().multiplyScalar(0.2)).add(new THREE.Vector3(0, -0.05, 0));
+      result = sharedFireWeapon(w, origin, dir, fireOpts);
+    }
 
     if (id === state.localId) updateHUDForLocalPlayer();
     if (result.magazineEmpty) {
@@ -1280,13 +1311,32 @@
     }
     // Ability input activation for local player
     var localEntry = state.players[state.localId];
+    var _localSecondaryDown = false;
     if (localEntry && localEntry.entity && localEntry.entity.abilityManager && state.inputEnabled) {
       var localInput = window.getInputState ? window.getInputState() : {};
+      _localSecondaryDown = !!localInput.secondaryDown;
       var abState = localEntry.entity.abilityManager.getHUDState();
       for (var ai = 0; ai < abState.length; ai++) {
         if (localInput[abState[ai].key]) {
           localEntry.entity.abilityManager.activate(abState[ai].id);
         }
+      }
+    }
+
+    // Scope/ADS for local player: if hero has weapon.scope and no ability consumed secondaryDown
+    state._scopeResult = { adsActive: false, spreadMultiplier: 1.0 };
+    if (localEntry && localEntry.entity && localEntry.alive) {
+      var hasSecondaryAbility = false;
+      if (localEntry.entity.abilityManager) {
+        var scopeHud = localEntry.entity.abilityManager.getHUDState();
+        for (var si = 0; si < scopeHud.length; si++) {
+          if (scopeHud[si].key === 'secondaryDown') { hasSecondaryAbility = true; break; }
+        }
+      }
+      if (!hasSecondaryAbility && window.updateScopeADS && localEntry.entity.weapon) {
+        state._scopeResult = window.updateScopeADS(localEntry.entity.weapon, _localSecondaryDown, dt);
+      } else if (window.updateScopeADS) {
+        window.updateScopeADS(localEntry.entity.weapon, false, dt);
       }
     }
 
@@ -1300,6 +1350,11 @@
         entry.entity.input.meleeDown = true;
         entry.entity.input.fireDown = false;
       }
+      // Sprint lockout: heroes with sprintLockout passive can't fire while sprinting
+      if (entry.entity.input.sprint && entry.entity.abilityManager && entry.entity.abilityManager.hasPassive('sprintLockout')) {
+        entry.entity.input.fireDown = false;
+        entry.entity.input.meleeDown = false;
+      }
       var ms = state._meleeSwingState[id];
       var canShoot = handleMelee(id, now);
       if (canShoot && (!ms || !ms.swinging)) handleShooting(id, now);
@@ -1308,6 +1363,7 @@
 
     // Phase 3: Update projectiles
     if (typeof updateProjectiles === 'function') updateProjectiles(dt);
+    if (typeof window.sharedUpdateBursts === 'function') window.sharedUpdateBursts(performance.now());
 
     // Phase 4: Hitbox viz
     if (window.devShowHitboxes && window.updateHitboxVisuals) window.updateHitboxVisuals();
@@ -1540,6 +1596,25 @@
         window.updateAbilityHUD(p.abilityManager.getHUDState());
       }
     }
+
+    // Scope/ADS for client player
+    if (window.updateScopeADS && p.weapon) {
+      var cHasSecondaryAbility = false;
+      if (p.abilityManager) {
+        var cHud = p.abilityManager.getHUDState();
+        for (var ci = 0; ci < cHud.length; ci++) {
+          if (cHud[ci].key === 'secondaryDown') { cHasSecondaryAbility = true; break; }
+        }
+      }
+      if (!cHasSecondaryAbility) {
+        window.updateScopeADS(p.weapon, enabled && !!rawInput.secondaryDown, dt);
+      } else {
+        window.updateScopeADS(p.weapon, false, dt);
+      }
+    }
+
+    // Burst update for client-side visual projectiles
+    if (typeof window.sharedUpdateBursts === 'function') window.sharedUpdateBursts(performance.now());
 
     updateHUDForLocalPlayer();
   }
@@ -2428,6 +2503,8 @@
       showFFAHUD(false);
       clearKillFeed();
       if (typeof clearAllProjectiles === 'function') clearAllProjectiles();
+      if (typeof window.sharedClearBursts === 'function') window.sharedClearBursts();
+      if (typeof window.resetScopeADS === 'function') window.resetScopeADS();
       setCrosshairDimmed(false);
       setCrosshairSpread(0);
       if (typeof clearFirstPersonWeapon === 'function') clearFirstPersonWeapon();
