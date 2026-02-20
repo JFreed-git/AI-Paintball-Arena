@@ -447,4 +447,30 @@
     }
   });
 
+  // ─── Unlimited Ammo Effect ──────────────────────────────────────
+  // Marksman's "Overdrive" ability: weapon stops consuming ammo for the duration.
+  // Ammo is kept at magSize each tick; original count restored when effect ends.
+
+  AbilityManager.registerEffect('unlimitedAmmo', {
+    onActivate: function (player, params) {
+      if (player.weapon) {
+        player._unlimitedAmmoActive = true;
+        player._savedAmmo = player.weapon.ammo;
+      }
+      if (typeof window.playSound === 'function') window.playSound('powerup');
+    },
+    onTick: function (player, params, dt) {
+      if (player.weapon && player._unlimitedAmmoActive) {
+        player.weapon.ammo = player.weapon.magSize;
+      }
+    },
+    onEnd: function (player, params) {
+      if (player.weapon && player._savedAmmo !== undefined) {
+        player.weapon.ammo = player._savedAmmo;
+      }
+      delete player._unlimitedAmmoActive;
+      delete player._savedAmmo;
+    }
+  });
+
 })();

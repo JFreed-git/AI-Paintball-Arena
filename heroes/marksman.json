@@ -72,7 +72,16 @@
     }
   },
   "passives": [],
-  "abilities": [],
+  "abilities": [
+    {
+      "id": "unlimitedAmmo",
+      "name": "Overdrive",
+      "key": "ability1",
+      "cooldownMs": 20000,
+      "duration": 5000,
+      "params": {}
+    }
+  ],
   "bodyParts": [
     {
       "name": "head",
