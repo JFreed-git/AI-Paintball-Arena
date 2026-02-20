@@ -288,5 +288,163 @@
     }
   });
 
+  // ─── Grapple Hook Effect ─────────────────────────────────────────
+  // Fires a hook forward; if an enemy is within range and cone angle,
+  // pulls them toward the Brawler over the duration. params: maxRange, pullSpeed.
+
+  function _getGrappleCandidates() {
+    var candidates = [];
+    // FFA mode players
+    var ffaState = (typeof window.getFFAState === 'function') ? window.getFFAState() : null;
+    if (ffaState && ffaState.players) {
+      var ids = Object.keys(ffaState.players);
+      for (var i = 0; i < ids.length; i++) {
+        var entry = ffaState.players[ids[i]];
+        if (entry && entry.entity && entry.entity.alive) {
+          candidates.push(entry.entity);
+        }
+      }
+    }
+    // Training mode bots
+    var trainState = (typeof window.getTrainingRangeState === 'function') ? window.getTrainingRangeState() : null;
+    if (trainState && trainState.bots) {
+      for (var b = 0; b < trainState.bots.length; b++) {
+        var bot = trainState.bots[b];
+        if (bot && bot.alive && bot.player && bot.player.position) {
+          candidates.push(bot.player);
+        }
+      }
+    }
+    return candidates;
+  }
+
+  AbilityManager.registerEffect('grappleHook', {
+
+    onActivate: function (player, params) {
+      var maxRange = params.maxRange || 30;
+      var pullSpeed = params.pullSpeed || 20;
+      var CONE_HALF_ANGLE = 0.3; // radians
+
+      // Get aim direction
+      var dir;
+      if (typeof THREE !== 'undefined') {
+        var quat;
+        if (window.camera && player.cameraAttached) {
+          quat = window.camera.quaternion;
+        } else if (player._meshGroup) {
+          quat = player._meshGroup.quaternion;
+        }
+        if (quat) {
+          dir = new THREE.Vector3(0, 0, -1).applyQuaternion(quat);
+        }
+      }
+      if (!dir) dir = new THREE.Vector3(0, 0, -1);
+
+      // Get player position
+      var origin = player.position.clone();
+
+      // Find best target in cone
+      var candidates = _getGrappleCandidates();
+      var bestTarget = null;
+      var bestDist = maxRange + 1;
+
+      for (var i = 0; i < candidates.length; i++) {
+        var candidate = candidates[i];
+        if (candidate === player) continue; // don't grapple self
+
+        var toTarget = candidate.position.clone().sub(origin);
+        var dist = toTarget.length();
+        if (dist > maxRange || dist < 0.5) continue;
+
+        toTarget.normalize();
+        var angle = Math.acos(Math.max(-1, Math.min(1, dir.dot(toTarget))));
+        if (angle > CONE_HALF_ANGLE) continue;
+
+        if (dist < bestDist) {
+          bestDist = dist;
+          bestTarget = candidate;
+        }
+      }
+
+      // Store grapple state on player
+      player._grappleTarget = bestTarget;
+      player._grapplePullSpeed = pullSpeed;
+
+      // Create visual chain line
+      if (bestTarget && typeof THREE !== 'undefined' && window.scene) {
+        var geom = new THREE.BufferGeometry();
+        var positions = new Float32Array(6); // 2 vertices * 3 components
+        geom.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+        var mat = new THREE.LineBasicMaterial({ color: 0x44ff44, linewidth: 2 });
+        player._grappleLine = new THREE.Line(geom, mat);
+        window.scene.add(player._grappleLine);
+      }
+
+      if (typeof window.playSound === 'function') window.playSound('grapple');
+    },
+
+    onTick: function (player, params, dt) {
+      if (!player._grappleTarget) return;
+
+      var target = player._grappleTarget;
+
+      // If target died during pull, clean up
+      if (!target.alive) {
+        player._grappleTarget = null;
+        return;
+      }
+
+      var pullSpeed = player._grapplePullSpeed || params.pullSpeed || 20;
+      var dtSec = dt / 1000;
+
+      // Calculate direction from target toward brawler
+      var dx = player.position.x - target.position.x;
+      var dy = player.position.y - target.position.y;
+      var dz = player.position.z - target.position.z;
+      var dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+
+      // Stop pulling if target is close enough
+      if (dist < 3) {
+        player._grappleTarget = null;
+        return;
+      }
+
+      // Normalize direction and move target
+      var invDist = 1 / Math.max(dist, 0.01);
+      target.position.x += dx * invDist * pullSpeed * dtSec;
+      target.position.z += dz * invDist * pullSpeed * dtSec;
+
+      // Sync target mesh
+      if (typeof target._syncMeshPosition === 'function') {
+        target._syncMeshPosition();
+      }
+
+      // Update visual chain line
+      if (player._grappleLine && player._grappleLine.geometry) {
+        var posAttr = player._grappleLine.geometry.getAttribute('position');
+        if (posAttr) {
+          posAttr.array[0] = player.position.x;
+          posAttr.array[1] = player.position.y;
+          posAttr.array[2] = player.position.z;
+          posAttr.array[3] = target.position.x;
+          posAttr.array[4] = target.position.y;
+          posAttr.array[5] = target.position.z;
+          posAttr.needsUpdate = true;
+        }
+      }
+    },
+
+    onEnd: function (player) {
+      // Remove visual chain
+      if (player._grappleLine) {
+        if (window.scene) window.scene.remove(player._grappleLine);
+        if (player._grappleLine.geometry) player._grappleLine.geometry.dispose();
+        if (player._grappleLine.material) player._grappleLine.material.dispose();
+      }
+      delete player._grappleTarget;
+      delete player._grapplePullSpeed;
+      delete player._grappleLine;
+    }
+  });
 
 })();

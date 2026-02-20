@@ -76,7 +76,19 @@
     }
   },
   "passives": [],
-  "abilities": [],
+  "abilities": [
+    {
+      "id": "grappleHook",
+      "name": "Grapple",
+      "key": "secondaryDown",
+      "cooldownMs": 8000,
+      "duration": 1500,
+      "params": {
+        "maxRange": 30,
+        "pullSpeed": 20
+      }
+    }
+  ],
   "bodyParts": [
     {
       "name": "head_visual",
