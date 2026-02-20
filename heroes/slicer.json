@@ -69,8 +69,21 @@
       "z": -0.3
     }
   },
-  "passives": [],
-  "abilities": [],
+  "passives": [
+    { "id": "doubleJump" }
+  ],
+  "abilities": [
+    {
+      "id": "dash",
+      "name": "Dash",
+      "key": "ability1",
+      "cooldownMs": 4000,
+      "duration": 200,
+      "params": {
+        "speed": 30
+      }
+    }
+  ],
   "bodyParts": [
     {
       "name": "body_visual",
