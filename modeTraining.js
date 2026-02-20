@@ -442,6 +442,15 @@
       input.fireDown = false;
       input.meleePressed = false;
     }
+    // Meditate freeze: block ALL input during meditate
+    if (state.player._meditating) {
+      input.moveX = 0;
+      input.moveZ = 0;
+      input.sprint = false;
+      input.jump = false;
+      input.fireDown = false;
+      input.secondaryDown = false;
+    }
     handleMelee(input, now);
     if (!_meleeSwinging) handlePlayerShooting(input, now);
     updateReload(now);
@@ -458,6 +467,15 @@
     // Update ability HUD
     if (state.player.abilityManager && typeof window.updateAbilityHUD === 'function') {
       window.updateAbilityHUD(state.player.abilityManager.getHUDState());
+    }
+    // Mana HUD
+    if (state.player.abilityManager) {
+      var _tam = state.player.abilityManager;
+      if (_tam.hasMana && _tam.hasMana()) {
+        if (window.updateManaHUD) window.updateManaHUD(_tam.getMana(), _tam.getMaxMana());
+      } else if (window.updateManaHUD) {
+        window.updateManaHUD(null);
+      }
     }
 
     // Update audio listener for spatial sound

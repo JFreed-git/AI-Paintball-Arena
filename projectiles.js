@@ -521,6 +521,28 @@
         var projDir = applySpread(baseDir, spread);
         var vel = projDir.clone().multiplyScalar(projSpeed);
 
+        // Lock-on: find closest enemy near crosshair if weapon has lockOn config
+        var lockOnTarget = null;
+        if (weapon.lockOn && projTargetEntities.length > 0) {
+          var coneAngle = (weapon.lockOn.coneAngle || 15) * Math.PI / 180;
+          var lockRange = weapon.lockOn.maxRange || 60;
+          var closestLockDist = lockRange;
+          for (var li = 0; li < projTargetEntities.length; li++) {
+            var le = projTargetEntities[li];
+            if (!le || !le.alive) continue;
+            var lePos = (typeof le.getPosition === 'function') ? le.getPosition() : (le.position || null);
+            if (!lePos) continue;
+            var toEnemy = lePos.clone().sub(origin);
+            var enemyDist = toEnemy.length();
+            if (enemyDist <= 0 || enemyDist > lockRange) continue;
+            var angle = toEnemy.normalize().angleTo(baseDir.clone().normalize());
+            if (angle <= coneAngle && enemyDist < closestLockDist) {
+              closestLockDist = enemyDist;
+              lockOnTarget = le;
+            }
+          }
+        }
+
         spawnProjectile({
           position: origin.clone(),
           velocity: vel,
@@ -531,7 +553,9 @@
           targetEntities: projTargetEntities,
           onHit: onHit,
           tracerColor: tracerColor,
-          origin: origin.clone()
+          origin: origin.clone(),
+          lockOnTarget: lockOnTarget,
+          lockOnTurnRate: weapon.lockOn ? (weapon.lockOn.turnRate || 3.0) : 0
         });
 
         var projResult = { hit: false, dir: projDir };
@@ -678,7 +702,9 @@
       solids: opts.solids || [],
       targetEntities: opts.targetEntities || [],
       onHit: opts.onHit || null,
-      origin: opts.origin ? opts.origin.clone() : opts.position.clone()
+      origin: opts.origin ? opts.origin.clone() : opts.position.clone(),
+      lockOnTarget: opts.lockOnTarget || null,
+      lockOnTurnRate: opts.lockOnTurnRate || 0
     });
   }
 
@@ -720,6 +746,27 @@
 
       // Apply gravity
       proj.velocity.y -= proj.gravity * dt;
+
+      // Lock-on tracking: curve velocity toward target
+      if (proj.lockOnTarget && proj.lockOnTurnRate > 0) {
+        var lt = proj.lockOnTarget;
+        var ltAlive = lt.alive !== undefined ? lt.alive : true;
+        if (ltAlive) {
+          var ltPos = (typeof lt.getPosition === 'function') ? lt.getPosition() : (lt.position || null);
+          if (ltPos) {
+            var toTarget = ltPos.clone().sub(proj.position).normalize();
+            var speed = proj.velocity.length();
+            var curDir = proj.velocity.clone().normalize();
+            // Slerp-like blend: lerp normalized direction then re-scale
+            var blendFactor = Math.min(1, proj.lockOnTurnRate * dt);
+            curDir.lerp(toTarget, blendFactor).normalize();
+            proj.velocity.copy(curDir.multiplyScalar(speed));
+          }
+        } else {
+          // Target dead — stop tracking
+          proj.lockOnTarget = null;
+        }
+      }
 
       // Compute frame movement
       var delta = proj.velocity.clone().multiplyScalar(dt);

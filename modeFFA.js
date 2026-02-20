@@ -1355,6 +1355,15 @@
         entry.entity.input.fireDown = false;
         entry.entity.input.meleeDown = false;
       }
+      // Meditate freeze: block ALL input during meditate
+      if (entry.entity._meditating) {
+        entry.entity.input.moveX = 0;
+        entry.entity.input.moveZ = 0;
+        entry.entity.input.sprint = false;
+        entry.entity.input.jump = false;
+        entry.entity.input.fireDown = false;
+        entry.entity.input.secondaryDown = false;
+      }
       var ms = state._meleeSwingState[id];
       var canShoot = handleMelee(id, now);
       if (canShoot && (!ms || !ms.swinging)) handleShooting(id, now);
@@ -1384,6 +1393,15 @@
     var localAbm = state.players[state.localId];
     if (localAbm && localAbm.entity && localAbm.entity.abilityManager && typeof window.updateAbilityHUD === 'function') {
       window.updateAbilityHUD(localAbm.entity.abilityManager.getHUDState());
+    }
+    // Mana HUD for local player
+    if (localAbm && localAbm.entity && localAbm.entity.abilityManager) {
+      var _am = localAbm.entity.abilityManager;
+      if (_am.hasMana && _am.hasMana()) {
+        if (window.updateManaHUD) window.updateManaHUD(_am.getMana(), _am.getMaxMana());
+      } else if (window.updateManaHUD) {
+        window.updateManaHUD(null);
+      }
     }
 
     // Phase 8: Update audio listener for spatial sound
@@ -1595,6 +1613,22 @@
       if (typeof window.updateAbilityHUD === 'function') {
         window.updateAbilityHUD(p.abilityManager.getHUDState());
       }
+      // Mana HUD
+      if (p.abilityManager.hasMana && p.abilityManager.hasMana()) {
+        if (window.updateManaHUD) window.updateManaHUD(p.abilityManager.getMana(), p.abilityManager.getMaxMana());
+      } else if (window.updateManaHUD) {
+        window.updateManaHUD(null);
+      }
+    }
+
+    // Meditate freeze: block ALL input during meditate (client-side prediction)
+    if (p._meditating) {
+      p.input.moveX = 0;
+      p.input.moveZ = 0;
+      p.input.sprint = false;
+      p.input.jump = false;
+      p.input.fireDown = false;
+      p.input.secondaryDown = false;
     }
 
     // Scope/ADS for client player
