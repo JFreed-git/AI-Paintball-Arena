@@ -1445,3 +1445,168 @@ function showOnlyMenu(idOrNull) {
     }
   });
 })();
+
+// === Settings Overlay (ESC menu) =======================================
+
+window.toggleSettingsOverlay = function () {
+  var overlay = document.getElementById('settingsOverlay');
+  if (!overlay) return;
+  var isOpen = !overlay.classList.contains('hidden');
+  if (isOpen) {
+    // Close settings, resume game
+    overlay.classList.add('hidden');
+    // Re-request pointer lock to resume gameplay
+    var canvas = document.querySelector('canvas');
+    if (canvas) canvas.requestPointerLock();
+  } else {
+    // Open settings, pause input
+    overlay.classList.remove('hidden');
+    // Populate keybind list
+    populateKeybindList();
+    // Exit pointer lock so mouse cursor is visible
+    document.exitPointerLock();
+  }
+};
+
+window.isSettingsOpen = function () {
+  var overlay = document.getElementById('settingsOverlay');
+  return overlay && !overlay.classList.contains('hidden');
+};
+
+// --- Keybind list population ---
+
+var DEFAULT_KEYBINDS = [
+  { action: 'Move Forward', key: 'W' },
+  { action: 'Move Back', key: 'S' },
+  { action: 'Move Left', key: 'A' },
+  { action: 'Move Right', key: 'D' },
+  { action: 'Sprint', key: 'Shift' },
+  { action: 'Jump', key: 'Space' },
+  { action: 'Reload', key: 'R' },
+  { action: 'Melee', key: 'V' },
+  { action: 'Ability 1 (Q)', key: 'Q' },
+  { action: 'Ability 2 (E)', key: 'E' },
+  { action: 'Ability 3 (F)', key: 'F' },
+  { action: 'Ability 4 (C)', key: 'C' }
+];
+
+function populateKeybindList() {
+  var container = document.getElementById('settingsKeybinds');
+  if (!container) return;
+
+  // Try to read live keymap
+  var keymap = (typeof window.getKeymap === 'function') ? window.getKeymap() : null;
+  var bindings = DEFAULT_KEYBINDS;
+
+  if (keymap) {
+    // Build reverse map: action → key label
+    var actionToKey = {};
+    var keys = Object.keys(keymap);
+    for (var i = 0; i < keys.length; i++) {
+      var code = keys[i];
+      var action = keymap[code];
+      if (!actionToKey[action]) {
+        // Convert code to a readable label
+        var label = code.replace('Key', '').replace('Digit', '').replace('Arrow', '');
+        if (code === 'ShiftLeft' || code === 'ShiftRight') label = 'Shift';
+        if (code === 'Space') label = 'Space';
+        actionToKey[action] = label;
+      }
+    }
+
+    // Map known actions to display
+    var ACTION_MAP = {
+      'Move Forward': 'forward',
+      'Move Back': 'back',
+      'Move Left': 'left',
+      'Move Right': 'right',
+      'Sprint': 'sprint',
+      'Jump': 'jump',
+      'Reload': 'reload',
+      'Melee': 'melee',
+      'Ability 1 (Q)': 'ability1',
+      'Ability 2 (E)': 'ability2',
+      'Ability 3 (F)': 'ability3',
+      'Ability 4 (C)': 'ability4'
+    };
+
+    bindings = [];
+    for (var j = 0; j < DEFAULT_KEYBINDS.length; j++) {
+      var def = DEFAULT_KEYBINDS[j];
+      var internalAction = ACTION_MAP[def.action];
+      var keyLabel = (internalAction && actionToKey[internalAction]) ? actionToKey[internalAction] : def.key;
+      bindings.push({ action: def.action, key: keyLabel });
+    }
+  }
+
+  // Render grid
+  var html = '<div class="settings-keybind-grid">';
+  for (var k = 0; k < bindings.length; k++) {
+    html += '<div class="settings-keybind-action">' + bindings[k].action + '</div>';
+    html += '<div class="settings-keybind-key">' + bindings[k].key + '</div>';
+  }
+  html += '</div>';
+  container.innerHTML = html;
+}
+
+// --- Tab switching ---
+
+(function () {
+  document.addEventListener('click', function (e) {
+    if (!e.target.classList.contains('settings-tab')) return;
+    var tabName = e.target.getAttribute('data-tab');
+    if (!tabName) return;
+
+    // Toggle active class on tabs
+    var tabs = document.querySelectorAll('.settings-tab');
+    for (var i = 0; i < tabs.length; i++) {
+      tabs[i].classList.toggle('active', tabs[i] === e.target);
+    }
+
+    // Toggle content visibility
+    var keybindsContent = document.getElementById('settingsKeybinds');
+    var crosshairContent = document.getElementById('settingsCrosshair');
+    if (keybindsContent) keybindsContent.classList.toggle('hidden', tabName !== 'keybinds');
+    if (crosshairContent) crosshairContent.classList.toggle('hidden', tabName !== 'crosshair');
+  });
+})();
+
+// --- Leave Game button ---
+
+(function () {
+  document.addEventListener('click', function (e) {
+    if (e.target.id !== 'settingsLeaveGame') return;
+
+    // Stop the active game mode
+    if (window.ffaActive) {
+      try { if (typeof stopFFAInternal === 'function') stopFFAInternal(); } catch (ex) {}
+    } else if (window.trainingRangeActive) {
+      try { if (typeof stopTrainingRangeInternal === 'function') stopTrainingRangeInternal(); } catch (ex) {}
+    }
+
+    // Show main menu
+    showOnlyMenu('mainMenu');
+
+    // Hide HUD
+    if (typeof setHUDVisible === 'function') setHUDVisible(false);
+
+    // Close settings overlay
+    var overlay = document.getElementById('settingsOverlay');
+    if (overlay) overlay.classList.add('hidden');
+  });
+})();
+
+// --- Resume button ---
+
+(function () {
+  document.addEventListener('click', function (e) {
+    if (e.target.id !== 'settingsClose') return;
+
+    // Close settings overlay and re-request pointer lock
+    var overlay = document.getElementById('settingsOverlay');
+    if (overlay) overlay.classList.add('hidden');
+
+    var canvas = document.querySelector('canvas');
+    if (canvas) canvas.requestPointerLock();
+  });
+})();

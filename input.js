@@ -151,6 +151,7 @@ function onWindowResize() {
 }
 
 function onPointerLockChange() {
+  if (window.isSettingsOpen && window.isSettingsOpen()) return;
   if (window._splitViewMode) return; // iframe: parent overlay manages lock
   if (window._splitScreenActive) return; // parent: devSplitScreen manages its own lifecycle
   const canvas = renderer && renderer.domElement;

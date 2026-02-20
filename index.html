@@ -303,5 +303,28 @@
     <!-- Bootstrap and dev tools (must be last) -->
     <script src="game.js"></script>
     <script src="devConsole.js"></script>
+
+    <!-- Settings Overlay (ESC menu) -->
+    <div id="settingsOverlay" class="hidden">
+      <div class="settings-panel">
+        <h2 class="settings-title">Settings</h2>
+        <div class="settings-tabs">
+          <button class="settings-tab active" data-tab="keybinds">Keybinds</button>
+          <button class="settings-tab" data-tab="crosshair">Crosshair</button>
+        </div>
+        <div class="settings-content">
+          <div id="settingsKeybinds" class="settings-tab-content">
+            <!-- Keybind list populated by JS -->
+          </div>
+          <div id="settingsCrosshair" class="settings-tab-content hidden">
+            <p style="color: #888; text-align: center; padding: 40px;">Crosshair customization coming soon</p>
+          </div>
+        </div>
+        <div class="settings-footer">
+          <button id="settingsLeaveGame" class="settings-leave-btn">Leave Game</button>
+          <button id="settingsClose" class="settings-close-btn">Resume</button>
+        </div>
+      </div>
+    </div>
 </body>
 </html>
