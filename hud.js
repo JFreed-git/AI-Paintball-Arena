@@ -166,11 +166,11 @@
 
       keyLabel.textContent = KEY_LABELS[state.key] || state.key;
 
-      // Cooldown overlay: clip from bottom to top based on cooldownPct
+      // Cooldown overlay: gray covers entire slot, recedes upward from bottom as cooldown progresses
       var pct = Math.max(0, Math.min(1, state.cooldownPct || 0));
       if (pct > 0) {
-        var topPct = (1 - pct) * 100;
-        cdOverlay.style.clipPath = 'inset(' + topPct + '% 0 0 0)';
+        var bottomPct = (1 - pct) * 100;
+        cdOverlay.style.clipPath = 'inset(0 0 ' + bottomPct + '% 0)';
         cdOverlay.style.display = '';
       } else {
         cdOverlay.style.display = 'none';
