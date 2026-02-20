@@ -555,11 +555,11 @@ class AIOpponent {
 
     // Play TP swing animation and spatial sound on AI's player mesh
     if (this.player.triggerMeleeSwing) this.player.triggerMeleeSwing(w.meleeSwingMs);
-    if (typeof playGameSound === 'function') playGameSound('melee_swing', { _worldPos: this.player.position });
+    if (typeof playGameSound === 'function') playGameSound('melee_swing', { heroId: this.player._heroId || undefined, _worldPos: this.player.position });
     return true;
   }
 
-  _tryShoot(ctx, hasLOS) {
+  _tryShoot(ctx, hasLOS, sprinting) {
     if (!hasLOS || this.weapon.reloading) return;
     // Melee-only weapons (e.g. Slicer) should never fire projectiles
     if (this.weapon.meleeOnly) {
@@ -591,12 +591,13 @@ class AIOpponent {
       } else {
         aiTargets.push({ position: ctx.playerPos, radius: ctx.playerRadius || 0.35 });
       }
+      var spread = sprinting ? (this.weapon.sprintSpreadRad || this.weapon.spreadRad) : this.weapon.spreadRad;
       var result = sharedFireWeapon(this.weapon, origin, aimDir, {
-        spreadOverride: this.weapon.spreadRad,
+        spreadOverride: spread,
         solids: this.arena.solids,
         targets: aiTargets,
         projectileTargetEntities: aiTargetEntities,
-        tracerColor: 0xff6666,
+        tracerColor: (typeof this.weapon.tracerColor === 'number') ? this.weapon.tracerColor : 0xffee66,
         worldPos: this.position,
         onHit: function (target, point, dist, pelletIdx, damageMultiplier) {
           if (ctx.onPlayerHit) ctx.onPlayerHit(self.weapon.damage * (damageMultiplier || 1.0), ctx.playerEntity);
@@ -871,7 +872,7 @@ class AIOpponent {
         wantJump = this._shouldJump(dt);
 
         // Shoot
-        this._tryShoot(activeCtx, hasLOS);
+        this._tryShoot(activeCtx, hasLOS, wantSprint);
 
         if (this.weapon.reloading) {
           this._lastBehavior = 'RELOADING';
@@ -932,7 +933,7 @@ class AIOpponent {
         }
 
         // Still shoot while seeking cover
-        this._tryShoot(activeCtx, hasLOS);
+        this._tryShoot(activeCtx, hasLOS, wantSprint);
         break;
 
       case 'HOLD_COVER':
@@ -963,7 +964,7 @@ class AIOpponent {
           case 'shooting':
             this._lastBehavior = 'PEEKING';
             moveDir.set(0, 0, 0);
-            this._tryShoot(activeCtx, hasLOS);
+            this._tryShoot(activeCtx, hasLOS, wantSprint);
             if (this._coverPeekTimer <= 0) {
               this._coverPeekState = 'peeking_back';
               this._coverPeekTimer = 0.3 + Math.random() * 0.2;
@@ -1028,7 +1029,7 @@ class AIOpponent {
         }
 
         // Shoot if has LOS while flanking
-        this._tryShoot(activeCtx, hasLOS);
+        this._tryShoot(activeCtx, hasLOS, wantSprint);
         break;
 
       case 'STUCK_RECOVER':

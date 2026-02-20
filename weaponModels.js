@@ -179,7 +179,139 @@
     return builder();
   }
 
+  // --- GLTF/GLB model support ---
+
+  var _gltfCache = {};  // modelType → THREE.Group (pre-loaded)
+
+  /**
+   * Register a GLTF-based weapon model from a cached scene.
+   * The builder clones from cache with scale/rotation/offset applied.
+   */
+  function _registerGltfModel(modelDef, cachedScene) {
+    if (!modelDef || !modelDef.modelType || !cachedScene) return;
+
+    _gltfCache[modelDef.modelType] = cachedScene;
+
+    WEAPON_MODEL_REGISTRY[modelDef.modelType] = function () {
+      var group = new THREE.Group();
+      group.name = 'weapon_' + modelDef.modelType;
+
+      var clone = cachedScene.clone(true);
+
+      // Apply scale
+      var s = modelDef.scale || [1, 1, 1];
+      clone.scale.set(s[0], s[1], s[2]);
+
+      // Apply rotation
+      var r = modelDef.rotation || [0, 0, 0];
+      clone.rotation.set(r[0], r[1], r[2]);
+
+      // Apply offset
+      var o = modelDef.offset || [0, 0, 0];
+      clone.position.set(o[0], o[1], o[2]);
+
+      group.add(clone);
+      return group;
+    };
+  }
+
+  /**
+   * Register a parts-based custom weapon model (boxes/cylinders).
+   */
+  function _registerPartsModel(modelDef) {
+    if (!modelDef || !modelDef.modelType || !modelDef.parts) return;
+
+    WEAPON_MODEL_REGISTRY[modelDef.modelType] = function () {
+      var group = new THREE.Group();
+      group.name = 'weapon_' + modelDef.modelType;
+
+      modelDef.parts.forEach(function (part) {
+        var geom, mesh;
+        var color = part.color || '#444444';
+        var mat = new THREE.MeshLambertMaterial({ color: color });
+
+        if (part.type === 'cylinder') {
+          var radius = (part.size && part.size[0]) ? part.size[0] / 2 : 0.05;
+          var height = (part.size && part.size[1]) ? part.size[1] : 0.1;
+          geom = new THREE.CylinderGeometry(radius, radius, height, 16);
+        } else {
+          var sx = (part.size && part.size[0]) ? part.size[0] : 0.1;
+          var sy = (part.size && part.size[1]) ? part.size[1] : 0.1;
+          var sz = (part.size && part.size[2]) ? part.size[2] : 0.1;
+          geom = new THREE.BoxGeometry(sx, sy, sz);
+        }
+
+        mesh = new THREE.Mesh(geom, mat);
+        if (part.position) mesh.position.set(part.position[0] || 0, part.position[1] || 0, part.position[2] || 0);
+        if (part.rotation) mesh.rotation.set(part.rotation[0] || 0, part.rotation[1] || 0, part.rotation[2] || 0);
+        group.add(mesh);
+      });
+
+      return group;
+    };
+  }
+
+  /**
+   * Load all custom weapon models from the server.
+   * For GLTF models: loads the GLB binary, parses with GLTFLoader, caches, and registers.
+   * For parts-based models: registers the builder directly.
+   * Returns a Promise that resolves when all models are loaded.
+   */
+  function loadCustomWeaponModelsFromServer() {
+    return fetch('/api/weapon-models').then(function (r) { return r.json(); }).then(function (names) {
+      var promises = names.map(function (name) {
+        return fetch('/api/weapon-models/' + encodeURIComponent(name))
+          .then(function (r) { return r.json(); });
+      });
+      return Promise.all(promises);
+    }).then(function (models) {
+      var gltfPromises = [];
+
+      (models || []).forEach(function (modelDef) {
+        if (!modelDef || !modelDef.modelType) return;
+
+        if (modelDef.source === 'gltf' && modelDef.gltfFile) {
+          // GLTF model — load the GLB binary
+          var p = fetch('/api/weapon-model-files/' + encodeURIComponent(modelDef.gltfFile))
+            .then(function (r) {
+              if (!r.ok) throw new Error('GLB file not found: ' + modelDef.gltfFile);
+              return r.arrayBuffer();
+            })
+            .then(function (arrayBuffer) {
+              return new Promise(function (resolve, reject) {
+                if (!THREE.GLTFLoader) {
+                  reject(new Error('GLTFLoader not available'));
+                  return;
+                }
+                var loader = new THREE.GLTFLoader();
+                loader.parse(arrayBuffer, '', function (gltf) {
+                  _registerGltfModel(modelDef, gltf.scene);
+                  resolve();
+                }, function (err) {
+                  reject(err);
+                });
+              });
+            })
+            .catch(function (err) {
+              console.warn('[weaponModels] Failed to load GLTF model "' + modelDef.modelType + '":', err);
+            });
+          gltfPromises.push(p);
+        } else if (modelDef.parts) {
+          // Parts-based model
+          _registerPartsModel(modelDef);
+        }
+      });
+
+      return Promise.all(gltfPromises);
+    }).catch(function (err) {
+      console.warn('[weaponModels] Failed to load custom weapon models:', err);
+    });
+  }
+
   window.buildWeaponModel = buildWeaponModel;
   window.WEAPON_MODEL_REGISTRY = WEAPON_MODEL_REGISTRY;
+  window.loadCustomWeaponModelsFromServer = loadCustomWeaponModelsFromServer;
+  window._registerGltfModel = _registerGltfModel;
+  window._registerPartsModel = _registerPartsModel;
 
 })();

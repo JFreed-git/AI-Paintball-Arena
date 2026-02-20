@@ -248,7 +248,7 @@
 
     _meleeSwinging = true;
     _meleeSwingEnd = now + w.meleeSwingMs;
-    if (typeof playGameSound === 'function') playGameSound('melee_swing');
+    if (typeof playGameSound === 'function') playGameSound('melee_swing', { heroId: state.currentHeroId || undefined });
     if (typeof window.triggerFPMeleeSwing === 'function') window.triggerFPMeleeSwing(w.meleeSwingMs);
     if (state.player.triggerMeleeSwing) state.player.triggerMeleeSwing(w.meleeSwingMs);
     updateHUD();
@@ -261,7 +261,7 @@
     if (w.meleeOnly) return; // No gun shooting for melee-only weapons
 
     if (input.reloadPressed) {
-      if (sharedStartReload(w, now)) {
+      if (sharedStartReload(w, now, state.currentHeroId)) {
         sharedSetReloadingUI(true, state.hud.reloadIndicator);
       }
       return;
@@ -269,8 +269,8 @@
     if (w.reloading) return;
 
     if (input.fireDown && !w.reloading && w.ammo <= 0) {
-      if (typeof playGameSound === 'function') playGameSound('dry_fire');
-      if (sharedStartReload(w, now)) sharedSetReloadingUI(true, state.hud.reloadIndicator);
+      if (typeof playGameSound === 'function') playGameSound('dry_fire', { heroId: state.currentHeroId || undefined });
+      if (sharedStartReload(w, now, state.currentHeroId)) sharedSetReloadingUI(true, state.hud.reloadIndicator);
       return;
     }
 
@@ -297,6 +297,7 @@
 
       var result = sharedFireWeapon(w, camera.position.clone(), dir, {
         sprinting: !!input.sprint,
+        heroId: state.currentHeroId || undefined,
         solids: state.arena.solids,
         targets: allTargets,
         projectileTargetEntities: allEntities,
@@ -312,7 +313,7 @@
           else if (typeof target.takeDamage === 'function') {
             target.takeDamage(w.damage * (damageMultiplier || 1.0));
           }
-          if (typeof playGameSound === 'function') playGameSound('hit_marker', { headshot: (damageMultiplier || 1) > 1 });
+          if (typeof playGameSound === 'function') playGameSound('hit_marker', { heroId: state.currentHeroId || undefined, headshot: (damageMultiplier || 1) > 1 });
           state.stats.hits++;
         }
       });
@@ -328,7 +329,7 @@
       updateHUD();
 
       if (result.magazineEmpty) {
-        if (sharedStartReload(w, now)) {
+        if (sharedStartReload(w, now, state.currentHeroId)) {
           sharedSetReloadingUI(true, state.hud.reloadIndicator);
         }
       }
@@ -337,7 +338,7 @@
 
   function updateReload(now) {
     if (state.player.weapon.meleeOnly) return;
-    if (sharedHandleReload(state.player.weapon, now)) {
+    if (sharedHandleReload(state.player.weapon, now, state.currentHeroId)) {
       sharedSetReloadingUI(false, state.hud.reloadIndicator);
       updateHUD();
     }
@@ -382,8 +383,9 @@
 
     // Movement sounds
     if (typeof playGameSound === 'function') {
-      if (prevGrounded && !state.player.grounded) playGameSound('jump');
-      if (!prevGrounded && state.player.grounded) playGameSound('land');
+      var _hid = state.currentHeroId || undefined;
+      if (prevGrounded && !state.player.grounded) playGameSound('jump', { heroId: _hid });
+      if (!prevGrounded && state.player.grounded) playGameSound('land', { heroId: _hid });
       var moving = (input.moveX !== 0 || input.moveZ !== 0);
       if (moving && state.player.grounded && typeof playFootstepIfDue === 'function') {
         playFootstepIfDue(!!input.sprint, state.currentHeroId, performance.now());

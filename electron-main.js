@@ -1,7 +1,10 @@
-const { app, BrowserWindow, globalShortcut } = require('electron');
+const { app, BrowserWindow, globalShortcut, session } = require('electron');
 const path = require('path');
 
 app.whenReady().then(() => {
+  // Clear cached JS so source file edits always take effect on reload
+  session.defaultSession.clearCache();
+
   const win = new BrowserWindow({
     width: 1400,
     height: 900,

@@ -183,6 +183,21 @@
                 <div class="dev-actions">
                     <button id="wmbAddBox" class="dev-btn-secondary">+ Box</button>
                     <button id="wmbAddCyl" class="dev-btn-secondary">+ Cylinder</button>
+                    <button id="wmbImportGlb" class="dev-btn-secondary">Import GLB</button>
+                </div>
+                <div id="wmbGltfInfo" class="hidden" style="padding:8px;border:1px solid #333;border-radius:6px;margin:8px 0;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+                        <strong style="color:#00ff88;font-size:12px;">GLTF Model</strong>
+                        <button id="wmbGltfRemove" class="dev-btn-danger" style="padding:2px 8px;font-size:10px;">Remove</button>
+                    </div>
+                    <div style="font-size:11px;color:#888;margin-bottom:6px;" id="wmbGltfFilename">—</div>
+                    <div class="dev-field"><label>Scale</label><input type="number" id="wmbGltfScale" value="1" step="0.1" min="0.01" /></div>
+                    <div class="dev-field"><label>Rot X</label><input type="number" id="wmbGltfRotX" value="0" step="0.1" /></div>
+                    <div class="dev-field"><label>Rot Y</label><input type="number" id="wmbGltfRotY" value="0" step="0.1" /></div>
+                    <div class="dev-field"><label>Rot Z</label><input type="number" id="wmbGltfRotZ" value="0" step="0.1" /></div>
+                    <div class="dev-field"><label>Offset X</label><input type="number" id="wmbGltfOffX" value="0" step="0.01" /></div>
+                    <div class="dev-field"><label>Offset Y</label><input type="number" id="wmbGltfOffY" value="0" step="0.01" /></div>
+                    <div class="dev-field"><label>Offset Z</label><input type="number" id="wmbGltfOffZ" value="0" step="0.01" /></div>
                 </div>
                 <div id="wmbPreviewContainer">
                     <canvas id="wmbPreviewCanvas" width="280" height="200"></canvas>
@@ -258,162 +273,7 @@
             <!-- Audio Manager Panel -->
             <div id="panelAudioManager" class="dev-panel">
                 <h3>Audio Manager</h3>
-                <div class="dev-actions">
-                    <button id="amNew" class="dev-btn-secondary">New</button>
-                    <button id="amDuplicate" class="dev-btn-secondary">Duplicate</button>
-                    <button id="amDelete" class="dev-btn-danger">Delete</button>
-                </div>
-
-                <div id="amEditorForm" class="dev-scrollable">
-                    <div class="dev-field"><label>Name</label><input type="text" id="amName" /></div>
-                    <div class="dev-field"><label>ID</label><input type="text" id="amId" /></div>
-
-                    <h4 class="dev-section-header">Synthesis</h4>
-                    <div class="dev-section-content">
-                        <div class="dev-field">
-                            <label>Type</label>
-                            <select id="amType">
-                                <option value="noise_burst">noise_burst</option>
-                                <option value="tone">tone</option>
-                                <option value="sweep">sweep</option>
-                                <option value="multi_tone">multi_tone</option>
-                                <option value="fm">fm</option>
-                                <option value="pluck">pluck</option>
-                                <option value="filtered_osc">filtered_osc</option>
-                                <option value="impact">impact</option>
-                            </select>
-                        </div>
-
-                        <div class="dev-field"><label>Duration</label><input type="number" id="amDuration" value="0.06" step="0.01" min="0.001" /></div>
-                        <div class="dev-field"><label>Volume</label><input type="number" id="amVolume" value="0.5" step="0.05" min="0" max="1" /></div>
-                        <div class="dev-field"><label>Attack</label><input type="number" id="amAttack" value="0.002" step="0.001" min="0" /></div>
-                        <div class="dev-field"><label>Decay</label><input type="number" id="amDecay" value="0.058" step="0.01" min="0" /></div>
-
-                        <!-- Shared waveform (tone, sweep, multi_tone) -->
-                        <div id="amSecWaveform" class="hidden">
-                            <div class="dev-field">
-                                <label>Waveform</label>
-                                <select id="amWaveform">
-                                    <option value="sine">sine</option>
-                                    <option value="square">square</option>
-                                    <option value="triangle">triangle</option>
-                                    <option value="sawtooth">sawtooth</option>
-                                </select>
-                            </div>
-                        </div>
-
-                        <!-- noise_burst params -->
-                        <div id="amSecNoiseBurst">
-                            <div class="dev-field"><label>Frequency</label><input type="number" id="amFrequency" value="3000" step="100" min="20" /></div>
-                            <div class="dev-field">
-                                <label>Filter</label>
-                                <select id="amFilterType">
-                                    <option value="lowpass">lowpass</option>
-                                    <option value="highpass">highpass</option>
-                                    <option value="bandpass">bandpass</option>
-                                </select>
-                            </div>
-                            <div class="dev-field"><label>Filter Q</label><input type="number" id="amFilterQ" value="1" step="0.1" min="0" /></div>
-                        </div>
-
-                        <!-- sweep params -->
-                        <div id="amSecSweep" class="hidden">
-                            <div class="dev-field"><label>Start Freq</label><input type="number" id="amStartFreq" value="800" step="50" min="20" /></div>
-                            <div class="dev-field"><label>End Freq</label><input type="number" id="amEndFreq" value="200" step="50" min="20" /></div>
-                            <div class="dev-field"><label>Noise Mix</label><input type="number" id="amNoiseAmount" value="0" step="0.1" min="0" max="1" /></div>
-                        </div>
-
-                        <!-- multi_tone params -->
-                        <div id="amSecMultiTone" class="hidden">
-                            <div class="dev-field" style="flex-direction:column;align-items:stretch;">
-                                <label>Notes (JSON)</label>
-                                <textarea id="amNotes" rows="4" style="width:100%;background:#1a1a1a;color:#fff;border:1px solid #444;border-radius:4px;font-family:monospace;font-size:11px;padding:4px;">[]</textarea>
-                            </div>
-                        </div>
-
-                        <!-- fm params -->
-                        <div id="amSecFM" class="hidden">
-                            <div class="dev-field"><label>Carrier Freq</label><input type="number" id="amCarrierFreq" value="440" step="10" min="20" /></div>
-                            <div class="dev-field">
-                                <label>Carrier Wave</label>
-                                <select id="amCarrierWaveform">
-                                    <option value="sine">sine</option>
-                                    <option value="square">square</option>
-                                    <option value="triangle">triangle</option>
-                                    <option value="sawtooth">sawtooth</option>
-                                </select>
-                            </div>
-                            <div class="dev-field"><label>Mod Freq</label><input type="number" id="amModFreq" value="880" step="10" min="1" /></div>
-                            <div class="dev-field"><label>Mod Depth</label><input type="number" id="amModDepth" value="200" step="10" min="0" /></div>
-                            <div class="dev-field">
-                                <label>Mod Wave</label>
-                                <select id="amModWaveform">
-                                    <option value="sine">sine</option>
-                                    <option value="square">square</option>
-                                    <option value="triangle">triangle</option>
-                                    <option value="sawtooth">sawtooth</option>
-                                </select>
-                            </div>
-                        </div>
-
-                        <!-- pluck params -->
-                        <div id="amSecPluck" class="hidden">
-                            <div class="dev-field"><label>Frequency</label><input type="number" id="amPluckFreq" value="200" step="10" min="20" /></div>
-                            <div class="dev-field"><label>Damping</label><input type="number" id="amPluckDamping" value="0.5" step="0.05" min="0" max="1" /></div>
-                        </div>
-
-                        <!-- filtered_osc params -->
-                        <div id="amSecFilteredOsc" class="hidden">
-                            <div class="dev-field"><label>Osc Freq</label><input type="number" id="amFOscFreq" value="440" step="10" min="20" /></div>
-                            <div class="dev-field">
-                                <label>Filter</label>
-                                <select id="amFOscFilterType">
-                                    <option value="lowpass">lowpass</option>
-                                    <option value="highpass">highpass</option>
-                                    <option value="bandpass">bandpass</option>
-                                </select>
-                            </div>
-                            <div class="dev-field"><label>Filter Freq</label><input type="number" id="amFOscFilterFreq" value="2000" step="50" min="20" /></div>
-                            <div class="dev-field"><label>Filter End</label><input type="number" id="amFOscFilterEnd" value="" step="50" min="20" placeholder="(no sweep)" /></div>
-                            <div class="dev-field"><label>Filter Q</label><input type="number" id="amFOscFilterQ" value="4" step="0.5" min="0" /></div>
-                        </div>
-
-                        <!-- impact params -->
-                        <div id="amSecImpact" class="hidden">
-                            <div class="dev-field"><label>Body Freq</label><input type="number" id="amImpactBodyFreq" value="100" step="10" min="20" /></div>
-                            <div class="dev-field"><label>Body Decay</label><input type="number" id="amImpactBodyDecay" value="0.05" step="0.01" min="0.001" /></div>
-                            <div class="dev-field"><label>Noise Freq</label><input type="number" id="amImpactNoiseFreq" value="2000" step="100" min="20" /></div>
-                            <div class="dev-field">
-                                <label>Noise Filter</label>
-                                <select id="amImpactNoiseFilterType">
-                                    <option value="lowpass">lowpass</option>
-                                    <option value="highpass">highpass</option>
-                                    <option value="bandpass">bandpass</option>
-                                </select>
-                            </div>
-                            <div class="dev-field"><label>Noise Q</label><input type="number" id="amImpactNoiseQ" value="1" step="0.5" min="0" /></div>
-                            <div class="dev-field"><label>Noise Dur</label><input type="number" id="amImpactNoiseDur" value="0.03" step="0.005" min="0.001" /></div>
-                            <div class="dev-field"><label>Mix (body)</label><input type="number" id="amImpactMix" value="0.5" step="0.05" min="0" max="1" /></div>
-                        </div>
-                    </div>
-
-                    <div class="dev-actions">
-                        <button id="amPlay" class="dev-btn-secondary">Play</button>
-                        <button id="amRandomize" class="dev-btn-secondary" title="Randomize params ±15%">Randomize</button>
-                    </div>
-
-                    <h4 class="dev-section-header">Bindings</h4>
-                    <div class="dev-section-content">
-                        <div id="amBindingsList"></div>
-                        <div class="dev-actions">
-                            <button id="amAddBinding" class="dev-btn-secondary">+ Add Binding</button>
-                        </div>
-                    </div>
-
-                    <div class="dev-actions" style="margin-top:12px;">
-                        <button id="amSave" class="dev-btn-primary">Save</button>
-                    </div>
-                </div>
+                <p class="dev-hint">Assign audio files to hero sound events.</p>
             </div>
         </div>
         <div id="serverLogPanel" class="hidden">
@@ -436,11 +296,7 @@
             <button id="mbGridToggle" class="dev-btn-secondary">Show Grid</button>
         </div>
         <div id="amViewportContainer" class="hidden">
-            <div id="amSoundTable"></div>
-            <div id="amVisualizerContainer">
-                <canvas id="amEnvelopeCanvas"></canvas>
-                <canvas id="amWaveformCanvas"></canvas>
-            </div>
+            <div id="amContent"></div>
         </div>
         <div id="heViewportToolbar" class="hidden">
             <div class="he-mode-group">
@@ -721,6 +577,7 @@
 
     <!-- External libraries -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
     <script src="electron-fetch-shim.js"></script>
     <script src="interactionEngine.js"></script>
 

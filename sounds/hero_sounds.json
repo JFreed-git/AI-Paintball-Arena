@@ -1,0 +1,8 @@
+{
+  "marksman": {
+    "weapon_fire": {
+      "file": "rifle_pew.mp3",
+      "volume": 0.8
+    }
+  }
+}

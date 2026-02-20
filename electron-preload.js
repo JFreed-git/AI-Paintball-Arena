@@ -167,6 +167,66 @@ contextBridge.exposeInMainWorld('devAPI', {
   writeSound:        function (name, data) { return writeJSON('sounds', name, data); },
   deleteSound:       function (name)       { return deleteJSON('sounds', name); },
 
+  readHeroSounds:    function () {
+    var filePath = path.join(BASE, 'sounds', 'hero_sounds.json');
+    if (!fs.existsSync(filePath)) return {};
+    try { return JSON.parse(fs.readFileSync(filePath, 'utf8')); } catch (e) { return {}; }
+  },
+  writeHeroSounds:   function (data) {
+    ensureDir(path.join(BASE, 'sounds'));
+    try {
+      fs.writeFileSync(path.join(BASE, 'sounds', 'hero_sounds.json'), JSON.stringify(data, null, 2), 'utf8');
+      return { ok: true };
+    } catch (e) { return { error: e.message }; }
+  },
+  listSoundFiles:    function () {
+    var dir = path.join(BASE, 'sounds', 'files');
+    ensureDir(dir);
+    return fs.readdirSync(dir);
+  },
+  writeSoundFile:    function (filename, base64Data) {
+    var dir = path.join(BASE, 'sounds', 'files');
+    ensureDir(dir);
+    try {
+      var buf = Buffer.from(base64Data, 'base64');
+      fs.writeFileSync(path.join(dir, filename), buf);
+      return { ok: true };
+    } catch (e) { return { error: e.message }; }
+  },
+  deleteSoundFile:   function (filename) {
+    var filePath = path.join(BASE, 'sounds', 'files', filename);
+    if (!fs.existsSync(filePath)) return { error: 'Not found' };
+    try { fs.unlinkSync(filePath); return { ok: true }; } catch (e) { return { error: e.message }; }
+  },
+  listWeaponModelFiles: function () {
+    var dir = path.join(BASE, 'weapon-models', 'files');
+    ensureDir(dir);
+    return fs.readdirSync(dir);
+  },
+  readWeaponModelFile: function (filename) {
+    var filePath = path.join(BASE, 'weapon-models', 'files', filename);
+    if (!fs.existsSync(filePath)) return { error: 'Not found' };
+    try {
+      var buf = fs.readFileSync(filePath);
+      // Return as Uint8Array (can be used as ArrayBuffer source)
+      return new Uint8Array(buf).buffer;
+    } catch (e) { return { error: e.message }; }
+  },
+  writeWeaponModelFile: function (filename, base64Data) {
+    var dir = path.join(BASE, 'weapon-models', 'files');
+    ensureDir(dir);
+    try {
+      var buf = Buffer.from(base64Data, 'base64');
+      fs.writeFileSync(path.join(dir, filename), buf);
+      return { ok: true };
+    } catch (e) { return { error: e.message }; }
+  },
+  deleteWeaponModelFile: function (filename) {
+    var filePath = path.join(BASE, 'weapon-models', 'files', filename);
+    if (!fs.existsSync(filePath)) return { error: 'Not found' };
+    try { fs.unlinkSync(filePath); return { ok: true }; } catch (e) { return { error: e.message }; }
+  },
+
   serverStart:       function ()           { return _serverStart(); },
   serverStop:        function ()           { return _serverStop(); },
   serverStatus:      function ()           { return { status: _serverStatus, error: _serverError }; },

@@ -46,7 +46,13 @@ window.setFirstPersonWeapon = function (modelType, fpOffset, fpRotation) {
     camera.remove(_fpWeaponGroup);
     _fpWeaponGroup.traverse(function (c) {
       if (c.geometry) c.geometry.dispose();
-      if (c.material) c.material.dispose();
+      if (c.material) {
+        if (Array.isArray(c.material)) {
+          c.material.forEach(function (m) { m.dispose(); });
+        } else {
+          c.material.dispose();
+        }
+      }
     });
     _fpWeaponGroup = null;
   }
@@ -67,9 +73,18 @@ window.setFirstPersonWeapon = function (modelType, fpOffset, fpRotation) {
   // Render on top of everything (no depth fighting with scene)
   _fpWeaponGroup.traverse(function (c) {
     if (c.isMesh && c.material) {
-      c.material = c.material.clone();
-      c.material.depthTest = false;
-      c.material.depthWrite = false;
+      if (Array.isArray(c.material)) {
+        c.material = c.material.map(function (m) {
+          var cl = m.clone();
+          cl.depthTest = false;
+          cl.depthWrite = false;
+          return cl;
+        });
+      } else {
+        c.material = c.material.clone();
+        c.material.depthTest = false;
+        c.material.depthWrite = false;
+      }
       c.renderOrder = 999;
     }
   });
@@ -192,6 +207,11 @@ function init() {
   // Load heroes from server (overrides built-in defaults with any edited versions)
   if (typeof loadHeroesFromServer === 'function') {
     loadHeroesFromServer();
+  }
+
+  // Load custom weapon models (GLTF + parts-based) from server
+  if (typeof loadCustomWeaponModelsFromServer === 'function') {
+    loadCustomWeaponModelsFromServer();
   }
 
   // Load custom menu configs (overrides hardcoded HTML with saved configs)

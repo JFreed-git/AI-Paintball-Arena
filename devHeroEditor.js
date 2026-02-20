@@ -61,6 +61,19 @@
     _hitboxSegments = JSON.parse(json);
     _selectedHitboxIndex = -1;
     if (_hitboxInteractionCtrl) _hitboxInteractionCtrl.clearHandles();
+    // Sync linked body parts to match restored hitbox data
+    for (var i = 0; i < _hitboxSegments.length; i++) {
+      var seg = _hitboxSegments[i];
+      var li = findLinkedBodyPartIndices(seg);
+      var mfo = computeBodyPartsMfo();
+      for (var k = 0; k < li.length; k++) {
+        var part = _bodyParts[li[k]];
+        part.offsetX = Math.round((seg.offsetX / 2) * 100) / 100;
+        part.offsetY = Math.max(0, Math.round(((seg.offsetY - mfo) / 2) * 100) / 100);
+        part.offsetZ = Math.round((seg.offsetZ / 2) * 100) / 100;
+        copyDimsHitboxToBodyPart(seg, part);
+      }
+    }
     renderHitboxSegmentList();
     updateHeroPreview();
   }
@@ -284,7 +297,12 @@
     _modelVisible = !_modelVisible;
     var btn = document.getElementById('heToggleModel');
     if (btn) btn.textContent = _modelVisible ? 'Hide Model' : 'Show Model';
-    applyPlayerMeshVisibility(_modelVisible);
+    // In hitbox mode, show body part group as reference (always up-to-date)
+    if (_viewMode === 'hitbox') {
+      if (_bodyPartGroup) _bodyPartGroup.visible = _modelVisible;
+    } else {
+      applyPlayerMeshVisibility(_modelVisible);
+    }
   }
 
   // --- Hitbox/Body-Part linking helpers ---
@@ -323,6 +341,36 @@
     }
   }
 
+  function copyDimsHitboxToBodyPart(seg, part) {
+    part.shape = seg.shape || 'box';
+    var s = seg.shape || 'box';
+    if (s === 'sphere') {
+      part.radius = Math.round(((seg.radius || 0.25) / 2) * 100) / 100;
+    } else if (s === 'cylinder' || s === 'capsule') {
+      part.radius = Math.round(((seg.radius || 0.3) / 2) * 100) / 100;
+      part.height = Math.round(((seg.height || 0.5) / 2) * 100) / 100;
+    } else {
+      part.width  = Math.round(((seg.width  || 0.5) / 2) * 100) / 100;
+      part.height = Math.round(((seg.height || 0.5) / 2) * 100) / 100;
+      part.depth  = Math.round(((seg.depth  || 0.5) / 2) * 100) / 100;
+    }
+  }
+
+  function copyDimsBodyPartToHitbox(part, seg) {
+    seg.shape = part.shape || 'box';
+    var s = part.shape || 'box';
+    if (s === 'sphere') {
+      seg.radius = Math.round(((part.radius || 0.25) * 2) * 100) / 100;
+    } else if (s === 'cylinder' || s === 'capsule') {
+      seg.radius = Math.round(((part.radius || 0.3) * 2) * 100) / 100;
+      seg.height = Math.round(((part.height || 0.5) * 2) * 100) / 100;
+    } else {
+      seg.width  = Math.round(((part.width  || 0.5) * 2) * 100) / 100;
+      seg.height = Math.round(((part.height || 0.5) * 2) * 100) / 100;
+      seg.depth  = Math.round(((part.depth  || 0.5) * 2) * 100) / 100;
+    }
+  }
+
   function syncBodyPartToHitbox(hitboxIndex) {
     var seg = _hitboxSegments[hitboxIndex];
     if (!seg) return;
@@ -336,6 +384,7 @@
       part.offsetX = Math.round((seg.offsetX / 2) * 100) / 100;
       part.offsetY = Math.max(0, Math.round(((seg.offsetY - mfo) / 2) * 100) / 100);
       part.offsetZ = Math.round((seg.offsetZ / 2) * 100) / 100;
+      copyDimsHitboxToBodyPart(seg, part);
       var mesh = _bodyPartPreviewMeshes[pi];
       if (mesh) {
         mesh.position.set(
@@ -343,9 +392,12 @@
           feetY + mfo + (part.offsetY || 0) * 2,
           (part.offsetZ || 0) * 2
         );
+        mesh.geometry.dispose();
+        mesh.geometry = buildBodyPartGeometry(part);
       }
     }
     syncBodyPartFormFromData();
+    syncPlayerMeshToBodyParts();
   }
 
   function syncHitboxToBodyPart(bodyPartIndex) {
@@ -359,11 +411,30 @@
     seg.offsetX = Math.round((part.offsetX * 2) * 100) / 100;
     seg.offsetY = Math.max(0, Math.round((part.offsetY * 2 + mfo) * 100) / 100);
     seg.offsetZ = Math.round((part.offsetZ * 2) * 100) / 100;
+    copyDimsBodyPartToHitbox(part, seg);
     var mesh = _hitboxPreviewMeshes[segIndex];
     if (mesh) {
       mesh.position.set(seg.offsetX || 0, feetY + seg.offsetY, seg.offsetZ || 0);
+      mesh.geometry.dispose();
+      mesh.geometry = buildHitboxGeometry(seg);
     }
     syncFormFromSegments();
+    syncPlayerMeshToBodyParts();
+  }
+
+  function syncPlayerMeshToBodyParts() {
+    if (!_heroPreviewPlayer || !_heroPreviewPlayer._meshGroup) return;
+    var children = _heroPreviewPlayer._meshGroup.children;
+    var bpIndex = 0;
+    for (var i = 0; i < children.length; i++) {
+      var child = children[i];
+      if (!child.userData || !child.userData.isBodyPart) continue;
+      if (bpIndex < _bodyParts.length) {
+        var part = _bodyParts[bpIndex];
+        child.position.set(part.offsetX || 0, part.offsetY || 0, part.offsetZ || 0);
+      }
+      bpIndex++;
+    }
   }
 
   // --- Hitbox move callback (called by interaction engine) ---
@@ -486,6 +557,7 @@
 
     // Sync form
     syncFormFromSegments();
+    syncBodyPartToHitbox(index);
   }
 
   var _hePreviewInited = false;
@@ -651,11 +723,11 @@
     var rightTitle = document.querySelector('#devRightPanelHeader h3');
 
     if (mode === 'hitbox') {
-      // Hitbox mode: show player mesh as reference, show hitbox wireframes, hide body part editor
-      if (_bodyPartGroup) _bodyPartGroup.visible = false;
+      // Hitbox mode: show body parts as reference when model visible, show hitbox wireframes
+      if (_bodyPartGroup) _bodyPartGroup.visible = _modelVisible;
       if (_hitboxGroup) _hitboxGroup.visible = true;
       if (_weaponPreviewGroup) _weaponPreviewGroup.visible = false;
-      applyPlayerMeshVisibility(_modelVisible);
+      applyPlayerMeshVisibility(false);
       if (_hitboxInteractionCtrl) _hitboxInteractionCtrl.enable();
       if (_bodyInteractionCtrl) _bodyInteractionCtrl.disable();
       if (rightContent) rightContent.classList.remove('hidden');
@@ -790,6 +862,8 @@
 
     // Sync linked hitbox segment
     syncHitboxToBodyPart(index);
+
+    syncPlayerMeshToBodyParts();
   }
 
   function onBodyPartResizeStart(index) {
@@ -830,6 +904,7 @@
       mesh.geometry = buildBodyPartGeometry(part);
     }
     syncBodyPartFormFromData();
+    syncHitboxToBodyPart(index);
   }
 
   function getBodyPartHandleDefs(index) {
@@ -870,8 +945,21 @@
     if (state.cam) _cameraOffset = state.cam;
     _selectedBodyPartIndex = -1;
     if (_bodyInteractionCtrl) _bodyInteractionCtrl.clearHandles();
+    // Sync linked hitboxes to match restored body part data
+    for (var i = 0; i < _bodyParts.length; i++) {
+      var p = _bodyParts[i];
+      if (!p.linkedTo) continue;
+      var si = findLinkedHitboxSegment(p);
+      if (si < 0) continue;
+      var seg = _hitboxSegments[si];
+      var mfo = computeBodyPartsMfo();
+      seg.offsetX = Math.round((p.offsetX * 2) * 100) / 100;
+      seg.offsetY = Math.max(0, Math.round((p.offsetY * 2 + mfo) * 100) / 100);
+      seg.offsetZ = Math.round((p.offsetZ * 2) * 100) / 100;
+      copyDimsBodyPartToHitbox(p, seg);
+    }
     renderBodyPartList();
-    updateBodyPartPreview();
+    updateHeroPreview();
     updateBodyPartUndoRedoButtons();
   }
 
@@ -883,8 +971,21 @@
     if (state.cam) _cameraOffset = state.cam;
     _selectedBodyPartIndex = -1;
     if (_bodyInteractionCtrl) _bodyInteractionCtrl.clearHandles();
+    // Sync linked hitboxes to match restored body part data
+    for (var i = 0; i < _bodyParts.length; i++) {
+      var p = _bodyParts[i];
+      if (!p.linkedTo) continue;
+      var si = findLinkedHitboxSegment(p);
+      if (si < 0) continue;
+      var seg = _hitboxSegments[si];
+      var mfo = computeBodyPartsMfo();
+      seg.offsetX = Math.round((p.offsetX * 2) * 100) / 100;
+      seg.offsetY = Math.max(0, Math.round((p.offsetY * 2 + mfo) * 100) / 100);
+      seg.offsetZ = Math.round((p.offsetZ * 2) * 100) / 100;
+      copyDimsBodyPartToHitbox(p, seg);
+    }
     renderBodyPartList();
-    updateBodyPartPreview();
+    updateHeroPreview();
     updateBodyPartUndoRedoButtons();
   }
 
@@ -906,49 +1007,47 @@
 
       var header = document.createElement('div');
       header.className = 'wmb-part-header';
-      var isLinked = !!part.linkedTo;
-      var linkLabel = isLinked
-        ? ' <span style="color:#44ddff;font-size:11px;font-weight:normal">[linked: ' + part.linkedTo + ']</span>'
-        : '';
-      header.innerHTML = '<span>' + (part.name || 'part').toUpperCase() + ' #' + (i + 1) + linkLabel + '</span>';
+      header.innerHTML = '<span>' + (part.name || 'part').toUpperCase() + ' #' + (i + 1) + '</span>';
       var removeBtn = document.createElement('button');
       removeBtn.className = 'wmb-part-remove';
       removeBtn.textContent = 'Remove';
       removeBtn.addEventListener('click', function () { removeBodyPart(i); });
-      var linkBtn = document.createElement('button');
-      linkBtn.className = 'wmb-part-remove';
-      linkBtn.style.marginRight = '4px';
-      linkBtn.textContent = isLinked ? 'Unlink' : 'Link';
-      linkBtn.title = isLinked
-        ? 'Unlink from hitbox segment "' + part.linkedTo + '"'
-        : 'Link to a hitbox segment by matching name';
-      (function (idx, linked) {
-        linkBtn.addEventListener('click', function () {
-          if (linked) {
-            _bodyParts[idx].linkedTo = null;
-          } else {
-            var baseName = getBaseName(_bodyParts[idx].name);
-            var found = false;
-            if (baseName && baseName !== 'part' && baseName !== 'segment') {
-              for (var j = 0; j < _hitboxSegments.length; j++) {
-                if (getBaseName(_hitboxSegments[j].name) === baseName) {
-                  _bodyParts[idx].linkedTo = _hitboxSegments[j].name;
-                  found = true;
-                  break;
-                }
-              }
-            }
-            if (!found && idx < _hitboxSegments.length) {
-              _bodyParts[idx].linkedTo = _hitboxSegments[idx].name;
-            }
+      header.appendChild(removeBtn);
+      div.appendChild(header);
+
+      // Link dropdown
+      var linkRow = document.createElement('div');
+      linkRow.className = 'dev-field';
+      var linkLbl = document.createElement('label');
+      linkLbl.textContent = 'Link';
+      var linkSelect = document.createElement('select');
+      var noneOpt = document.createElement('option');
+      noneOpt.value = '';
+      noneOpt.textContent = '(none)';
+      if (!part.linkedTo) noneOpt.selected = true;
+      linkSelect.appendChild(noneOpt);
+      for (var si = 0; si < _hitboxSegments.length; si++) {
+        var seg = _hitboxSegments[si];
+        var opt = document.createElement('option');
+        opt.value = seg.name;
+        opt.textContent = (seg.name || 'segment').toUpperCase() + ' #' + (si + 1);
+        if (part.linkedTo === seg.name) opt.selected = true;
+        linkSelect.appendChild(opt);
+      }
+      (function (idx) {
+        linkSelect.addEventListener('change', function () {
+          _bodyParts[idx].linkedTo = linkSelect.value || null;
+          if (linkSelect.value) {
+            syncHitboxToBodyPart(idx);
+            updateHeroPreview();
           }
           renderBodyPartList();
           renderHitboxSegmentList();
         });
-      })(i, isLinked);
-      header.insertBefore(linkBtn, removeBtn);
-      header.appendChild(removeBtn);
-      div.appendChild(header);
+      })(i);
+      linkRow.appendChild(linkLbl);
+      linkRow.appendChild(linkSelect);
+      div.appendChild(linkRow);
 
       // Shape dropdown
       var shapeRow = document.createElement('div');
@@ -1797,8 +1896,9 @@
     }
 
     // Apply visibility based on current view mode
+    // Player mesh is no longer used as reference — body part group is used instead
     if (_viewMode === 'hitbox') {
-      applyPlayerMeshVisibility(_modelVisible);
+      applyPlayerMeshVisibility(false);
     } else {
       // In visual and combined modes, player mesh is hidden (body part group is shown instead)
       applyPlayerMeshVisibility(false);
@@ -1846,7 +1946,7 @@
 
     // Re-apply visibility for current view mode (rebuild may have reset it)
     if (_viewMode === 'hitbox') {
-      if (_bodyPartGroup) _bodyPartGroup.visible = false;
+      if (_bodyPartGroup) _bodyPartGroup.visible = _modelVisible;
       if (_hitboxGroup) _hitboxGroup.visible = true;
       if (_weaponPreviewGroup) _weaponPreviewGroup.visible = false;
     } else if (_viewMode === 'visual') {

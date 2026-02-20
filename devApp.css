@@ -1076,291 +1076,194 @@ body {
     z-index: 5;
 }
 
-/* Sound Library Table */
-#amSoundTable {
-    flex: 0 0 auto;
-    max-height: 45%;
+#amContent {
+    flex: 1;
     overflow-y: auto;
-    border-bottom: 1px solid #333;
+    padding: 16px;
 }
 
-.am-table {
-    width: 100%;
-    border-collapse: collapse;
-    font-size: 12px;
+/* Hero list grid */
+.am-hero-grid {
+    gap: 12px;
 }
 
-.am-table thead {
-    position: sticky;
-    top: 0;
-    z-index: 1;
-}
-
-.am-table th {
-    background: #1a1a1a;
-    color: #aaa;
-    font-size: 11px;
-    font-weight: bold;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    padding: 8px 10px;
-    text-align: left;
-    border-bottom: 1px solid #333;
-    white-space: nowrap;
-}
-
-.am-table td {
-    padding: 6px 10px;
-    color: #ccc;
-    border-bottom: 1px solid #1a1a1a;
-    white-space: nowrap;
+.am-hero-card {
+    cursor: pointer;
+    position: relative;
     overflow: hidden;
-    text-overflow: ellipsis;
-    max-width: 180px;
+    transition: transform 0.1s, box-shadow 0.1s;
 }
 
-.am-table tr {
-    cursor: pointer;
-    transition: background 0.1s;
+.am-hero-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.4);
 }
 
-.am-table tbody tr:hover {
-    background: #1a1a1a;
+.am-hero-card-accent {
+    height: 4px;
+    width: 100%;
 }
 
-.am-table tr.am-row-selected {
-    background: rgba(0, 255, 136, 0.08);
-}
-
-.am-table tr.am-row-selected td {
-    color: #fff;
-}
-
-/* Type badge */
-.am-type-badge {
-    display: inline-block;
-    padding: 2px 6px;
-    border-radius: 3px;
-    font-size: 10px;
-    font-weight: bold;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-}
-
-.am-type-badge.noise_burst { background: #3a2010; color: #f0a040; }
-.am-type-badge.tone { background: #102030; color: #40a0f0; }
-.am-type-badge.sweep { background: #102a10; color: #40f080; }
-.am-type-badge.multi_tone { background: #2a1030; color: #c060f0; }
-.am-type-badge.fm { background: #2a2010; color: #f0c040; }
-.am-type-badge.filtered_osc { background: #10202a; color: #40c0f0; }
-.am-type-badge.impact { background: #2a1010; color: #f06040; }
-.am-type-badge.pluck { background: #1a2a10; color: #80f040; }
-
-/* Grouped sound table */
-.am-group-row {
-    background: #151515;
-    cursor: pointer;
-    transition: background 0.1s;
-}
-
-.am-group-row:hover {
-    background: #1e1e1e;
-}
-
-.am-group-row td {
-    padding: 8px 10px;
-    color: #ccc;
-    border-bottom: 1px solid #222;
-    white-space: nowrap;
-}
-
-.am-group-name {
-    font-weight: bold;
-    color: #fff;
-    font-size: 13px;
-}
-
-.am-expand-icon {
-    display: inline-block;
-    font-size: 10px;
-    color: #888;
-    width: 14px;
-}
-
-.am-layer-count {
-    display: inline-block;
-    padding: 2px 7px;
-    background: rgba(0, 255, 136, 0.1);
-    border: 1px solid rgba(0, 255, 136, 0.25);
-    border-radius: 3px;
-    font-size: 10px;
-    font-weight: bold;
-    color: #00ff88;
-    letter-spacing: 0.3px;
-}
-
-.am-layer-row {
-    cursor: pointer;
-    transition: background 0.1s;
-}
-
-.am-layer-row:hover {
-    background: #1a1a1a;
-}
-
-.am-layer-row td {
-    border-bottom: 1px solid #141414;
-}
-
-.am-layer-indent {
-    padding-left: 30px !important;
-    color: #aaa;
-    font-size: 12px;
-}
-
-tr.am-layer-row.hidden {
-    display: none;
-}
-
-.am-play-all-btn {
-    background: transparent;
-    border: 1px solid rgba(0, 255, 136, 0.3);
-    color: #00ff88;
-    border-radius: 3px;
-    padding: 2px 8px;
-    cursor: pointer;
-    font-size: 11px;
-    font-weight: bold;
-    transition: background 0.1s, border-color 0.1s;
-    white-space: nowrap;
-}
-
-.am-play-all-btn:hover {
-    background: rgba(0, 255, 136, 0.1);
-    border-color: #00ff88;
-}
-
-/* Table action buttons */
-.am-table-btn {
-    background: transparent;
-    border: 1px solid #444;
-    color: #aaa;
-    border-radius: 3px;
-    padding: 2px 8px;
-    cursor: pointer;
-    font-size: 11px;
-    transition: background 0.1s, color 0.1s;
-}
-
-.am-table-btn:hover {
-    background: #333;
-    color: #fff;
-}
-
-.am-table-btn.am-play-btn:hover {
-    border-color: #00ff88;
-    color: #00ff88;
-}
-
-/* Filter pills in table */
-.am-filter-pill {
-    display: inline-block;
-    padding: 1px 5px;
-    background: #1a1a1a;
-    border: 1px solid #333;
-    border-radius: 3px;
-    font-size: 10px;
-    color: #888;
-    margin-right: 3px;
-}
-
-/* Visualizer Container */
-#amVisualizerContainer {
-    flex: 1;
+.am-hero-card-body {
+    padding: 12px;
     display: flex;
-    gap: 0;
-    min-height: 0;
-    background: #0a0a0a;
-}
-
-#amEnvelopeCanvas,
-#amWaveformCanvas {
-    flex: 1;
-    min-width: 0;
-    min-height: 0;
-    border-right: 1px solid #222;
-}
-
-#amWaveformCanvas {
-    border-right: none;
-}
-
-/* Audio Manager editor scrollable */
-#amEditorForm {
-    max-height: none;
-    overflow-y: auto;
-    padding-right: 4px;
-}
-
-/* Audio Manager binding rows */
-.am-binding-row {
-    background: #1a1a1a;
-    border: 1px solid #333;
-    border-radius: 4px;
-    padding: 6px 8px;
-    margin: 4px 0;
-    display: flex;
-    flex-wrap: wrap;
+    flex-direction: column;
     align-items: center;
     gap: 6px;
 }
 
-.am-binding-event {
-    flex: 0 0 auto;
-    padding: 3px 6px;
-    background: #111;
+.am-hero-card-name {
+    font-size: 14px;
+    font-weight: bold;
     color: #fff;
-    border: 1px solid #444;
-    border-radius: 3px;
-    font-size: 11px;
 }
 
-.am-binding-filters {
-    flex: 1;
-    display: flex;
-    flex-wrap: wrap;
-    gap: 4px;
-    align-items: center;
-}
-
-.am-filter-label {
-    font-size: 10px;
+.am-hero-card-count {
+    font-size: 12px;
     color: #888;
 }
 
-.am-filter-input {
-    width: 60px;
-    padding: 2px 4px;
-    background: #111;
-    color: #fff;
-    border: 1px solid #444;
-    border-radius: 3px;
-    font-size: 10px;
+/* Detail view */
+.am-detail {
+    max-width: 700px;
 }
 
-.am-binding-remove {
+.am-back-btn {
     background: transparent;
-    border: 1px solid #cc3333;
-    color: #ff6666;
-    border-radius: 3px;
-    padding: 1px 6px;
+    border: 1px solid #444;
+    color: #aaa;
+    border-radius: 4px;
+    padding: 4px 12px;
     cursor: pointer;
-    font-size: 11px;
-    flex-shrink: 0;
+    font-size: 12px;
+    margin-bottom: 12px;
+    transition: background 0.1s, color 0.1s;
 }
 
-.am-binding-remove:hover {
-    background: #331111;
+.am-back-btn:hover {
+    background: #222;
+    color: #fff;
+}
+
+.am-hero-header {
+    font-size: 18px;
+    font-weight: bold;
+    color: #fff;
+    margin-bottom: 16px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.am-color-dot {
+    display: inline-block;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+}
+
+.am-category {
+    margin-bottom: 16px;
+}
+
+.am-category-title {
+    font-size: 11px;
+    font-weight: bold;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: #888;
+    padding-bottom: 4px;
+    margin-bottom: 6px;
+    border-bottom: 1px solid #333;
+}
+
+.am-slot {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 8px;
+    border-radius: 4px;
+    transition: background 0.1s;
+}
+
+.am-slot:hover {
+    background: #1a1a1a;
+}
+
+.am-slot-name {
+    flex: 0 0 120px;
+    font-size: 12px;
+    color: #ccc;
+}
+
+.am-slot-file {
+    flex: 1;
+    font-size: 12px;
+    color: #aaa;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.am-no-file {
+    color: #555;
+    font-style: italic;
+}
+
+.am-slot-volume {
+    flex: 0 0 80px;
+}
+
+.am-vol-slider {
+    width: 100%;
+    height: 4px;
+    accent-color: #00ff88;
+}
+
+.am-vol-slider:disabled {
+    opacity: 0.3;
+}
+
+.am-slot-actions {
+    flex: 0 0 auto;
+    display: flex;
+    gap: 4px;
+}
+
+.am-slot-btn {
+    background: transparent;
+    border: 1px solid #444;
+    color: #aaa;
+    border-radius: 3px;
+    padding: 2px 8px;
+    cursor: pointer;
+    font-size: 12px;
+    transition: background 0.1s, color 0.1s;
+}
+
+.am-slot-btn:hover:not(:disabled) {
+    background: #333;
+    color: #fff;
+}
+
+.am-slot-btn:disabled {
+    opacity: 0.3;
+    cursor: default;
+}
+
+.am-slot-btn.am-play-btn:hover:not(:disabled) {
+    border-color: #00ff88;
+    color: #00ff88;
+}
+
+.am-slot-btn.am-remove-btn:hover:not(:disabled) {
+    border-color: #ff4444;
+    color: #ff4444;
+}
+
+.am-slot-btn.am-upload-btn:hover:not(:disabled) {
+    border-color: #4488ff;
+    color: #4488ff;
 }
 
 /* ===== Gallery Views ===== */

@@ -23,8 +23,8 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server, { cors: { origin: '*' } });
 
-// JSON body parsing for map API
-app.use(express.json({ limit: '1mb' }));
+// JSON body parsing for map API and audio file uploads
+app.use(express.json({ limit: '50mb' }));
 
 // Block dev workbench files from being served to LAN players
 var DEV_BLOCKED = ['/dev.html', '/devApp.js', '/devApp.css', '/devHeroEditor.js', '/devSplitScreen.js',
@@ -246,6 +246,78 @@ app.delete('/api/sounds/:name', function (req, res) {
   }
 });
 
+// ── Hero Sound Assignment API ──
+const SOUND_FILES_DIR = path.join(__dirname, 'sounds', 'files');
+const HERO_SOUNDS_PATH = path.join(__dirname, 'sounds', 'hero_sounds.json');
+
+function ensureSoundFilesDir() {
+  if (!fs.existsSync(SOUND_FILES_DIR)) fs.mkdirSync(SOUND_FILES_DIR, { recursive: true });
+}
+
+app.get('/api/hero-sounds', function (req, res) {
+  try {
+    if (!fs.existsSync(HERO_SOUNDS_PATH)) return res.json({});
+    var data = fs.readFileSync(HERO_SOUNDS_PATH, 'utf8');
+    res.type('json').send(data);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to read hero sounds' });
+  }
+});
+
+app.post('/api/hero-sounds', function (req, res) {
+  ensureSoundsDir();
+  try {
+    fs.writeFileSync(HERO_SOUNDS_PATH, JSON.stringify(req.body, null, 2), 'utf8');
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to save hero sounds' });
+  }
+});
+
+app.get('/api/sound-files', function (req, res) {
+  ensureSoundFilesDir();
+  try {
+    var files = fs.readdirSync(SOUND_FILES_DIR);
+    res.json(files);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to list sound files' });
+  }
+});
+
+app.post('/api/sound-files/:filename', function (req, res) {
+  var filename = req.params.filename;
+  if (!filename || !/\.(wav|mp3)$/i.test(filename)) {
+    return res.status(400).json({ error: 'Only .wav and .mp3 files allowed' });
+  }
+  // Sanitize: only allow safe characters in filename
+  if (/[^a-zA-Z0-9_\-.]/.test(filename)) {
+    return res.status(400).json({ error: 'Invalid filename characters' });
+  }
+  ensureSoundFilesDir();
+  try {
+    var buf = Buffer.from(req.body.data, 'base64');
+    fs.writeFileSync(path.join(SOUND_FILES_DIR, filename), buf);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to write sound file' });
+  }
+});
+
+app.delete('/api/sound-files/:filename', function (req, res) {
+  var filename = req.params.filename;
+  if (!filename || /[^a-zA-Z0-9_\-.]/.test(filename)) {
+    return res.status(400).json({ error: 'Invalid filename' });
+  }
+  var filePath = path.join(SOUND_FILES_DIR, filename);
+  if (!fs.existsSync(filePath)) return res.status(404).json({ error: 'File not found' });
+  try {
+    fs.unlinkSync(filePath);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to delete sound file' });
+  }
+});
+
 // ── Hero REST API (read-only — editing happens in the Electron dev workbench) ──
 const HEROES_DIR = path.join(__dirname, 'heroes');
 
@@ -350,6 +422,124 @@ app.delete('/api/heroes/:id', function (req, res) {
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ error: 'Failed to delete hero' });
+  }
+});
+
+// ── Weapon Model REST API ──
+const WEAPON_MODELS_DIR = path.join(__dirname, 'weapon-models');
+const WEAPON_MODEL_FILES_DIR = path.join(__dirname, 'weapon-models', 'files');
+
+function ensureWeaponModelsDir() {
+  if (!fs.existsSync(WEAPON_MODELS_DIR)) fs.mkdirSync(WEAPON_MODELS_DIR, { recursive: true });
+}
+
+function ensureWeaponModelFilesDir() {
+  if (!fs.existsSync(WEAPON_MODEL_FILES_DIR)) fs.mkdirSync(WEAPON_MODEL_FILES_DIR, { recursive: true });
+}
+
+app.get('/api/weapon-models', function (req, res) {
+  ensureWeaponModelsDir();
+  try {
+    var files = fs.readdirSync(WEAPON_MODELS_DIR).filter(function (f) { return f.endsWith('.json'); });
+    var names = files.map(function (f) { return f.replace(/\.json$/, ''); });
+    res.json(names);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to list weapon models' });
+  }
+});
+
+app.get('/api/weapon-models/:name', function (req, res) {
+  var name = sanitizeMapName(req.params.name);
+  if (!name) return res.status(400).json({ error: 'Invalid weapon model name' });
+  var filePath = path.join(WEAPON_MODELS_DIR, name + '.json');
+  if (!fs.existsSync(filePath)) return res.status(404).json({ error: 'Weapon model not found' });
+  try {
+    var data = fs.readFileSync(filePath, 'utf8');
+    res.type('json').send(data);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to read weapon model' });
+  }
+});
+
+app.post('/api/weapon-models/:name', function (req, res) {
+  var name = sanitizeMapName(req.params.name);
+  if (!name) return res.status(400).json({ error: 'Invalid weapon model name' });
+  ensureWeaponModelsDir();
+  try {
+    fs.writeFileSync(path.join(WEAPON_MODELS_DIR, name + '.json'), JSON.stringify(req.body, null, 2), 'utf8');
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to save weapon model' });
+  }
+});
+
+app.delete('/api/weapon-models/:name', function (req, res) {
+  var name = sanitizeMapName(req.params.name);
+  if (!name) return res.status(400).json({ error: 'Invalid weapon model name' });
+  var filePath = path.join(WEAPON_MODELS_DIR, name + '.json');
+  if (!fs.existsSync(filePath)) return res.status(404).json({ error: 'Weapon model not found' });
+  try {
+    fs.unlinkSync(filePath);
+    // Also delete associated GLB file if it exists
+    var glbPath = path.join(WEAPON_MODEL_FILES_DIR, name + '.glb');
+    if (fs.existsSync(glbPath)) fs.unlinkSync(glbPath);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to delete weapon model' });
+  }
+});
+
+// Weapon model binary files (GLB)
+app.get('/api/weapon-model-files', function (req, res) {
+  ensureWeaponModelFilesDir();
+  try {
+    var files = fs.readdirSync(WEAPON_MODEL_FILES_DIR);
+    res.json(files);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to list weapon model files' });
+  }
+});
+
+app.get('/api/weapon-model-files/:filename', function (req, res) {
+  var filename = req.params.filename;
+  if (!filename || /[^a-zA-Z0-9_\-.]/.test(filename)) {
+    return res.status(400).json({ error: 'Invalid filename' });
+  }
+  var filePath = path.join(WEAPON_MODEL_FILES_DIR, filename);
+  if (!fs.existsSync(filePath)) return res.status(404).json({ error: 'File not found' });
+  res.sendFile(filePath);
+});
+
+app.post('/api/weapon-model-files/:filename', function (req, res) {
+  var filename = req.params.filename;
+  if (!filename || !/\.(glb|gltf)$/i.test(filename)) {
+    return res.status(400).json({ error: 'Only .glb and .gltf files allowed' });
+  }
+  if (/[^a-zA-Z0-9_\-.]/.test(filename)) {
+    return res.status(400).json({ error: 'Invalid filename characters' });
+  }
+  ensureWeaponModelFilesDir();
+  try {
+    var buf = Buffer.from(req.body.data, 'base64');
+    fs.writeFileSync(path.join(WEAPON_MODEL_FILES_DIR, filename), buf);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to write weapon model file' });
+  }
+});
+
+app.delete('/api/weapon-model-files/:filename', function (req, res) {
+  var filename = req.params.filename;
+  if (!filename || /[^a-zA-Z0-9_\-.]/.test(filename)) {
+    return res.status(400).json({ error: 'Invalid filename' });
+  }
+  var filePath = path.join(WEAPON_MODEL_FILES_DIR, filename);
+  if (!fs.existsSync(filePath)) return res.status(404).json({ error: 'File not found' });
+  try {
+    fs.unlinkSync(filePath);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to delete weapon model file' });
   }
 });
 

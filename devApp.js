@@ -609,7 +609,6 @@ function loadAllHeroes() {
     _loadHeroesDirect();
     return;
   }
-
   // Fallback: fetch-based loading (server mode)
   _loadHeroesFetch();
 }
@@ -639,7 +638,6 @@ function _loadHeroesDirect() {
         if (res.data && res.data.id) {
           heroes.push(res.data);
         } else if (res.status === 200 && res.id) {
-          // readHero might return the hero directly in some formats
           heroes.push(res);
         }
       } catch (e) {

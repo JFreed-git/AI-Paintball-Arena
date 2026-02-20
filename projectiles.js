@@ -356,7 +356,8 @@
   }
 
   // Visual bullet: small sphere that travels from origin to hit point
-  function spawnTracer(origin, end, color, lifetimeMs) {
+  // speed: units/sec matching weapon.projectileSpeed. 0/null = instant (hitscan).
+  function spawnTracer(origin, end, color, lifetimeMs, speed) {
     if (color === undefined) color = 0x00ff88;
     if (lifetimeMs === undefined) lifetimeMs = 60;
     try {
@@ -365,11 +366,43 @@
       var mat = new THREE.MeshBasicMaterial({ color: color });
       var bullet = new THREE.Mesh(geom, mat);
       bullet.frustumCulled = false;
-      bullet.position.copy(origin);
       scene.add(bullet);
 
+      // Instant hitscan: draw a line trail from origin to endpoint that fades out
+      if (!speed || speed <= 0) {
+        scene.remove(bullet);
+        try { geom.dispose(); mat.dispose(); } catch(e) {}
+
+        var midpoint = origin.clone().add(end).multiplyScalar(0.5);
+        var totalDist = origin.distanceTo(end);
+        var lineGeom = new THREE.CylinderGeometry(0.02, 0.02, totalDist, 4, 1);
+        var lineMat = new THREE.MeshBasicMaterial({ color: 0xaaaaaa, transparent: true, opacity: 0.6 });
+        var line = new THREE.Mesh(lineGeom, lineMat);
+        line.position.copy(midpoint);
+        var dir = end.clone().sub(origin).normalize();
+        line.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir);
+        line.frustumCulled = false;
+        scene.add(line);
+
+        var fadeMs = 1000;
+        var fadeStart = performance.now();
+        function fadeStep() {
+          var t = Math.min(1, (performance.now() - fadeStart) / fadeMs);
+          lineMat.opacity = 0.6 * (1 - t);
+          if (t < 1) {
+            requestAnimationFrame(fadeStep);
+          } else {
+            scene.remove(line);
+            try { lineGeom.dispose(); lineMat.dispose(); } catch(e) {}
+          }
+        }
+        requestAnimationFrame(fadeStep);
+        return;
+      }
+
+      // Traveling tracer at weapon's projectile speed
+      bullet.position.copy(origin);
       var totalDist = origin.distanceTo(end);
-      var speed = 120;
       var travelMs = (totalDist / Math.max(0.001, speed)) * 1000;
       var duration = Math.max(lifetimeMs, travelMs);
 
@@ -444,7 +477,7 @@
       }
     }
 
-    spawnTracer(origin.clone(), hitInfo.point.clone(), tracerColor, 70);
+    spawnTracer(origin.clone(), hitInfo.point.clone(), tracerColor, 70, 0);
     return hitInfo;
   }
 
@@ -518,7 +551,7 @@
       }
 
       // Fire sound
-      if (typeof playGameSound === 'function') playGameSound('weapon_fire', { weaponModelType: weapon.modelType, _worldPos: opts.worldPos || null });
+      if (typeof playGameSound === 'function') playGameSound('weapon_fire', { heroId: opts.heroId || undefined, weaponModelType: weapon.modelType, _worldPos: opts.worldPos || null });
 
       return { pelletsFired: pelletCount, hits: 0, results: projResults, magazineEmpty: projMagEmpty };
     }
@@ -581,7 +614,7 @@
       }
 
       // Tracer
-      spawnTracer(origin.clone(), closestPoint.clone(), tracerColor, 70);
+      spawnTracer(origin.clone(), closestPoint.clone(), tracerColor, 70, weapon.projectileSpeed || 0);
 
       var result = {
         hit: !!closestTarget,
@@ -617,7 +650,7 @@
     }
 
     // Fire sound
-    if (typeof playGameSound === 'function') playGameSound('weapon_fire', { weaponModelType: weapon.modelType, _worldPos: opts.worldPos || null });
+    if (typeof playGameSound === 'function') playGameSound('weapon_fire', { heroId: opts.heroId || undefined, weaponModelType: weapon.modelType, _worldPos: opts.worldPos || null });
 
     return { pelletsFired: stopped ? results.length : pelletCount, hits: hits, results: results, magazineEmpty: magazineEmpty };
   }
@@ -839,7 +872,7 @@
     }
 
     // Melee hit sound (spatial at impact point)
-    if (closestTarget && typeof playGameSound === 'function') playGameSound('melee_hit', { _worldPos: closestPoint || null });
+    if (closestTarget && typeof playGameSound === 'function') playGameSound('melee_hit', { heroId: opts.heroId || undefined, _worldPos: closestPoint || null });
 
     weapon.lastMeleeTime = performance.now();
 

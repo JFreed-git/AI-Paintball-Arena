@@ -29,10 +29,12 @@ All JS files use IIFEs `(function() { ... })()` for scope isolation. Public APIs
 | File | Purpose |
 |------|---------|
 | `config.js` | Shared constants: `GAME_CONFIG` (round timing, hero select timer) |
-| `audio.js` | Web Audio sound engine: synthesis, event-driven sound dispatch, AnalyserNode for viz, loads from `sounds/` |
-| `sounds/*.json` | Sound definition JSON files (editable via Audio Manager workbench) |
+| `audio.js` | Web Audio sound engine: synthesis for kept events (ui_click, countdown, death, respawn), file-based playback for hero sounds via `hero_sounds.json`, spatial audio |
+| `sounds/*.json` | Synthesis-only sound definitions (ui_click, countdown, death, respawn) |
+| `sounds/hero_sounds.json` | Hero+event → audio file mapping for file-based sounds |
+| `sounds/files/` | Uploaded `.wav`/`.mp3` audio files for hero sound events |
 | `weapon.js` | `Weapon` class — static stats + mutable state, `reset()` for rounds |
-| `weaponModels.js` | `WEAPON_MODEL_REGISTRY` — model type keys → `THREE.Group` builders |
+| `weaponModels.js` | `WEAPON_MODEL_REGISTRY` — model type keys → `THREE.Group` builders; GLTF/GLB model loading via `loadCustomWeaponModelsFromServer()` |
 | `physics.js` | 3D movement engine: gravity, jumping, ground detection, AABB + cylindrical collision |
 | `crosshair.js` | Crosshair rendering (cross/circle styles), spread, sprint spread |
 | `hud.js` | Shared HUD: reload state machine, health bar, ammo display |
@@ -55,10 +57,10 @@ All JS files use IIFEs `(function() { ... })()` for scope isolation. Public APIs
 | `modeTraining.js` | Training range mode — free practice, no rounds |
 | `game.js` | Bootstrap: creates `scene`/`camera`/`renderer`, master render loop |
 | `devConsole.js` | Dev console: god mode, hitbox viz, spectator cam (toggle with 'C') |
-| `server.js` | Express + Socket.IO relay server, REST API, no game logic |
+| `server.js` | Express + Socket.IO relay server, REST API (maps, heroes, sounds, weapon-models, weapon-model-files), no game logic |
 | `index.html` | Main HTML page with all DOM and script tags in dependency order |
 | `style.css` | All CSS for menus, HUD, overlays, and game UI |
-| `devAudioManager.js` | Workbench editor for sounds: viewport sound table, envelope/waveform viz, CRUD, duplicate, randomize |
+| `devAudioManager.js` | Hero sound assignment UI: assign .wav/.mp3 files to per-hero sound events |
 | `electron-*.js`, `dev*.js/html/css`, `interactionEngine.js`, `menuBuilder.js`, `mapEditor.js` | Dev workbench (Electron) — see [`docs/dev-workbench.md`](docs/dev-workbench.md) |
 
 ## Script Load Order
@@ -66,7 +68,7 @@ All JS files use IIFEs `(function() { ... })()` for scope isolation. Public APIs
 Scripts load in this order in index.html (dependencies flow top-to-bottom):
 
 ```
-Three.js (CDN) → Socket.IO (CDN) →
+Three.js (CDN) → GLTFLoader (CDN) → Socket.IO (CDN) →
 config.js → audio.js → weapon.js → weaponModels.js → physics.js → crosshair.js →
 hud.js → roundFlow.js → heroes.js → abilities.js → heroSelectUI.js →
 menuRenderer.js → menuNavigation.js → input.js → environment.js →
@@ -80,7 +82,7 @@ game.js → devConsole.js
 dev.html (Electron) loads the same shared scripts but replaces game.js with dev-specific bootstrap, and swaps Socket.IO for the fetch shim:
 
 ```
-Three.js (CDN) → electron-fetch-shim.js → interactionEngine.js →
+Three.js (CDN) → GLTFLoader (CDN) → electron-fetch-shim.js → interactionEngine.js →
 [same shared scripts as index.html: config.js → audio.js → ... through modeTraining.js] →
 mapEditor.js →
 menuBuilder.js → devAudioManager.js → devSplitScreen.js → devHeroEditor.js → devConsole.js → devApp.js

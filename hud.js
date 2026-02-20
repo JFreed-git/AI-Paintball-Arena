@@ -41,11 +41,11 @@
    * Check if a reload just finished and reset weapon state.
    * Returns true if reload completed this frame.
    */
-  window.sharedHandleReload = function (weapon, now) {
+  window.sharedHandleReload = function (weapon, now, heroId) {
     if (weapon.reloading && now >= weapon.reloadEnd) {
       weapon.reloading = false;
       weapon.ammo = weapon.magSize;
-      if (typeof playGameSound === 'function') playGameSound('reload_end');
+      if (typeof playGameSound === 'function') playGameSound('reload_end', { heroId: heroId || undefined });
       return true;
     }
     return false;
@@ -55,12 +55,12 @@
    * Start a reload if not already reloading and magazine isn't full.
    * Returns true if reload was initiated.
    */
-  window.sharedStartReload = function (weapon, now) {
+  window.sharedStartReload = function (weapon, now, heroId) {
     if (weapon.reloading || weapon.ammo >= weapon.magSize) return false;
     weapon.reloading = true;
     var reloadSec = weapon.reloadTimeSec || 2.5;
     weapon.reloadEnd = now + reloadSec * 1000;
-    if (typeof playGameSound === 'function') playGameSound('reload_start', { _duration: reloadSec });
+    if (typeof playGameSound === 'function') playGameSound('reload_start', { heroId: heroId || undefined, _duration: reloadSec });
     return true;
   };
 

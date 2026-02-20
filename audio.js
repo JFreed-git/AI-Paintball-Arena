@@ -37,6 +37,14 @@
   var FOOTSTEP_WALK_CD = 400;
   var FOOTSTEP_SPRINT_CD = 280;
 
+  // Hero sound file system
+  var _heroSoundMap = {};       // loaded from hero_sounds.json
+  var _audioBufferCache = {};   // filename → decoded AudioBuffer
+  var _synthesisOnlyEvents = {
+    ui_click: true, countdown_tick: true, countdown_go: true,
+    own_death: true, respawn: true
+  };
+
   // --- AudioContext management ---
 
   function ensureContext() {
@@ -482,30 +490,82 @@
     }
   }
 
+  // --- Audio file playback ---
+
+  function _playAudioFile(filename, volume, worldPos) {
+    var ctx = ensureContext();
+    if (!ctx) return;
+
+    var vol = (typeof volume === 'number') ? volume : 0.8;
+
+    function playBuffer(buffer) {
+      var source = ctx.createBufferSource();
+      source.buffer = buffer;
+      var gain = ctx.createGain();
+      gain.gain.value = vol;
+      source.connect(gain);
+      gain.connect(_getOutputNode(worldPos));
+      source.start(0);
+    }
+
+    if (_audioBufferCache[filename]) {
+      playBuffer(_audioBufferCache[filename]);
+      return;
+    }
+
+    fetch('/sounds/files/' + encodeURIComponent(filename))
+      .then(function (r) { return r.arrayBuffer(); })
+      .then(function (buf) { return ctx.decodeAudioData(buf); })
+      .then(function (decoded) {
+        _audioBufferCache[filename] = decoded;
+        playBuffer(decoded);
+      })
+      .catch(function () {});
+  }
+
   // --- Public API ---
 
   window.playGameSound = function (eventName, context) {
     if (!eventName) return;
     context = context || {};
     var worldPos = context._worldPos || null;
-    var entries = _eventIndex[eventName];
-    if (!entries || entries.length === 0) return;
 
-    for (var i = 0; i < entries.length; i++) {
-      var entry = entries[i];
-      if (matchesFilter(entry.filter, context)) {
-        var synth = entry.sound.synthesis;
-        // Override duration for dynamic-duration sounds (e.g. reload hum)
-        if (synth.dynamicDuration && typeof context._duration === 'number') {
-          var copy = {};
-          var sk = Object.keys(synth);
-          for (var j = 0; j < sk.length; j++) copy[sk[j]] = synth[sk[j]];
-          copy.duration = context._duration;
-          synth = copy;
+    // Synthesis-only events always use the old path
+    if (_synthesisOnlyEvents[eventName]) {
+      var entries = _eventIndex[eventName];
+      if (!entries || entries.length === 0) return;
+      for (var i = 0; i < entries.length; i++) {
+        var entry = entries[i];
+        if (matchesFilter(entry.filter, context)) {
+          var synth = entry.sound.synthesis;
+          if (synth.dynamicDuration && typeof context._duration === 'number') {
+            var copy = {};
+            var sk = Object.keys(synth);
+            for (var j = 0; j < sk.length; j++) copy[sk[j]] = synth[sk[j]];
+            copy.duration = context._duration;
+            synth = copy;
+          }
+          _synthesize(synth, worldPos);
         }
-        _synthesize(synth, worldPos);
       }
+      return;
     }
+
+    // File-based hero sound path
+    var heroId = context.heroId || null;
+    var mapping = null;
+
+    // Check hero-specific mapping first, then global
+    if (heroId && _heroSoundMap[heroId] && _heroSoundMap[heroId][eventName]) {
+      mapping = _heroSoundMap[heroId][eventName];
+    } else if (_heroSoundMap['global'] && _heroSoundMap['global'][eventName]) {
+      mapping = _heroSoundMap['global'][eventName];
+    }
+
+    if (mapping && mapping.file) {
+      _playAudioFile(mapping.file, mapping.volume, worldPos);
+    }
+    // If no mapping, no sound (silent)
   };
 
   window.playRawSound = function (synthesis) {
@@ -547,6 +607,43 @@
   window.getAudioAnalyser = function () {
     ensureContext();
     return _analyser;
+  };
+
+  window.loadHeroSoundsFromServer = function () {
+    return fetch('/api/hero-sounds').then(function (r) {
+      return r.json();
+    }).then(function (data) {
+      if (data && typeof data === 'object') {
+        _heroSoundMap = data;
+        // Preload all referenced audio files
+        var filesToLoad = {};
+        var heroIds = Object.keys(_heroSoundMap);
+        for (var h = 0; h < heroIds.length; h++) {
+          var events = _heroSoundMap[heroIds[h]];
+          if (!events) continue;
+          var eventNames = Object.keys(events);
+          for (var e = 0; e < eventNames.length; e++) {
+            var entry = events[eventNames[e]];
+            if (entry && entry.file) filesToLoad[entry.file] = true;
+          }
+        }
+        var ctx = ensureContext();
+        if (ctx) {
+          Object.keys(filesToLoad).forEach(function (filename) {
+            if (_audioBufferCache[filename]) return;
+            fetch('/sounds/files/' + encodeURIComponent(filename))
+              .then(function (r) { return r.arrayBuffer(); })
+              .then(function (buf) { return ctx.decodeAudioData(buf); })
+              .then(function (decoded) { _audioBufferCache[filename] = decoded; })
+              .catch(function () {});
+          });
+        }
+      }
+    }).catch(function () {});
+  };
+
+  window.getHeroSoundMap = function () {
+    return _heroSoundMap;
   };
 
   // --- Listener positioning for spatial audio ---
@@ -602,6 +699,7 @@
   // Auto-load sounds on startup
   if (typeof fetch === 'function') {
     window.loadSoundsFromServer();
+    window.loadHeroSoundsFromServer();
   }
 
 })();
