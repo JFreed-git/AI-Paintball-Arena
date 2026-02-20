@@ -7,7 +7,7 @@
  * EXPORTS (bare global): bindPlayerControls, DEFAULT_CAMERA_POS
  * DEPENDENCIES: THREE (r128), camera/renderer globals (game.js),
  *               mouseSensitivity (menuNavigation.js), showOnlyMenu/setHUDVisible (menuNavigation.js)
- * TODO (future): ADS (right-click) input
+ * TODO (future): ADS dispatch (right-click → scope/grapple logic)
  */
 
 // Camera defaults and reset live with player controls
@@ -25,15 +25,15 @@ function resetCameraToDefaults() {
 }
 
 /* Paintball input state (inputs live here; physics elsewhere) */
-const INPUT_STATE = { fireDown: false, sprint: false, reloadPressed: false, jump: false, meleePressed: false, ability1: false, ability2: false, ability3: false, ability4: false, moveX: 0, moveZ: 0 };
+const INPUT_STATE = { fireDown: false, secondaryDown: false, sprint: false, reloadPressed: false, jump: false, meleePressed: false, ability1: false, ability2: false, ability3: false, ability4: false, moveX: 0, moveZ: 0 };
 let _w = false, _a = false, _s = false, _d = false;
 function recomputeMoveAxes() {
   INPUT_STATE.moveZ = (_w ? 1 : 0) + (_s ? -1 : 0);
   INPUT_STATE.moveX = (_d ? 1 : 0) + (_a ? -1 : 0);
 }
 // Mouse button state for paintball
-function onMouseDownGeneric() { INPUT_STATE.fireDown = true; }
-function onMouseUpGeneric() { INPUT_STATE.fireDown = false; }
+function onMouseDownGeneric(e) { if (e.button === 2) { INPUT_STATE.secondaryDown = true; } else { INPUT_STATE.fireDown = true; } }
+function onMouseUpGeneric(e) { if (e.button === 2) { INPUT_STATE.secondaryDown = false; } else { INPUT_STATE.fireDown = false; } }
 // One-shot accessor for reload
 function getInputState() {
   const out = { ...INPUT_STATE };
@@ -62,6 +62,7 @@ function bindPlayerControls(renderer) {
     // Additional input hooks for Paintball mode
     renderer.domElement.addEventListener('mousedown', onMouseDownGeneric);
     renderer.domElement.addEventListener('mouseup', onMouseUpGeneric);
+    renderer.domElement.addEventListener('contextmenu', function (e) { e.preventDefault(); });
     // Click canvas to acquire pointer lock when a game mode is active
     renderer.domElement.addEventListener('click', function () {
       if (window._splitViewMode) return; // parent overlay handles lock
@@ -239,10 +240,10 @@ window.addEventListener('message', function (evt) {
       break;
     }
     case 'svMouseDown':
-      INPUT_STATE.fireDown = true;
+      if (d.button === 2) { INPUT_STATE.secondaryDown = true; } else { INPUT_STATE.fireDown = true; }
       break;
     case 'svMouseUp':
-      INPUT_STATE.fireDown = false;
+      if (d.button === 2) { INPUT_STATE.secondaryDown = false; } else { INPUT_STATE.fireDown = false; }
       break;
     case 'svKeyDown':
       switch (d.code) {
@@ -291,6 +292,7 @@ window.addEventListener('message', function (evt) {
       _w = _a = _s = _d = false;
       INPUT_STATE.sprint = false;
       INPUT_STATE.fireDown = false;
+      INPUT_STATE.secondaryDown = false;
       INPUT_STATE.ability1 = false;
       INPUT_STATE.ability2 = false;
       INPUT_STATE.ability3 = false;
