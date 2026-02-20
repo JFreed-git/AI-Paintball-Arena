@@ -1,0 +1,151 @@
+{
+  "id": "mage",
+  "name": "Mage",
+  "description": "Mid-range ability caster with lock-on projectiles and mana-fueled spells.",
+  "color": 8865535,
+  "maxHealth": 90,
+  "walkSpeed": 4.5,
+  "sprintSpeed": 8.5,
+  "jumpVelocity": 8.5,
+  "hitbox": [
+    {
+      "name": "head",
+      "shape": "sphere",
+      "offsetX": 0,
+      "offsetY": 1.75,
+      "offsetZ": 0,
+      "damageMultiplier": 2,
+      "radius": 0.35
+    },
+    {
+      "name": "torso",
+      "shape": "cylinder",
+      "offsetX": 0,
+      "offsetY": 0.75,
+      "offsetZ": 0,
+      "damageMultiplier": 1,
+      "radius": 0.4,
+      "height": 1.5
+    }
+  ],
+  "modelType": "standard",
+  "weapon": {
+    "cooldownMs": 250,
+    "magSize": 15,
+    "reloadTimeSec": 2.0,
+    "damage": 12,
+    "spreadRad": 0.02,
+    "sprintSpreadRad": 0.05,
+    "maxRange": 150,
+    "pellets": 1,
+    "projectileSpeed": 80,
+    "projectileGravity": 0,
+    "splashRadius": 0,
+    "meleeOnly": false,
+    "meleeDamage": 20,
+    "meleeRange": 2.0,
+    "meleeCooldownMs": 600,
+    "meleeSwingMs": 350,
+    "meleeUseHitMultiplier": true,
+    "scope": null,
+    "modelType": "rifle",
+    "tracerColor": 8865535,
+    "crosshair": {
+      "style": "circle",
+      "baseSpreadPx": 12,
+      "sprintSpreadPx": 24,
+      "color": "#8755ff"
+    },
+    "abilities": [],
+    "fpOffset": {
+      "x": 0.28,
+      "y": -0.22,
+      "z": -0.45
+    },
+    "fpRotation": {
+      "x": 0.05,
+      "y": -0.15,
+      "z": 0
+    }
+  },
+  "mana": {
+    "maxMana": 100,
+    "regenRate": 10,
+    "regenDelay": 2000
+  },
+  "passives": [
+    { "id": "manaRegen" }
+  ],
+  "abilities": [
+    {
+      "id": "teleport",
+      "name": "Teleport",
+      "key": "ability1",
+      "cooldownMs": 6000,
+      "duration": 0,
+      "params": {
+        "maxRange": 25,
+        "manaCost": 30,
+        "snapTolerance": 1.5
+      }
+    },
+    {
+      "id": "piercingBlast",
+      "name": "Piercing Blast",
+      "key": "secondaryDown",
+      "cooldownMs": 1000,
+      "duration": 0,
+      "params": {
+        "manaDrainRate": 20,
+        "damagePerMana": 2.5,
+        "maxChargeMs": 3000,
+        "beamRange": 200
+      }
+    },
+    {
+      "id": "meditate",
+      "name": "Meditate",
+      "key": "ability2",
+      "cooldownMs": 15000,
+      "duration": 5000,
+      "params": {
+        "manaRestoreFraction": 0.5,
+        "interruptOnDamage": true
+      }
+    }
+  ],
+  "bodyParts": [
+    {
+      "name": "head_visual",
+      "shape": "sphere",
+      "offsetX": 0,
+      "offsetY": 1.6,
+      "offsetZ": 0,
+      "rotationX": 0,
+      "rotationY": 0,
+      "rotationZ": 0,
+      "color": "#aa88ff",
+      "linkedTo": "head",
+      "radius": 0.175
+    },
+    {
+      "name": "torso_visual",
+      "shape": "cylinder",
+      "offsetX": 0,
+      "offsetY": 1.1,
+      "offsetZ": 0,
+      "rotationX": 0,
+      "rotationY": 0,
+      "rotationZ": 0,
+      "color": "#6633cc",
+      "linkedTo": "torso",
+      "radius": 0.25,
+      "height": 0.8
+    }
+  ],
+  "cameraOffset": {
+    "x": 0,
+    "y": 0,
+    "z": 0
+  }
+}
