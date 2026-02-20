@@ -306,6 +306,14 @@
   // Fires a hook forward; if an enemy is within range and cone angle,
   // pulls them toward the Brawler over the duration. params: maxRange, pullSpeed.
 
+  function _getGrappleColliders() {
+    var ffaState = (typeof window.getFFAState === 'function') ? window.getFFAState() : null;
+    if (ffaState && ffaState.arena && ffaState.arena.colliders) return ffaState.arena.colliders;
+    var trainState = (typeof window.getTrainingRangeState === 'function') ? window.getTrainingRangeState() : null;
+    if (trainState && trainState.arena && trainState.arena.colliders) return trainState.arena.colliders;
+    return null;
+  }
+
   function _getGrappleCandidates() {
     var candidates = [];
     // FFA mode players
@@ -402,8 +410,14 @@
 
       var target = player._grappleTarget;
 
-      // If target died during pull, clean up
+      // If target died during pull, clean up chain line immediately
       if (!target.alive) {
+        if (player._grappleLine && window.scene) {
+          window.scene.remove(player._grappleLine);
+          if (player._grappleLine.geometry) player._grappleLine.geometry.dispose();
+          if (player._grappleLine.material) player._grappleLine.material.dispose();
+          delete player._grappleLine;
+        }
         player._grappleTarget = null;
         return;
       }
@@ -427,6 +441,12 @@
       var invDist = 1 / Math.max(dist, 0.01);
       target.position.x += dx * invDist * pullSpeed * dtSec;
       target.position.z += dz * invDist * pullSpeed * dtSec;
+
+      // Resolve wall collisions so target doesn't get pulled through geometry
+      var colliders = _getGrappleColliders();
+      if (colliders && typeof window.resolveCollisions3D === 'function') {
+        window.resolveCollisions3D(target, colliders);
+      }
 
       // Sync target mesh
       if (typeof target._syncMeshPosition === 'function') {
