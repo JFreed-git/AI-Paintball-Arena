@@ -330,6 +330,21 @@
     // Store hero id on player for reference
     player._heroId = heroId;
 
+    // Wire abilities into AbilityManager
+    if (player.abilityManager) {
+      player.abilityManager.clearAbilities();
+      if (hero.passives && hero.passives.length) {
+        for (var pi = 0; pi < hero.passives.length; pi++) {
+          player.abilityManager.registerPassive(hero.passives[pi]);
+        }
+      }
+      if (hero.abilities && hero.abilities.length) {
+        for (var ai = 0; ai < hero.abilities.length; ai++) {
+          player.abilityManager.registerAbility(hero.abilities[ai]);
+        }
+      }
+    }
+
     return hero;
   }
 

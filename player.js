@@ -94,6 +94,11 @@
     // --- Camera offset (custom first-person eye position from hero) ---
     this._cameraOffset = null;
 
+    // --- Ability Manager ---
+    if (typeof window.AbilityManager === 'function') {
+      this.abilityManager = new window.AbilityManager(this);
+    }
+
     // --- 3D Mesh ---
     this._color = opts.color || 0xff5555;
     this._meshGroup = new THREE.Group();
