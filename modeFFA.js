@@ -1355,7 +1355,7 @@
         entry.entity.input.fireDown = false;
         entry.entity.input.meleeDown = false;
       }
-      // Meditate freeze: block ALL input during meditate
+      // Meditate freeze: block all input while meditating
       if (entry.entity._meditating) {
         entry.entity.input.moveX = 0;
         entry.entity.input.moveZ = 0;
@@ -1363,6 +1363,7 @@
         entry.entity.input.jump = false;
         entry.entity.input.fireDown = false;
         entry.entity.input.secondaryDown = false;
+        entry.entity.input.meleeDown = false;
       }
       var ms = state._meleeSwingState[id];
       var canShoot = handleMelee(id, now);
@@ -1389,17 +1390,16 @@
     // Phase 6: Send snapshot
     maybeSendSnapshot(now);
 
-    // Phase 7: Update ability HUD for local player
+    // Phase 7: Update ability HUD + mana HUD for local player
     var localAbm = state.players[state.localId];
     if (localAbm && localAbm.entity && localAbm.entity.abilityManager && typeof window.updateAbilityHUD === 'function') {
       window.updateAbilityHUD(localAbm.entity.abilityManager.getHUDState());
     }
-    // Mana HUD for local player
     if (localAbm && localAbm.entity && localAbm.entity.abilityManager) {
       var _am = localAbm.entity.abilityManager;
-      if (_am.hasMana && _am.hasMana()) {
-        if (window.updateManaHUD) window.updateManaHUD(_am.getMana(), _am.getMaxMana());
-      } else if (window.updateManaHUD) {
+      if (_am.hasMana && _am.hasMana() && typeof window.updateManaHUD === 'function') {
+        window.updateManaHUD(_am.getMana(), _am.getMaxMana());
+      } else if (typeof window.updateManaHUD === 'function') {
         window.updateManaHUD(null);
       }
     }
@@ -1613,15 +1613,14 @@
       if (typeof window.updateAbilityHUD === 'function') {
         window.updateAbilityHUD(p.abilityManager.getHUDState());
       }
-      // Mana HUD
-      if (p.abilityManager.hasMana && p.abilityManager.hasMana()) {
-        if (window.updateManaHUD) window.updateManaHUD(p.abilityManager.getMana(), p.abilityManager.getMaxMana());
-      } else if (window.updateManaHUD) {
+      if (p.abilityManager.hasMana && p.abilityManager.hasMana() && typeof window.updateManaHUD === 'function') {
+        window.updateManaHUD(p.abilityManager.getMana(), p.abilityManager.getMaxMana());
+      } else if (typeof window.updateManaHUD === 'function') {
         window.updateManaHUD(null);
       }
     }
 
-    // Meditate freeze: block ALL input during meditate (client-side prediction)
+    // Meditate freeze: block all input during meditate (client-side prediction)
     if (p._meditating) {
       p.input.moveX = 0;
       p.input.moveZ = 0;
@@ -1629,6 +1628,7 @@
       p.input.jump = false;
       p.input.fireDown = false;
       p.input.secondaryDown = false;
+      p.input.meleeDown = false;
     }
 
     // Scope/ADS for client player

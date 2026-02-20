@@ -442,7 +442,7 @@
       input.fireDown = false;
       input.meleePressed = false;
     }
-    // Meditate freeze: block ALL input during meditate
+    // Meditate freeze: block all input while meditating
     if (state.player._meditating) {
       input.moveX = 0;
       input.moveZ = 0;
@@ -450,6 +450,7 @@
       input.jump = false;
       input.fireDown = false;
       input.secondaryDown = false;
+      input.meleePressed = false;
     }
     handleMelee(input, now);
     if (!_meleeSwinging) handlePlayerShooting(input, now);
@@ -464,16 +465,15 @@
 
     updateHUD();
 
-    // Update ability HUD
+    // Update ability HUD + mana HUD
     if (state.player.abilityManager && typeof window.updateAbilityHUD === 'function') {
       window.updateAbilityHUD(state.player.abilityManager.getHUDState());
     }
-    // Mana HUD
     if (state.player.abilityManager) {
       var _tam = state.player.abilityManager;
-      if (_tam.hasMana && _tam.hasMana()) {
-        if (window.updateManaHUD) window.updateManaHUD(_tam.getMana(), _tam.getMaxMana());
-      } else if (window.updateManaHUD) {
+      if (_tam.hasMana && _tam.hasMana() && typeof window.updateManaHUD === 'function') {
+        window.updateManaHUD(_tam.getMana(), _tam.getMaxMana());
+      } else if (typeof window.updateManaHUD === 'function') {
         window.updateManaHUD(null);
       }
     }

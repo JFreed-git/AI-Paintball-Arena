@@ -49,6 +49,11 @@
     "meleeUseHitMultiplier": true,
     "lockOn": { "coneAngle": 15, "maxRange": 60, "turnRate": 3.0 },
     "scope": null,
+    "lockOn": {
+      "coneAngle": 15,
+      "maxRange": 60,
+      "turnRate": 3.0
+    },
     "modelType": "rifle",
     "tracerColor": 8865535,
     "crosshair": {
