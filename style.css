@@ -19,14 +19,21 @@ body {
 
 #ui {
     position: absolute;
-    bottom: 20px;
-    right: 20px;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
     z-index: 100;
+    pointer-events: none;
     /* UI container no longer draws a background; individual HUD elements are styled themselves */
     background: transparent;
     padding: 0;
     border-radius: 0;
     backdrop-filter: none;
+}
+
+#ui > * {
+    pointer-events: auto;
 }
 
 
