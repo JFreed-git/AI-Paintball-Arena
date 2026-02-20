@@ -775,6 +775,65 @@ body {
     line-height: 1;
 }
 
+/* ── Ability HUD (bottom-center cooldown slots) ── */
+#abilityHUD {
+    position: fixed;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    gap: 8px;
+    z-index: 150;
+    pointer-events: none;
+}
+
+#abilityHUD:empty {
+    display: none;
+}
+
+.ability-slot {
+    width: 48px;
+    height: 48px;
+    border-radius: 6px;
+    background: rgba(0, 0, 0, 0.6);
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.ability-slot .key-label {
+    font-size: 14px;
+    color: #fff;
+    font-weight: bold;
+    z-index: 1;
+    font-family: Consolas, 'Courier New', monospace;
+}
+
+.ability-slot .cooldown-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.7);
+    border-radius: 4px;
+}
+
+.ability-slot.ready {
+    border-color: rgba(0, 255, 150, 0.8);
+}
+
+.ability-slot.active {
+    border-color: rgba(255, 200, 0, 0.9);
+    background: rgba(255, 200, 0, 0.2);
+}
+
+.ability-slot.on-cooldown {
+    opacity: 0.7;
+}
+
 /* Enhanced crosshair for paintball */
 #crosshair {
     position: absolute;

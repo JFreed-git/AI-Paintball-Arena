@@ -124,6 +124,65 @@
     if (meleeCdEl) meleeCdEl.classList.toggle('hidden', !isMeleeOnly);
   };
 
+  // ========== Ability HUD ==========
+
+  var KEY_LABELS = { ability1: 'Q', ability2: 'E', ability3: 'F', ability4: 'C' };
+
+  /**
+   * Update ability cooldown HUD slots.
+   * @param {Array|null} hudState - array of {id, name, key, cooldownPct, isActive, isReady}
+   */
+  window.updateAbilityHUD = function (hudState) {
+    var container = document.getElementById('abilityHUD');
+    if (!container) return;
+
+    if (!hudState || hudState.length === 0) {
+      container.innerHTML = '';
+      return;
+    }
+
+    // Reconcile slot count
+    while (container.children.length > hudState.length) {
+      container.removeChild(container.lastChild);
+    }
+    while (container.children.length < hudState.length) {
+      var slot = document.createElement('div');
+      slot.className = 'ability-slot';
+      var label = document.createElement('span');
+      label.className = 'key-label';
+      slot.appendChild(label);
+      var overlay = document.createElement('div');
+      overlay.className = 'cooldown-overlay';
+      slot.appendChild(overlay);
+      container.appendChild(slot);
+    }
+
+    // Update each slot
+    for (var i = 0; i < hudState.length; i++) {
+      var state = hudState[i];
+      var el = container.children[i];
+      var keyLabel = el.querySelector('.key-label');
+      var cdOverlay = el.querySelector('.cooldown-overlay');
+
+      keyLabel.textContent = KEY_LABELS[state.key] || state.key;
+
+      // Cooldown overlay: clip from bottom to top based on cooldownPct
+      var pct = Math.max(0, Math.min(1, state.cooldownPct || 0));
+      if (pct > 0) {
+        var topPct = (1 - pct) * 100;
+        cdOverlay.style.clipPath = 'inset(' + topPct + '% 0 0 0)';
+        cdOverlay.style.display = '';
+      } else {
+        cdOverlay.style.display = 'none';
+      }
+
+      // Toggle state classes
+      el.classList.toggle('ready', !!state.isReady);
+      el.classList.toggle('active', !!state.isActive);
+      el.classList.toggle('on-cooldown', pct > 0 && !state.isActive);
+    }
+  };
+
   /**
    * Update melee cooldown circular timer.
    * Shows remaining cooldown as a filling arc; hidden when no weapon has melee.
