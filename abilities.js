@@ -587,4 +587,408 @@
     }
   });
 
+  // ─── Mage Effects ────────────────────────────────────────────────
+
+  // Helper: get solids array from active game mode (for raycasting)
+  function _getMageSolids() {
+    var ffaState = (typeof window.getFFAState === 'function') ? window.getFFAState() : null;
+    if (ffaState && ffaState.arena && ffaState.arena.solids) return ffaState.arena.solids;
+    var trainState = (typeof window.getTrainingRangeState === 'function') ? window.getTrainingRangeState() : null;
+    if (trainState && trainState.arena && trainState.arena.solids) return trainState.arena.solids;
+    return [];
+  }
+
+  // Helper: get look direction (horizontal only) for local/AI player
+  function _getHorizontalLookDir(player) {
+    var dir;
+    if (typeof THREE !== 'undefined') {
+      var quat;
+      if (window.camera && player.cameraAttached) {
+        quat = window.camera.quaternion;
+      } else if (player._meshGroup) {
+        quat = player._meshGroup.quaternion;
+      } else if (player.mesh) {
+        quat = player.mesh.quaternion;
+      }
+      if (quat) {
+        dir = new THREE.Vector3(0, 0, -1).applyQuaternion(quat);
+      }
+    }
+    if (!dir) dir = new THREE.Vector3(0, 0, -1);
+    dir.y = 0;
+    if (dir.lengthSq() < 1e-6) dir.set(0, 0, -1);
+    dir.normalize();
+    return dir;
+  }
+
+  // Helper: get full look direction (with vertical component) for beam aiming
+  function _getFullLookDir(player) {
+    var dir;
+    if (typeof THREE !== 'undefined') {
+      var quat;
+      if (window.camera && player.cameraAttached) {
+        quat = window.camera.quaternion;
+      } else if (player._meshGroup) {
+        quat = player._meshGroup.quaternion;
+      } else if (player.mesh) {
+        quat = player.mesh.quaternion;
+      }
+      if (quat) {
+        dir = new THREE.Vector3(0, 0, -1).applyQuaternion(quat);
+      }
+    }
+    if (!dir) dir = new THREE.Vector3(0, 0, -1);
+    return dir.normalize();
+  }
+
+  // Helper: create a temporary visual sphere that fades out
+  function _spawnBurstParticle(pos, color, size, lifetimeMs) {
+    if (typeof THREE === 'undefined' || !window.scene) return;
+    var geom = new THREE.SphereGeometry(size, 6, 6);
+    var mat = new THREE.MeshBasicMaterial({ color: color, transparent: true, opacity: 0.8 });
+    var mesh = new THREE.Mesh(geom, mat);
+    mesh.position.copy(pos);
+    window.scene.add(mesh);
+    var start = performance.now();
+    function fade() {
+      var elapsed = performance.now() - start;
+      if (elapsed >= lifetimeMs) {
+        window.scene.remove(mesh);
+        geom.dispose();
+        mat.dispose();
+        return;
+      }
+      mat.opacity = 0.8 * (1 - elapsed / lifetimeMs);
+      mesh.scale.setScalar(1 + elapsed / lifetimeMs);
+      requestAnimationFrame(fade);
+    }
+    requestAnimationFrame(fade);
+  }
+
+  // ─── Teleport Effect ─────────────────────────────────────────────
+  // Mage Q: Instant blink in look direction. Costs mana. Snaps to ground.
+
+  AbilityManager.registerEffect('teleport', {
+    onActivate: function (player, params) {
+      var am = player.abilityManager;
+      var manaCost = params.manaCost || 30;
+
+      // Mana check (guarded)
+      if (am && am.hasMana && am.hasMana()) {
+        if (!am.consumeMana(manaCost)) {
+          // Not enough mana — cooldown still applies (simplest approach)
+          return;
+        }
+      }
+
+      var maxRange = params.maxRange || 25;
+      var snapTolerance = params.snapTolerance || 1.5;
+      var dir = _getHorizontalLookDir(player);
+      var origin = player.position.clone();
+      var solids = _getMageSolids();
+
+      // Visual burst at origin
+      _spawnBurstParticle(origin.clone(), 0x9944ff, 0.4, 300);
+
+      // Raycast forward to find wall — binary search for maximum clear distance
+      var safeDist = maxRange;
+      if (typeof window.hasBlockingBetween === 'function' && solids.length > 0) {
+        var lo = 0, hi = maxRange;
+        for (var step = 0; step < 8; step++) {
+          var mid = (lo + hi) / 2;
+          var testPt = origin.clone().add(dir.clone().multiplyScalar(mid));
+          if (window.hasBlockingBetween(origin, testPt, solids)) {
+            hi = mid;
+          } else {
+            lo = mid;
+          }
+        }
+        safeDist = Math.max(0, lo - 0.5);
+      }
+      var dest = origin.clone().add(dir.clone().multiplyScalar(safeDist));
+
+      // Snap to ground at destination
+      var groundY = window.GROUND_Y || 0;
+      if (typeof window.getGroundHeight === 'function') {
+        var gh = window.getGroundHeight(dest, solids, dest.y, false);
+        if (Math.abs(gh - (player.feetY || groundY)) <= snapTolerance || gh > groundY) {
+          groundY = gh;
+        }
+      }
+
+      var eyeH = window.EYE_HEIGHT || 1.6;
+      player.position.x = dest.x;
+      player.position.z = dest.z;
+      player.feetY = groundY;
+      player.position.y = groundY + eyeH;
+      player.grounded = true;
+      player.verticalVelocity = 0;
+
+      // Sync camera for local player
+      if (player.cameraAttached && window.camera) {
+        window.camera.position.set(player.position.x, player.position.y, player.position.z);
+      }
+      if (typeof player._syncMeshPosition === 'function') player._syncMeshPosition();
+
+      // Visual burst at destination
+      _spawnBurstParticle(player.position.clone(), 0x9944ff, 0.4, 300);
+
+      if (typeof window.playSound === 'function') window.playSound('teleport');
+    },
+
+    onEnd: function (player) {
+      // No persistent visuals to clean up
+    }
+  });
+
+  // ─── Piercing Blast Effect ───────────────────────────────────────
+  // Mage right-click: Hold to charge (drains mana), release to fire beam.
+
+  function _pbFireBeam(player, params) {
+    var damage = (player._pbManaSpent || 0) * (params.damagePerMana || 2);
+    var beamRange = params.beamRange || 50;
+    var dir = _getFullLookDir(player);
+    var origin = player.position.clone();
+
+    // Simple hitscan: check all enemy candidates
+    var candidates = _getGrappleCandidates();
+    var bestHit = null;
+    var bestDist = beamRange + 1;
+
+    for (var i = 0; i < candidates.length; i++) {
+      var c = candidates[i];
+      if (c === player) continue;
+      if (!c.alive) continue;
+
+      // Simple sphere intersection test
+      var toC = c.position.clone().sub(origin);
+      var dot = toC.dot(dir);
+      if (dot < 0 || dot > beamRange) continue;
+      var closest = origin.clone().add(dir.clone().multiplyScalar(dot));
+      var dist = closest.distanceTo(c.position);
+      var hitRadius = c.radius || 0.6;
+      if (dist < hitRadius && dot < bestDist) {
+        bestDist = dot;
+        bestHit = c;
+      }
+    }
+
+    // Deal damage to first hit
+    if (bestHit && typeof bestHit.takeDamage === 'function' && damage > 0) {
+      bestHit.takeDamage(damage);
+    }
+
+    // Visual: beam line from player to hit/max range
+    if (typeof THREE !== 'undefined' && window.scene) {
+      var endPt = bestHit ? bestHit.position.clone() : origin.clone().add(dir.clone().multiplyScalar(beamRange));
+      var geom = new THREE.BufferGeometry();
+      var positions = new Float32Array([
+        origin.x, origin.y, origin.z,
+        endPt.x, endPt.y, endPt.z
+      ]);
+      geom.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+      var mat = new THREE.LineBasicMaterial({ color: 0x9944ff, linewidth: 2, transparent: true, opacity: 1.0 });
+      var beamLine = new THREE.Line(geom, mat);
+      beamLine.frustumCulled = false;
+      window.scene.add(beamLine);
+
+      // Fade beam over 200ms
+      var start = performance.now();
+      function fadeBeam() {
+        var elapsed = performance.now() - start;
+        if (elapsed >= 200) {
+          window.scene.remove(beamLine);
+          geom.dispose();
+          mat.dispose();
+          return;
+        }
+        mat.opacity = 1.0 - (elapsed / 200);
+        requestAnimationFrame(fadeBeam);
+      }
+      requestAnimationFrame(fadeBeam);
+    }
+
+    if (typeof window.playSound === 'function') window.playSound('beam');
+
+    // Clean up charging state
+    player._pbCharging = false;
+    delete player._pbManaSpent;
+    delete player._pbStartTime;
+
+    // Clean up charge visual
+    if (player._pbChargeVisual && window.scene) {
+      window.scene.remove(player._pbChargeVisual);
+      if (player._pbChargeVisual.geometry) player._pbChargeVisual.geometry.dispose();
+      if (player._pbChargeVisual.material) player._pbChargeVisual.material.dispose();
+      delete player._pbChargeVisual;
+    }
+  }
+
+  AbilityManager.registerEffect('piercingBlast', {
+    onActivate: function (player, params) {
+      player._pbCharging = true;
+      player._pbManaSpent = 0;
+      player._pbStartTime = performance.now();
+
+      // Create charge visual: small growing purple sphere in front of player
+      if (typeof THREE !== 'undefined' && window.scene) {
+        var geom = new THREE.SphereGeometry(0.15, 8, 8);
+        var mat = new THREE.MeshBasicMaterial({ color: 0x9944ff, transparent: true, opacity: 0.6 });
+        player._pbChargeVisual = new THREE.Mesh(geom, mat);
+        player._pbChargeVisual.frustumCulled = false;
+        var dir = _getFullLookDir(player);
+        player._pbChargeVisual.position.copy(player.position).add(dir.multiplyScalar(1.5));
+        window.scene.add(player._pbChargeVisual);
+      }
+    },
+
+    onTick: function (player, params, dt) {
+      if (!player._pbCharging) return;
+
+      var dtSec = dt / 1000;
+      var am = player.abilityManager;
+      var drainRate = params.manaDrainRate || 20;
+      var maxChargeMs = params.maxChargeMs || 3000;
+
+      // Drain mana while charging
+      var drainAmount = drainRate * dtSec;
+      var drained = false;
+      if (am && am.hasMana && am.hasMana()) {
+        drained = am.consumeMana(drainAmount);
+        if (drained) {
+          player._pbManaSpent = (player._pbManaSpent || 0) + drainAmount;
+        }
+      } else {
+        // No mana system — use time-based charge
+        player._pbManaSpent = (player._pbManaSpent || 0) + drainAmount;
+        drained = true;
+      }
+
+      // Update charge visual size and position
+      if (player._pbChargeVisual) {
+        var chargeElapsed = performance.now() - (player._pbStartTime || 0);
+        var chargePct = Math.min(1, chargeElapsed / maxChargeMs);
+        var scale = 0.5 + chargePct * 1.5;
+        player._pbChargeVisual.scale.setScalar(scale);
+        var dir = _getFullLookDir(player);
+        player._pbChargeVisual.position.copy(player.position).add(dir.multiplyScalar(1.5));
+      }
+
+      // Auto-fire conditions: mana ran out, max charge reached, or right-click released
+      var elapsed = performance.now() - (player._pbStartTime || 0);
+      var shouldFire = false;
+      if (!drained) shouldFire = true;
+      if (elapsed >= maxChargeMs) shouldFire = true;
+      if (player.input && player.input.secondaryDown === false) shouldFire = true;
+
+      if (shouldFire) {
+        _pbFireBeam(player, params);
+      }
+    },
+
+    onEnd: function (player) {
+      // If still charging when effect expires, fire the beam
+      if (player._pbCharging) {
+        _pbFireBeam(player, {});
+      }
+      delete player._pbCharging;
+      delete player._pbManaSpent;
+      delete player._pbStartTime;
+      if (player._pbChargeVisual && window.scene) {
+        window.scene.remove(player._pbChargeVisual);
+        if (player._pbChargeVisual.geometry) player._pbChargeVisual.geometry.dispose();
+        if (player._pbChargeVisual.material) player._pbChargeVisual.material.dispose();
+        delete player._pbChargeVisual;
+      }
+    }
+  });
+
+  // ─── Meditate Effect ─────────────────────────────────────────────
+  // Mage E: 5s channel, freezes player, restores mana. Interrupted by damage.
+
+  AbilityManager.registerEffect('meditate', {
+    onActivate: function (player, params) {
+      player._meditating = true;
+      player._meditateLastHP = player.health;
+
+      var am = player.abilityManager;
+      if (am && am.hasMana && am.hasMana()) {
+        player._meditateStartMana = am.getMana();
+      }
+
+      // Visual: blue circle on ground
+      if (typeof THREE !== 'undefined' && window.scene) {
+        var ringGeom = new THREE.RingGeometry(1.0, 1.3, 32);
+        var ringMat = new THREE.MeshBasicMaterial({ color: 0x4488ff, transparent: true, opacity: 0.5, side: THREE.DoubleSide });
+        player._meditateRing = new THREE.Mesh(ringGeom, ringMat);
+        player._meditateRing.rotation.x = -Math.PI / 2;
+        player._meditateRing.position.set(player.position.x, (player.feetY || 0) + 0.05, player.position.z);
+        player._meditateRing.frustumCulled = false;
+        window.scene.add(player._meditateRing);
+      }
+
+      if (typeof window.playSound === 'function') window.playSound('meditate');
+    },
+
+    onTick: function (player, params, dt) {
+      if (!player._meditating) return;
+
+      // FREEZE player — override all movement/combat input
+      if (player.input) {
+        player.input.moveX = 0;
+        player.input.moveZ = 0;
+        player.input.sprint = false;
+        player.input.jump = false;
+        player.input.fireDown = false;
+      }
+
+      // Interrupt on damage
+      var interruptOnDamage = params.interruptOnDamage !== false;
+      if (interruptOnDamage && player.health < player._meditateLastHP) {
+        player._meditating = false;
+        if (player._meditateRing && window.scene) {
+          window.scene.remove(player._meditateRing);
+          if (player._meditateRing.geometry) player._meditateRing.geometry.dispose();
+          if (player._meditateRing.material) player._meditateRing.material.dispose();
+          delete player._meditateRing;
+        }
+        return;
+      }
+      player._meditateLastHP = player.health;
+
+      // Restore mana gradually over the duration
+      var am = player.abilityManager;
+      if (am && am.hasMana && am.hasMana() && am.addMana) {
+        var duration = params.duration || 5000;
+        var restoreFraction = params.manaRestoreFraction || 0.5;
+        var maxMana = am.getMaxMana();
+        var manaPerMs = maxMana * restoreFraction / duration;
+        am.addMana(manaPerMs * dt);
+      }
+
+      // Pulse ring visual
+      if (player._meditateRing) {
+        var t = performance.now() * 0.003;
+        player._meditateRing.material.opacity = 0.3 + 0.2 * Math.sin(t);
+      }
+    },
+
+    onEnd: function (player) {
+      player._meditating = false;
+
+      if (player._meditateRing && window.scene) {
+        window.scene.remove(player._meditateRing);
+        if (player._meditateRing.geometry) player._meditateRing.geometry.dispose();
+        if (player._meditateRing.material) player._meditateRing.material.dispose();
+        delete player._meditateRing;
+      }
+
+      var am = player.abilityManager;
+      if (am && am.resetManaRegenDelay) am.resetManaRegenDelay();
+
+      delete player._meditateLastHP;
+      delete player._meditateStartMana;
+    }
+  });
+
 })();
