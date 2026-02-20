@@ -885,6 +885,91 @@
     };
   }
 
+
+  // --- Burst Fire Manager ---
+  var _activeBursts = [];
+
+  /**
+   * Start a burst fire sequence. Fires the first shot immediately,
+   * then queues remaining shots with burst.delayMs between each.
+   *
+   * @param {Object} weapon - Weapon instance (must have weapon.burst.count, weapon.burst.delayMs)
+   * @param {Function|THREE.Vector3} origin - function returning fire origin, or static vector
+   * @param {Function} dirFn - function returning current aim direction (re-evaluated each shot)
+   * @param {Object} opts - options passed through to sharedFireWeapon
+   * @returns {Object} result of the first shot (from sharedFireWeapon)
+   */
+  function sharedStartBurst(weapon, origin, dirFn, opts) {
+    var burst = weapon.burst;
+    if (!burst || !burst.count || burst.count <= 1) {
+      // Not a burst weapon or single shot — just fire normally
+      var org = (typeof origin === 'function') ? origin() : origin;
+      var dir = (typeof dirFn === 'function') ? dirFn() : dirFn;
+      return sharedFireWeapon(weapon, org, dir, opts);
+    }
+
+    // Fire the first shot immediately
+    var org = (typeof origin === 'function') ? origin() : origin;
+    var dir = (typeof dirFn === 'function') ? dirFn() : dirFn;
+    var firstResult = sharedFireWeapon(weapon, org, dir, opts);
+
+    // Queue remaining shots
+    var nowMs = performance.now();
+    _activeBursts.push({
+      weapon: weapon,
+      originFn: (typeof origin === 'function') ? origin : function () { return origin; },
+      dirFn: (typeof dirFn === 'function') ? dirFn : function () { return dirFn; },
+      opts: opts || {},
+      remaining: burst.count - 1,
+      nextShotTime: nowMs + burst.delayMs
+    });
+
+    return firstResult;
+  }
+
+  /**
+   * Tick active burst sequences. Called each frame from the game loop.
+   * Fires queued burst shots when their delay has elapsed.
+   *
+   * @param {number} nowMs - current time in milliseconds (performance.now())
+   */
+  function sharedUpdateBursts(nowMs) {
+    for (var i = _activeBursts.length - 1; i >= 0; i--) {
+      var entry = _activeBursts[i];
+
+      if (nowMs >= entry.nextShotTime) {
+        // Check if weapon still has ammo
+        if (entry.weapon.ammo <= 0) {
+          _activeBursts.splice(i, 1);
+          continue;
+        }
+
+        // Fire one shot
+        var org = entry.originFn();
+        var dir = entry.dirFn();
+        sharedFireWeapon(entry.weapon, org, dir, entry.opts);
+
+        entry.remaining--;
+        entry.nextShotTime = nowMs + entry.weapon.burst.delayMs;
+
+        // Update weapon.lastShotTime to the time of this shot
+        // so cooldown applies after the LAST shot in the burst
+        entry.weapon.lastShotTime = nowMs;
+
+        if (entry.remaining <= 0) {
+          _activeBursts.splice(i, 1);
+        }
+      }
+    }
+  }
+
+  /**
+   * Clear all active bursts (called on round reset, hero switch, etc.)
+   */
+  function sharedClearBursts() {
+    _activeBursts.length = 0;
+  }
+
   // Expose
   window.applySpread = applySpread;
   window.rayHitsSphere = rayHitsSphere;
@@ -901,4 +986,7 @@
   window.updateProjectiles = updateProjectiles;
   window.clearAllProjectiles = clearAllProjectiles;
   window.sharedMeleeAttack = sharedMeleeAttack;
+  window.sharedStartBurst = sharedStartBurst;
+  window.sharedUpdateBursts = sharedUpdateBursts;
+  window.sharedClearBursts = sharedClearBursts;
 })();
