@@ -346,16 +346,19 @@ window.getKeymap = function () { return _keymap; };
 
 window.setKeyBinding = function (keyCode, action, opts) {
   opts = opts || {};
-  // Remove old binding(s) for this action (find and delete)
-  for (var code in _keymap) {
-    if (_keymap[code].action === action) {
-      delete _keymap[code];
-    }
+  // Remove the old binding for THIS specific keyCode only (not all bindings for the action)
+  if (_keymap[keyCode]) {
+    delete _keymap[keyCode];
   }
   // Set new binding
   var binding = { action: action };
   if (opts.type) binding.type = opts.type;
-  if (opts.value !== undefined) binding.value = opts.value;
+  if (opts.value !== undefined) {
+    binding.value = opts.value;
+  } else if (action === 'moveX' || action === 'moveZ') {
+    console.warn('setKeyBinding: axis action "' + action + '" missing opts.value, defaulting to 1');
+    binding.value = 1;
+  }
   _keymap[keyCode] = binding;
 };
 
