@@ -395,10 +395,16 @@
       // Create visual chain line
       if (bestTarget && typeof THREE !== 'undefined' && window.scene) {
         var geom = new THREE.BufferGeometry();
-        var positions = new Float32Array(6); // 2 vertices * 3 components
+        var positions = new Float32Array([
+          origin.x, origin.y, origin.z,
+          bestTarget.position.x, bestTarget.position.y, bestTarget.position.z
+        ]);
         geom.setAttribute('position', new THREE.BufferAttribute(positions, 3));
         var mat = new THREE.LineBasicMaterial({ color: 0x44ff44, linewidth: 2 });
         player._grappleLine = new THREE.Line(geom, mat);
+        // Disable frustum culling — vertices are updated dynamically each tick
+        // and the bounding sphere won't auto-recompute, causing the line to be culled
+        player._grappleLine.frustumCulled = false;
         window.scene.add(player._grappleLine);
       }
 
