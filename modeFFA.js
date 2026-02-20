@@ -1270,6 +1270,26 @@
       tickAIPlayers(dt);
     }
 
+    // Phase 1c: Ability updates for all players
+    var dtMs = dt * 1000;
+    for (var i = 0; i < ids.length; i++) {
+      var id = ids[i];
+      var entry = state.players[id];
+      if (!entry || !entry.entity || !entry.entity.abilityManager) continue;
+      entry.entity.abilityManager.update(dtMs);
+    }
+    // Ability input activation for local player
+    var localEntry = state.players[state.localId];
+    if (localEntry && localEntry.entity && localEntry.entity.abilityManager && state.inputEnabled) {
+      var localInput = window.getInputState ? window.getInputState() : {};
+      var abState = localEntry.entity.abilityManager.getHUDState();
+      for (var ai = 0; ai < abState.length; ai++) {
+        if (localInput[abState[ai].key]) {
+          localEntry.entity.abilityManager.activate(abState[ai].id);
+        }
+      }
+    }
+
     // Phase 2: Combat (melee + shooting) for human players after all physics
     for (var i = 0; i < ids.length; i++) {
       var id = ids[i];
@@ -1304,7 +1324,13 @@
     // Phase 6: Send snapshot
     maybeSendSnapshot(now);
 
-    // Phase 7: Update audio listener for spatial sound
+    // Phase 7: Update ability HUD for local player
+    var localAbm = state.players[state.localId];
+    if (localAbm && localAbm.entity && localAbm.entity.abilityManager && typeof window.updateAbilityHUD === 'function') {
+      window.updateAbilityHUD(localAbm.entity.abilityManager.getHUDState());
+    }
+
+    // Phase 8: Update audio listener for spatial sound
     if (typeof window.updateAudioListener === 'function') {
       window.updateAudioListener(camera.position, camera.quaternion);
     }
@@ -1497,6 +1523,22 @@
         inputPacket.meleeDir = [dir.x, dir.y, dir.z];
       }
       socket.emit('input', inputPacket);
+    }
+
+    // Ability update + input activation + HUD for local player
+    if (p.abilityManager) {
+      p.abilityManager.update(dt * 1000);
+      if (enabled) {
+        var abState = p.abilityManager.getHUDState();
+        for (var ai = 0; ai < abState.length; ai++) {
+          if (rawInput[abState[ai].key]) {
+            p.abilityManager.activate(abState[ai].id);
+          }
+        }
+      }
+      if (typeof window.updateAbilityHUD === 'function') {
+        window.updateAbilityHUD(p.abilityManager.getHUDState());
+      }
     }
 
     updateHUDForLocalPlayer();

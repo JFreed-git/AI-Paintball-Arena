@@ -404,6 +404,17 @@
       state.targets[t].update();
     }
 
+    // Ability update + input activation
+    if (state.player.abilityManager) {
+      state.player.abilityManager.update(dt * 1000);
+      var abilities = state.player.abilityManager.getHUDState();
+      for (var ai = 0; ai < abilities.length; ai++) {
+        if (input[abilities[ai].key]) {
+          state.player.abilityManager.activate(abilities[ai].id);
+        }
+      }
+    }
+
     // Melee + Shooting
     var now = performance.now();
     // Melee-only weapons: left-click triggers melee swing, not fire
@@ -422,6 +433,11 @@
     if (window.devShowHitboxes && window.updateHitboxVisuals) window.updateHitboxVisuals();
 
     updateHUD();
+
+    // Update ability HUD
+    if (state.player.abilityManager && typeof window.updateAbilityHUD === 'function') {
+      window.updateAbilityHUD(state.player.abilityManager.getHUDState());
+    }
 
     // Update audio listener for spatial sound
     if (typeof window.updateAudioListener === 'function') {
