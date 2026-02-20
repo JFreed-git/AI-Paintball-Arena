@@ -80,7 +80,9 @@
       "z": 0
     }
   },
-  "passives": [],
+  "passives": [
+    { "id": "sprintLockout" }
+  ],
   "abilities": [],
   "bodyParts": [
     {
