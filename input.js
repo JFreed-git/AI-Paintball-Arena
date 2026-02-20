@@ -3,11 +3,12 @@
  *
  * PURPOSE: Captures WASD movement, mouse look, sprint, reload, jump, and fire
  *          inputs. Manages pointer lock lifecycle and camera defaults/reset.
- * EXPORTS (window): getInputState, resetCameraToDefaults
+ *          Uses a data-driven keymap for remappable keybindings.
+ * EXPORTS (window): getInputState, resetCameraToDefaults, getKeymap, setKeyBinding,
+ *                   resetKeymap, loadKeymapForHero, saveKeymapForHero, getDefaultKeymap
  * EXPORTS (bare global): bindPlayerControls, DEFAULT_CAMERA_POS
  * DEPENDENCIES: THREE (r128), camera/renderer globals (game.js),
  *               mouseSensitivity (menuNavigation.js), showOnlyMenu/setHUDVisible (menuNavigation.js)
- * TODO (future): ADS dispatch (right-click → scope/grapple logic)
  */
 
 // Camera defaults and reset live with player controls
@@ -24,16 +25,53 @@ function resetCameraToDefaults() {
   camera.up.set(0, 1, 0);
 }
 
+/* ── Data-driven keymap ── */
+var _defaultKeymap = {
+  // Movement (axis values)
+  'KeyW':       { action: 'moveZ',    value: 1 },
+  'KeyS':       { action: 'moveZ',    value: -1 },
+  'KeyA':       { action: 'moveX',    value: -1 },
+  'KeyD':       { action: 'moveX',    value: 1 },
+  // Toggles (true while held)
+  'ShiftLeft':  { action: 'sprint',   type: 'toggle' },
+  'ShiftRight': { action: 'sprint',   type: 'toggle' },
+  // One-shots (true once, cleared after read)
+  'Space':      { action: 'jump',     type: 'oneShot' },
+  'KeyR':       { action: 'reloadPressed', type: 'oneShot' },
+  'KeyV':       { action: 'meleePressed',  type: 'oneShot' },
+  // Abilities (true while held)
+  'KeyQ':       { action: 'ability1', type: 'toggle' },
+  'KeyE':       { action: 'ability2', type: 'toggle' },
+  'KeyF':       { action: 'ability3', type: 'toggle' },
+  'KeyC':       { action: 'ability4', type: 'toggle' }
+};
+var _keymap = JSON.parse(JSON.stringify(_defaultKeymap));
+
+// Track which axis keys are currently held, for correct release behavior
+// e.g. if W and S are both held, moveZ should be 0; releasing W should set moveZ = -1
+var _heldAxisKeys = {}; // { 'KeyW': true, 'KeyS': true, ... }
+
 /* Paintball input state (inputs live here; physics elsewhere) */
 const INPUT_STATE = { fireDown: false, secondaryDown: false, sprint: false, reloadPressed: false, jump: false, meleePressed: false, ability1: false, ability2: false, ability3: false, ability4: false, moveX: 0, moveZ: 0 };
-let _w = false, _a = false, _s = false, _d = false;
-function recomputeMoveAxes() {
-  INPUT_STATE.moveZ = (_w ? 1 : 0) + (_s ? -1 : 0);
-  INPUT_STATE.moveX = (_d ? 1 : 0) + (_a ? -1 : 0);
+
+// Recompute an axis value from all currently held keys for that axis
+function recomputeAxis(axisAction) {
+  var sum = 0;
+  for (var code in _heldAxisKeys) {
+    if (!_heldAxisKeys[code]) continue;
+    var binding = _keymap[code];
+    if (binding && binding.action === axisAction && binding.value !== undefined) {
+      sum += binding.value;
+    }
+  }
+  // Clamp to -1..1
+  INPUT_STATE[axisAction] = Math.max(-1, Math.min(1, sum));
 }
+
 // Mouse button state for paintball
 function onMouseDownGeneric(e) { if (e.button === 2) { INPUT_STATE.secondaryDown = true; } else { INPUT_STATE.fireDown = true; } }
 function onMouseUpGeneric(e) { if (e.button === 2) { INPUT_STATE.secondaryDown = false; } else { INPUT_STATE.fireDown = false; } }
+
 // One-shot accessor for reload
 function getInputState() {
   const out = { ...INPUT_STATE };
@@ -145,6 +183,42 @@ function onPointerLockChange() {
   }
 }
 
+/**
+ * Apply a keydown event code via the keymap.
+ * Shared by onGlobalKeyDown and svKeyDown.
+ */
+function applyKeyDown(code) {
+  var binding = _keymap[code];
+  if (!binding) return false;
+
+  if (binding.value !== undefined) {
+    // Axis input — track held state and recompute
+    _heldAxisKeys[code] = true;
+    recomputeAxis(binding.action);
+  } else {
+    INPUT_STATE[binding.action] = true;
+  }
+  return true;
+}
+
+/**
+ * Apply a keyup event code via the keymap.
+ * Shared by onGlobalKeyUp and svKeyUp.
+ */
+function applyKeyUp(code) {
+  var binding = _keymap[code];
+  if (!binding) return false;
+
+  if (binding.value !== undefined) {
+    // Axis release — remove from held set and recompute
+    delete _heldAxisKeys[code];
+    recomputeAxis(binding.action);
+  } else if (binding.type !== 'oneShot') {
+    INPUT_STATE[binding.action] = false;
+  }
+  return true;
+}
+
 function onGlobalKeyDown(e) {
   if (window.editorActive) return;
   if (window._splitViewMode) {
@@ -155,20 +229,26 @@ function onGlobalKeyDown(e) {
     return; // iframe: parent forwards all other input via postMessage
   }
   if (window._splitScreenActive) return; // parent: devSplitScreen.js handles all input
+
+  // Non-remappable: ESC
   if (e.key === 'Escape') {
-    if (window._splitScreenActive) {
-      try { if (typeof stopSplitScreen === 'function') stopSplitScreen(); } catch {}
-    } else if (window.ffaActive) {
-      try { if (typeof stopFFAInternal === 'function') stopFFAInternal(); } catch {}
-    } else if (window.trainingRangeActive) {
-      try { if (typeof stopTrainingRangeInternal === 'function') stopTrainingRangeInternal(); } catch {}
+    if (typeof window.toggleSettingsOverlay === 'function') {
+      window.toggleSettingsOverlay();
+    } else {
+      if (window._splitScreenActive) {
+        try { if (typeof stopSplitScreen === 'function') stopSplitScreen(); } catch {}
+      } else if (window.ffaActive) {
+        try { if (typeof stopFFAInternal === 'function') stopFFAInternal(); } catch {}
+      } else if (window.trainingRangeActive) {
+        try { if (typeof stopTrainingRangeInternal === 'function') stopTrainingRangeInternal(); } catch {}
+      }
+      showOnlyMenu('mainMenu');
+      setHUDVisible(false);
     }
-    showOnlyMenu('mainMenu');
-    setHUDVisible(false);
     return;
   }
 
-  // Tab key: show FFA scoreboard while held (during gameplay or lobby)
+  // Non-remappable: Tab (scoreboard)
   if (e.code === 'Tab') {
     e.preventDefault();
     var hasRoom = window._lobbyState && window._lobbyState.roomId;
@@ -180,21 +260,8 @@ function onGlobalKeyDown(e) {
     return;
   }
 
-  // Paintball input tracking (WASD + Sprint + Reload)
-  switch (e.code) {
-    case 'KeyW': _w = true; recomputeMoveAxes(); break;
-    case 'KeyA': _a = true; recomputeMoveAxes(); break;
-    case 'KeyS': _s = true; recomputeMoveAxes(); break;
-    case 'KeyD': _d = true; recomputeMoveAxes(); break;
-    case 'ShiftLeft': INPUT_STATE.sprint = true; break;
-    case 'KeyR': INPUT_STATE.reloadPressed = true; break;
-    case 'Space': INPUT_STATE.jump = true; break;
-    case 'KeyV': INPUT_STATE.meleePressed = true; break;
-    case 'KeyQ': INPUT_STATE.ability1 = true; break;
-    case 'KeyE': INPUT_STATE.ability2 = true; break;
-    case 'KeyF': INPUT_STATE.ability3 = true; break;
-    case 'KeyC': INPUT_STATE.ability4 = true; break;
-  }
+  // Keymap-driven input
+  applyKeyDown(e.code);
 }
 
 function onGlobalKeyUp(e) {
@@ -202,24 +269,15 @@ function onGlobalKeyUp(e) {
   if (window._splitViewMode) return;
   if (window._splitScreenActive) return;
 
-  // Tab release: hide FFA scoreboard
+  // Non-remappable: Tab release
   if (e.code === 'Tab') {
     var sb = document.getElementById('scoreboardOverlay');
     if (sb) sb.classList.add('hidden');
     return;
   }
 
-  switch (e.code) {
-    case 'KeyW': _w = false; recomputeMoveAxes(); break;
-    case 'KeyA': _a = false; recomputeMoveAxes(); break;
-    case 'KeyS': _s = false; recomputeMoveAxes(); break;
-    case 'KeyD': _d = false; recomputeMoveAxes(); break;
-    case 'ShiftLeft': INPUT_STATE.sprint = false; break;
-    case 'KeyQ': INPUT_STATE.ability1 = false; break;
-    case 'KeyE': INPUT_STATE.ability2 = false; break;
-    case 'KeyF': INPUT_STATE.ability3 = false; break;
-    case 'KeyC': INPUT_STATE.ability4 = false; break;
-  }
+  // Keymap-driven input
+  applyKeyUp(e.code);
 }
 
 /* ── SplitView input forwarding (postMessage from parent overlay) ── */
@@ -246,50 +304,29 @@ window.addEventListener('message', function (evt) {
       if (d.button === 2) { INPUT_STATE.secondaryDown = false; } else { INPUT_STATE.fireDown = false; }
       break;
     case 'svKeyDown':
-      switch (d.code) {
-        case 'KeyW': _w = true; recomputeMoveAxes(); break;
-        case 'KeyA': _a = true; recomputeMoveAxes(); break;
-        case 'KeyS': _s = true; recomputeMoveAxes(); break;
-        case 'KeyD': _d = true; recomputeMoveAxes(); break;
-        case 'ShiftLeft': INPUT_STATE.sprint = true; break;
-        case 'KeyR': INPUT_STATE.reloadPressed = true; break;
-        case 'Space': INPUT_STATE.jump = true; break;
-        case 'KeyV': INPUT_STATE.meleePressed = true; break;
-        case 'KeyQ': INPUT_STATE.ability1 = true; break;
-        case 'KeyE': INPUT_STATE.ability2 = true; break;
-        case 'KeyF': INPUT_STATE.ability3 = true; break;
-        case 'KeyC': INPUT_STATE.ability4 = true; break;
-        case 'Tab': {
-          var hasRoom = window._lobbyState && window._lobbyState.roomId;
-          if (window.ffaActive || hasRoom) {
-            var sb = document.getElementById('scoreboardOverlay');
-            if (sb) sb.classList.remove('hidden');
-            if (typeof window.updateFFAScoreboard === 'function') window.updateFFAScoreboard();
-          }
-          break;
+      // Non-remappable: Tab
+      if (d.code === 'Tab') {
+        var hasRoom = window._lobbyState && window._lobbyState.roomId;
+        if (window.ffaActive || hasRoom) {
+          var sb = document.getElementById('scoreboardOverlay');
+          if (sb) sb.classList.remove('hidden');
+          if (typeof window.updateFFAScoreboard === 'function') window.updateFFAScoreboard();
         }
+        break;
       }
+      applyKeyDown(d.code);
       break;
     case 'svKeyUp':
-      switch (d.code) {
-        case 'KeyW': _w = false; recomputeMoveAxes(); break;
-        case 'KeyA': _a = false; recomputeMoveAxes(); break;
-        case 'KeyS': _s = false; recomputeMoveAxes(); break;
-        case 'KeyD': _d = false; recomputeMoveAxes(); break;
-        case 'ShiftLeft': INPUT_STATE.sprint = false; break;
-        case 'KeyQ': INPUT_STATE.ability1 = false; break;
-        case 'KeyE': INPUT_STATE.ability2 = false; break;
-        case 'KeyF': INPUT_STATE.ability3 = false; break;
-        case 'KeyC': INPUT_STATE.ability4 = false; break;
-        case 'Tab': {
-          var sb = document.getElementById('scoreboardOverlay');
-          if (sb) sb.classList.add('hidden');
-          break;
-        }
+      // Non-remappable: Tab
+      if (d.code === 'Tab') {
+        var sb = document.getElementById('scoreboardOverlay');
+        if (sb) sb.classList.add('hidden');
+        break;
       }
+      applyKeyUp(d.code);
       break;
     case 'svResetKeys':
-      _w = _a = _s = _d = false;
+      _heldAxisKeys = {};
       INPUT_STATE.sprint = false;
       INPUT_STATE.fireDown = false;
       INPUT_STATE.secondaryDown = false;
@@ -297,7 +334,47 @@ window.addEventListener('message', function (evt) {
       INPUT_STATE.ability2 = false;
       INPUT_STATE.ability3 = false;
       INPUT_STATE.ability4 = false;
-      recomputeMoveAxes();
+      INPUT_STATE.moveX = 0;
+      INPUT_STATE.moveZ = 0;
       break;
   }
 });
+
+/* ── Keymap API ── */
+window.getKeymap = function () { return _keymap; };
+
+window.setKeyBinding = function (keyCode, action, opts) {
+  opts = opts || {};
+  // Remove old binding(s) for this action (find and delete)
+  for (var code in _keymap) {
+    if (_keymap[code].action === action) {
+      delete _keymap[code];
+    }
+  }
+  // Set new binding
+  var binding = { action: action };
+  if (opts.type) binding.type = opts.type;
+  if (opts.value !== undefined) binding.value = opts.value;
+  _keymap[keyCode] = binding;
+};
+
+window.resetKeymap = function () {
+  _keymap = JSON.parse(JSON.stringify(_defaultKeymap));
+};
+
+window.loadKeymapForHero = function (heroId) {
+  var saved = localStorage.getItem('keymap_' + heroId);
+  if (saved) {
+    try { _keymap = JSON.parse(saved); } catch (e) { window.resetKeymap(); }
+  } else {
+    window.resetKeymap();
+  }
+};
+
+window.saveKeymapForHero = function (heroId) {
+  localStorage.setItem('keymap_' + heroId, JSON.stringify(_keymap));
+};
+
+window.getDefaultKeymap = function () {
+  return JSON.parse(JSON.stringify(_defaultKeymap));
+};
