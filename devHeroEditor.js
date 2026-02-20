@@ -1848,6 +1848,56 @@
       var el = document.getElementById(fk);
       if (el && typeof fpFields[fk] === 'number') el.value = fpFields[fk];
     }
+
+    // Populate abilities display
+    populateAbilitiesDisplay(hero.passives, hero.abilities);
+  }
+
+  // --- Abilities display (read-only) ---
+
+  var _abilityKeyLabels = { ability1: 'Q', ability2: 'E', ability3: 'F', ability4: 'C' };
+
+  function populateAbilitiesDisplay(passives, abilities) {
+    var container = document.getElementById('heroAbilitiesDisplay');
+    if (!container) return;
+
+    var html = '<div style="color:#666;font-size:10px;margin-bottom:8px;font-style:italic;">(Editing coming soon)</div>';
+
+    // Passives
+    html += '<div style="margin-bottom:8px;"><strong style="color:#aaa;">Passives</strong>';
+    if (Array.isArray(passives) && passives.length > 0) {
+      for (var i = 0; i < passives.length; i++) {
+        var pid = passives[i].id || 'unknown';
+        var displayName = pid.replace(/([A-Z])/g, ' $1').replace(/^./, function (c) { return c.toUpperCase(); });
+        html += '<div style="margin:4px 0 0 8px;color:#ddd;">' + displayName + '</div>';
+      }
+    } else {
+      html += '<div style="margin:4px 0 0 8px;color:#666;">None</div>';
+    }
+    html += '</div>';
+
+    // Active Abilities
+    html += '<div><strong style="color:#aaa;">Active Abilities</strong>';
+    if (Array.isArray(abilities) && abilities.length > 0) {
+      for (var j = 0; j < abilities.length; j++) {
+        var ab = abilities[j];
+        var keyLabel = _abilityKeyLabels[ab.key] || ab.key || '?';
+        html += '<div style="margin:6px 0 0 8px;padding:6px 8px;background:#1a1a2e;border:1px solid #333;border-radius:4px;">';
+        html += '<div style="color:#00ff88;font-weight:bold;">' + (ab.name || ab.id || 'Unnamed') + ' <span style="color:#888;font-weight:normal;font-size:11px;">[' + keyLabel + ']</span></div>';
+        html += '<div style="color:#aaa;font-size:11px;margin-top:2px;">Cooldown: ' + ((ab.cooldownMs || 0) / 1000) + 's';
+        if (ab.duration) html += ' &middot; Duration: ' + ab.duration + 'ms';
+        html += '</div>';
+        if (ab.params && Object.keys(ab.params).length > 0) {
+          html += '<div style="color:#777;font-size:10px;margin-top:2px;font-family:monospace;">' + JSON.stringify(ab.params) + '</div>';
+        }
+        html += '</div>';
+      }
+    } else {
+      html += '<div style="margin:4px 0 0 8px;color:#666;">None</div>';
+    }
+    html += '</div>';
+
+    container.innerHTML = html;
   }
 
   // --- Hero preview update ---
@@ -2384,6 +2434,7 @@
         document.getElementById('heDesc').value = '';
         _bodyParts = [];
         renderBodyPartList();
+        populateAbilitiesDisplay([], []);
         updateHeroPreview();
       });
     }
