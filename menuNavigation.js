@@ -476,13 +476,16 @@ function lobbyEnsureSocket() {
   sock.on('playerList', function (list) {
     if (!window._lobbyState) return;
     window._lobbyState.playerList = list;
-    // Sync team assignments from server data
     if (!window._lobbyState.isHost) {
+      // Non-host: sync team assignments from server data
       var ta = {};
       for (var i = 0; i < list.length; i++) {
         if (list[i].team) ta[list[i].id] = list[i].team;
       }
       window._lobbyState.teamAssignments = ta;
+    } else {
+      // Host: auto-assign new players to teams with available slots
+      lobbyAutoAssignNewPlayers(list);
     }
     lobbyRenderSlots();
   });
@@ -712,6 +715,132 @@ window.lobbyJoinRoom = function (roomId, onError) {
   });
 };
 
+// Team colors matching modeFFA.js TEAM_COLORS_HEX
+var TEAM_COLORS_CSS = { 1: '#55aaff', 2: '#ff5555', 3: '#44ff44', 4: '#ff8844' };
+
+// Count spawns per team from map data — determines max slots per team
+function lobbyGetTeamCapacities() {
+  var cfg = window.gameSetupConfig || {};
+  var mapData = cfg.mapData;
+  if (!mapData || !mapData.spawns) {
+    // No spawn data: split maxPlayers evenly across default 2 teams
+    var mp = (window._lobbyState && window._lobbyState.maxPlayers) || 6;
+    var half = Math.ceil(mp / 2);
+    return { 1: half, 2: half };
+  }
+  var spawns = window.normalizeSpawns ? window.normalizeSpawns(mapData.spawns) : mapData.spawns;
+  var mode = cfg.mode || 'ffa';
+  var spawnList = (spawns && spawns[mode]) || (spawns && spawns.ffa) || [];
+  if (Array.isArray(spawns)) spawnList = spawns;
+  var caps = {};
+  for (var i = 0; i < spawnList.length; i++) {
+    var t = spawnList[i].team;
+    if (t > 0) caps[t] = (caps[t] || 0) + 1;
+  }
+  return caps;
+}
+
+// Count current members per team (humans + AIs)
+function lobbyGetTeamCounts() {
+  var ls = window._lobbyState;
+  if (!ls) return {};
+  var counts = {};
+  var ta = ls.teamAssignments || {};
+  var playerList = ls.playerList || [];
+  for (var i = 0; i < playerList.length; i++) {
+    if (playerList[i].isBot) continue;
+    var team = ta[playerList[i].id] || playerList[i].team || 0;
+    counts[team] = (counts[team] || 0) + 1;
+  }
+  var aiSlots = ls.aiSlots || {};
+  var aiKeys = Object.keys(aiSlots);
+  for (var j = 0; j < aiKeys.length; j++) {
+    var aiTeam = aiSlots[aiKeys[j]].team || 0;
+    counts[aiTeam] = (counts[aiTeam] || 0) + 1;
+  }
+  return counts;
+}
+
+// Find the team with the most remaining capacity; returns 0 if all full
+function lobbyFindTeamWithRoom(availableTeams, capacities) {
+  var counts = lobbyGetTeamCounts();
+  var bestTeam = 0;
+  var bestRemaining = 0;
+  for (var i = 0; i < availableTeams.length; i++) {
+    var t = availableTeams[i];
+    var cap = capacities[t] || 0;
+    var cur = counts[t] || 0;
+    var remaining = cap - cur;
+    if (remaining > bestRemaining) {
+      bestRemaining = remaining;
+      bestTeam = t;
+    }
+  }
+  return bestTeam;
+}
+
+// Auto-assign unassigned human players to teams with room (host only)
+function lobbyAutoAssignNewPlayers(list) {
+  var ls = window._lobbyState;
+  if (!ls || !ls.isHost) return;
+  var ta = ls.teamAssignments;
+  var capacities = lobbyGetTeamCapacities();
+  var availableTeams = lobbyGetAvailableTeams();
+  if (availableTeams.length === 0) availableTeams = [1, 2];
+
+  // Clean up stale assignments for players who left
+  var currentIds = {};
+  for (var i = 0; i < list.length; i++) {
+    if (!list[i].isBot) currentIds[list[i].id] = true;
+  }
+  var taKeys = Object.keys(ta);
+  for (var j = 0; j < taKeys.length; j++) {
+    if (!currentIds[taKeys[j]]) delete ta[taKeys[j]];
+  }
+
+  // Auto-assign players with no team assignment yet
+  for (var k = 0; k < list.length; k++) {
+    var p = list[k];
+    if (p.isBot) continue;
+    if (ta[p.id] !== undefined && ta[p.id] > 0) continue; // already assigned to a real team
+    var bestTeam = lobbyFindTeamWithRoom(availableTeams, capacities);
+    // If all teams are full, pick the team with the fewest members anyway
+    if (bestTeam <= 0) bestTeam = lobbyFindSmallestTeam(availableTeams);
+    if (bestTeam > 0) {
+      ta[p.id] = bestTeam;
+      if (window._lobbySocket) {
+        window._lobbySocket.emit('setPlayerTeam', p.id, bestTeam);
+      }
+    }
+  }
+}
+
+// Find the team with the fewest current members (ignoring capacity)
+function lobbyFindSmallestTeam(availableTeams) {
+  var counts = lobbyGetTeamCounts();
+  var bestTeam = availableTeams[0] || 1;
+  var bestCount = counts[bestTeam] || 0;
+  for (var i = 1; i < availableTeams.length; i++) {
+    var t = availableTeams[i];
+    var c = counts[t] || 0;
+    if (c < bestCount) {
+      bestCount = c;
+      bestTeam = t;
+    }
+  }
+  return bestTeam;
+}
+
+// Check if the current game setup is FFA (no team spawns)
+function lobbyIsFFA() {
+  var cfg = window.gameSetupConfig || {};
+  if (cfg.mode === 'ffa') return true;
+  // Also check via server settings for non-host
+  var ls = window._lobbyState;
+  if (ls && ls.serverSettings && ls.serverSettings.mode === 'ffa') return true;
+  return false;
+}
+
 // Render all player/AI slots in the lobby
 function lobbyRenderSlots() {
   var container = document.getElementById('lobbyPlayerList');
@@ -722,7 +851,6 @@ function lobbyRenderSlots() {
   var playerList = ls.playerList || [];
   var aiSlots = ls.aiSlots || {};
   var isHost = ls.isHost;
-  var availableTeams = lobbyGetAvailableTeams();
 
   container.innerHTML = '';
 
@@ -737,110 +865,358 @@ function lobbyRenderSlots() {
     }
   }
 
-  // Map human players: slot 0 = host, rest = remote players in order
-  var slotPlayers = {};
-  for (var hp = 0; hp < humanPlayers.length; hp++) {
-    if (humanPlayers[hp].isHost) {
-      slotPlayers[0] = humanPlayers[hp];
-    }
-  }
-  var nextSlot = 1;
-  for (var hp2 = 0; hp2 < humanPlayers.length; hp2++) {
-    if (!humanPlayers[hp2].isHost) {
-      // Bump AI from this slot if needed
-      if (aiSlots[nextSlot]) delete aiSlots[nextSlot];
-      slotPlayers[nextSlot] = humanPlayers[hp2];
-      nextSlot++;
-    }
-  }
-
-  // For non-host clients, populate aiSlots from server bot entries
-  if (!isHost) {
-    // Clear any stale bot entries from previous renders
+  // For non-host: rebuild aiSlots from server bot data (includes team)
+  if (!isHost && serverBots.length > 0) {
     aiSlots = {};
-    if (serverBots.length > 0) {
-      var botSlot = nextSlot;
-      for (var sb = 0; sb < serverBots.length; sb++) {
-        while (botSlot < maxPlayers && slotPlayers[botSlot]) botSlot++;
-        if (botSlot >= maxPlayers) break;
-        aiSlots[botSlot] = { hero: serverBots[sb].hero || 'random', difficulty: serverBots[sb].difficulty || 'Medium' };
-        botSlot++;
-      }
+    for (var sb = 0; sb < serverBots.length; sb++) {
+      aiSlots[sb] = {
+        hero: serverBots[sb].hero || 'random',
+        difficulty: serverBots[sb].difficulty || 'Medium',
+        team: serverBots[sb].team || 0
+      };
     }
   }
 
-  for (var i = 0; i < maxPlayers; i++) {
+  var aiKeys = Object.keys(aiSlots);
+  var totalEntities = humanPlayers.length + aiKeys.length;
+
+  // ── FFA mode: flat player list (no team sections) ──
+  if (lobbyIsFFA()) {
+    // Render all humans
+    for (var h = 0; h < humanPlayers.length; h++) {
+      var row = document.createElement('div');
+      row.className = 'player-row';
+      lobbyRenderHumanRow(row, humanPlayers[h]);
+      container.appendChild(row);
+    }
+    // Render all AIs
+    for (var a = 0; a < aiKeys.length; a++) {
+      var aiKey = aiKeys[a];
+      var ai = aiSlots[aiKey];
+      var row2 = document.createElement('div');
+      row2.className = 'player-row ai-slot';
+      lobbyRenderAISlot(row2, parseInt(aiKey, 10), ai, isHost);
+      container.appendChild(row2);
+    }
+    // Open slots
+    for (var o = totalEntities; o < maxPlayers; o++) {
+      var openRow = document.createElement('div');
+      openRow.className = 'player-row lobby-open-slot';
+      var openLabel = document.createElement('span');
+      openLabel.className = 'player-name';
+      openLabel.textContent = '(open)';
+      openRow.appendChild(openLabel);
+      container.appendChild(openRow);
+    }
+    // Add AI button
+    if (isHost && totalEntities < maxPlayers) {
+      var addBtn = document.createElement('button');
+      addBtn.className = 'ai-add-btn';
+      addBtn.textContent = '+ Add AI';
+      addBtn.style.marginTop = '6px';
+      addBtn.addEventListener('click', function () {
+        lobbyAddAI();
+      });
+      container.appendChild(addBtn);
+    }
+    return;
+  }
+
+  // ── Team mode: team-sectioned layout ──
+  var availableTeams = lobbyGetAvailableTeams();
+  if (availableTeams.length === 0) availableTeams = [1, 2];
+
+  // Categorize entities by team
+  var teamMembers = {};
+  for (var t = 0; t < availableTeams.length; t++) {
+    teamMembers[availableTeams[t]] = [];
+  }
+
+  // Categorize humans
+  for (var h2 = 0; h2 < humanPlayers.length; h2++) {
+    var player = humanPlayers[h2];
+    var pTeam = (ls.teamAssignments && ls.teamAssignments[player.id]) || player.team || 0;
+    // If player is unassigned (team 0), auto-assign for display purposes
+    if (pTeam === 0 || !teamMembers[pTeam]) {
+      pTeam = availableTeams[0] || 1;
+    }
+    teamMembers[pTeam].push({ type: 'human', data: player });
+  }
+
+  // Categorize AIs
+  for (var a2 = 0; a2 < aiKeys.length; a2++) {
+    var aiKey2 = aiKeys[a2];
+    var ai2 = aiSlots[aiKey2];
+    var aiTeam = ai2.team || 0;
+    if (aiTeam === 0 || !teamMembers[aiTeam]) {
+      aiTeam = availableTeams[0] || 1;
+    }
+    teamMembers[aiTeam].push({ type: 'ai', slotIndex: parseInt(aiKey2, 10), data: ai2 });
+  }
+
+  var capacities = lobbyGetTeamCapacities();
+
+  // Render each team section (no unassigned section)
+  for (var ti = 0; ti < availableTeams.length; ti++) {
+    var tn = availableTeams[ti];
+    container.appendChild(lobbyCreateTeamSection(tn, teamMembers[tn] || [], isHost, maxPlayers, totalEntities, capacities[tn] || 0));
+  }
+
+  // Add AI button below team sections
+  if (isHost && totalEntities < maxPlayers) {
+    var addBtn2 = document.createElement('button');
+    addBtn2.className = 'ai-add-btn';
+    addBtn2.textContent = '+ Add AI';
+    addBtn2.style.marginTop = '6px';
+    addBtn2.addEventListener('click', function () {
+      lobbyAddAI();
+    });
+    container.appendChild(addBtn2);
+  }
+}
+
+// Create a single team section with header, player rows, drop targets, and open slot placeholders
+function lobbyCreateTeamSection(teamNum, members, isHost, maxPlayers, totalEntities, capacity) {
+  var isFull = teamNum > 0 && capacity > 0 && members.length >= capacity;
+
+  var section = document.createElement('div');
+  section.className = 'lobby-team-section';
+  section.setAttribute('data-team', String(teamNum));
+
+  // Header
+  var header = document.createElement('div');
+  header.className = 'lobby-team-header';
+
+  var dot = document.createElement('span');
+  dot.className = 'lobby-team-dot';
+  dot.style.background = TEAM_COLORS_CSS[teamNum] || '#888';
+  header.appendChild(dot);
+
+  var title = document.createElement('span');
+  title.textContent = TEAM_LABELS[teamNum] || ('Team ' + teamNum);
+  header.appendChild(title);
+
+  var count = document.createElement('span');
+  count.className = 'lobby-team-count';
+  if (capacity > 0) {
+    count.textContent = members.length + '/' + capacity;
+    if (isFull) count.style.color = '#ff8844';
+  } else if (members.length > 0) {
+    count.textContent = members.length;
+  }
+  header.appendChild(count);
+
+  section.appendChild(header);
+
+  // Players container
+  var playersDiv = document.createElement('div');
+  playersDiv.className = 'lobby-team-players';
+
+  for (var m = 0; m < members.length; m++) {
+    var member = members[m];
     var row = document.createElement('div');
     row.className = 'player-row';
 
-    var player = slotPlayers[i];
-    var ai = aiSlots[i];
-
-    if (i === 0 && isHost) {
-      // Slot 0: Host player
-      row.classList.add('is-host');
-      var hostName = document.createElement('span');
-      hostName.className = 'player-name';
-      var savedName = null;
-      try { savedName = localStorage.getItem('playerName'); } catch (e) {}
-      hostName.textContent = savedName || 'Player 1';
-      row.appendChild(hostName);
-
-      var hostBadge = document.createElement('span');
-      hostBadge.className = 'player-ready host-badge';
-      hostBadge.textContent = 'HOST';
-      row.appendChild(hostBadge);
-
-      // Team selector for host
-      var hostId = (slotPlayers[0] && slotPlayers[0].id) || 'host';
-      var hostTeam = (ls.teamAssignments && ls.teamAssignments[hostId]) || (slotPlayers[0] && slotPlayers[0].team) || 0;
-      var hostTeamEl = lobbyCreateTeamSelector(hostId, hostTeam, availableTeams, true);
-      if (hostTeamEl) row.appendChild(hostTeamEl);
-    } else if (player) {
-      // Remote player
-      row.classList.toggle('is-ready', !!player.ready);
-      var pName = document.createElement('span');
-      pName.className = 'player-name';
-      pName.textContent = player.name || 'Player';
-      row.appendChild(pName);
-
-      var pStatus = document.createElement('span');
-      pStatus.className = 'player-ready';
-      pStatus.textContent = player.ready ? 'READY' : '';
-      if (player.ready) pStatus.classList.add('is-ready');
-      row.appendChild(pStatus);
-
-      // Team selector for remote player
-      var pTeam = (ls.teamAssignments && ls.teamAssignments[player.id]) || player.team || 0;
-      var pTeamEl = lobbyCreateTeamSelector(player.id, pTeam, availableTeams, isHost);
-      if (pTeamEl) row.appendChild(pTeamEl);
-    } else if (ai) {
-      // AI slot
+    if (member.type === 'human') {
+      lobbyRenderHumanRow(row, member.data);
+    } else if (member.type === 'ai') {
       row.classList.add('ai-slot');
-      lobbyRenderAISlot(row, i, ai, isHost);
-    } else {
-      // Empty slot
-      row.classList.add('empty-slot');
-      if (isHost) {
-        var addBtn = document.createElement('button');
-        addBtn.className = 'ai-add-btn';
-        addBtn.textContent = '+ Add AI';
-        addBtn.setAttribute('data-slot', String(i));
-        addBtn.addEventListener('click', function () {
-          var slotIdx = parseInt(this.getAttribute('data-slot'), 10);
-          lobbyAddAI(slotIdx);
-        });
-        row.appendChild(addBtn);
-      } else {
-        var openSpan = document.createElement('span');
-        openSpan.className = 'player-name';
-        openSpan.textContent = 'Open Slot';
-        row.appendChild(openSpan);
-      }
+      lobbyRenderAISlot(row, member.slotIndex, member.data, isHost);
     }
 
-    container.appendChild(row);
+    // Make draggable for host + enable row-level drop for swap
+    if (isHost) {
+      row.setAttribute('draggable', 'true');
+      var dragId = member.type === 'human' ? ('human:' + member.data.id) : ('ai:' + member.slotIndex);
+      row.setAttribute('data-drag-id', dragId);
+      row.setAttribute('data-team', String(teamNum));
+      row.addEventListener('dragstart', function (e) {
+        e.dataTransfer.setData('text/plain', this.getAttribute('data-drag-id'));
+        e.dataTransfer.effectAllowed = 'move';
+        this.classList.add('dragging');
+      });
+      row.addEventListener('dragend', function () {
+        this.classList.remove('dragging');
+        var allRows = document.querySelectorAll('.player-row.drop-target');
+        for (var r = 0; r < allRows.length; r++) allRows[r].classList.remove('drop-target');
+        var allSections = document.querySelectorAll('.lobby-team-section');
+        for (var s = 0; s < allSections.length; s++) allSections[s].classList.remove('drag-over');
+      });
+      // Row-level drop: swap teams with the dropped-on player
+      row.addEventListener('dragover', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        e.dataTransfer.dropEffect = 'move';
+        this.classList.add('drop-target');
+      });
+      row.addEventListener('dragleave', function (e) {
+        if (!this.contains(e.relatedTarget)) {
+          this.classList.remove('drop-target');
+        }
+      });
+      row.addEventListener('drop', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        this.classList.remove('drop-target');
+        var sourceDragId = e.dataTransfer.getData('text/plain');
+        var targetDragId = this.getAttribute('data-drag-id');
+        if (sourceDragId && targetDragId && sourceDragId !== targetDragId) {
+          lobbySwapTeams(sourceDragId, targetDragId);
+        }
+      });
+    }
+
+    playersDiv.appendChild(row);
   }
+
+  // Render open placeholder rows for remaining capacity
+  if (teamNum > 0 && capacity > 0) {
+    var remaining = capacity - members.length;
+    for (var r = 0; r < remaining; r++) {
+      var openRow = document.createElement('div');
+      openRow.className = 'player-row lobby-open-slot';
+      var openLabel = document.createElement('span');
+      openLabel.className = 'player-name';
+      openLabel.textContent = '(open)';
+      openRow.appendChild(openLabel);
+      playersDiv.appendChild(openRow);
+    }
+  }
+
+  section.appendChild(playersDiv);
+
+  // Section-level drop target handlers (host only) — for dropping onto empty area
+  if (isHost) {
+    section.addEventListener('dragover', function (e) {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      this.classList.add('drag-over');
+    });
+    section.addEventListener('dragleave', function (e) {
+      if (!this.contains(e.relatedTarget)) {
+        this.classList.remove('drag-over');
+      }
+    });
+    section.addEventListener('drop', function (e) {
+      e.preventDefault();
+      this.classList.remove('drag-over');
+      var dragData = e.dataTransfer.getData('text/plain');
+      var targetTeam = parseInt(this.getAttribute('data-team'), 10);
+      lobbyHandleTeamDrop(dragData, targetTeam);
+    });
+  }
+
+  return section;
+}
+
+// Swap teams between two entities (player-on-player drop)
+function lobbySwapTeams(dragIdA, dragIdB) {
+  if (!window._lobbyState) return;
+  var ls = window._lobbyState;
+
+  function getEntityTeam(dragId) {
+    var parts = dragId.split(':');
+    var type = parts[0];
+    var id = parts.slice(1).join(':');
+    if (type === 'human') {
+      return { type: type, id: id, team: ls.teamAssignments[id] || 0 };
+    } else if (type === 'ai') {
+      var slot = ls.aiSlots[parseInt(id, 10)];
+      return { type: type, id: id, team: slot ? (slot.team || 0) : 0 };
+    }
+    return null;
+  }
+
+  var a = getEntityTeam(dragIdA);
+  var b = getEntityTeam(dragIdB);
+  if (!a || !b || a.team === b.team) return;
+
+  // Swap their teams
+  if (a.type === 'human') {
+    ls.teamAssignments[a.id] = b.team;
+    if (window._lobbySocket) window._lobbySocket.emit('setPlayerTeam', a.id, b.team);
+  } else if (a.type === 'ai') {
+    var slotA = ls.aiSlots[parseInt(a.id, 10)];
+    if (slotA) slotA.team = b.team;
+  }
+
+  if (b.type === 'human') {
+    ls.teamAssignments[b.id] = a.team;
+    if (window._lobbySocket) window._lobbySocket.emit('setPlayerTeam', b.id, a.team);
+  } else if (b.type === 'ai') {
+    var slotB = ls.aiSlots[parseInt(b.id, 10)];
+    if (slotB) slotB.team = a.team;
+  }
+
+  if (a.type === 'ai' || b.type === 'ai') lobbySyncAISlotsToServer();
+  lobbyRenderSlots();
+}
+
+// Render a human player row (host or remote)
+function lobbyRenderHumanRow(row, player) {
+  if (player.isHost) row.classList.add('is-host');
+
+  var name = document.createElement('span');
+  name.className = 'player-name';
+  name.textContent = player.name || 'Player';
+  row.appendChild(name);
+
+  if (player.isHost) {
+    var badge = document.createElement('span');
+    badge.className = 'player-ready host-badge';
+    badge.textContent = 'HOST';
+    row.appendChild(badge);
+  } else {
+    var status = document.createElement('span');
+    status.className = 'player-ready';
+    if (player.ready) {
+      status.classList.add('is-ready');
+      status.textContent = 'READY';
+    }
+    row.appendChild(status);
+  }
+}
+
+// Handle a drop onto a team section
+function lobbyHandleTeamDrop(dragData, targetTeam) {
+  if (!dragData || !window._lobbyState) return;
+  var parts = dragData.split(':');
+  var entityType = parts[0];
+  var entityId = parts.slice(1).join(':');
+
+  // Determine entity's current team so we can skip no-op and adjust capacity check
+  var currentTeam = 0;
+  if (entityType === 'human') {
+    currentTeam = window._lobbyState.teamAssignments[entityId] || 0;
+  } else if (entityType === 'ai') {
+    var slot = window._lobbyState.aiSlots[parseInt(entityId, 10)];
+    if (slot) currentTeam = slot.team || 0;
+  }
+  if (currentTeam === targetTeam) return; // no-op
+
+  // Enforce team capacity (skip check for unassigned section)
+  if (targetTeam > 0) {
+    var capacities = lobbyGetTeamCapacities();
+    var counts = lobbyGetTeamCounts();
+    var cap = capacities[targetTeam] || 0;
+    var cur = counts[targetTeam] || 0;
+    if (cap > 0 && cur >= cap) return; // team is full
+  }
+
+  if (entityType === 'human') {
+    window._lobbyState.teamAssignments[entityId] = targetTeam;
+    if (window._lobbySocket) {
+      window._lobbySocket.emit('setPlayerTeam', entityId, targetTeam);
+    }
+  } else if (entityType === 'ai') {
+    var slotIdx = parseInt(entityId, 10);
+    if (window._lobbyState.aiSlots[slotIdx]) {
+      window._lobbyState.aiSlots[slotIdx].team = targetTeam;
+      lobbySyncAISlotsToServer();
+    }
+  }
+
+  lobbyRenderSlots();
 }
 
 // Render AI config controls inside a slot row
@@ -935,9 +1311,22 @@ function lobbyRenderAISlot(row, slotIndex, aiConfig, isHost) {
   }
 }
 
-function lobbyAddAI(slotIndex) {
+function lobbyAddAI() {
   if (!window._lobbyState || !window._lobbyState.isHost) return;
-  window._lobbyState.aiSlots[slotIndex] = { hero: 'random', difficulty: 'Medium' };
+  // Find next available slot key
+  var keys = Object.keys(window._lobbyState.aiSlots);
+  var maxKey = -1;
+  for (var i = 0; i < keys.length; i++) {
+    var k = parseInt(keys[i], 10);
+    if (k > maxKey) maxKey = k;
+  }
+  // Auto-assign to team with the most room (never team 0)
+  var availableTeams = lobbyGetAvailableTeams();
+  if (availableTeams.length === 0) availableTeams = [1, 2];
+  var capacities = lobbyGetTeamCapacities();
+  var team = lobbyFindTeamWithRoom(availableTeams, capacities);
+  if (team <= 0) team = lobbyFindSmallestTeam(availableTeams);
+  window._lobbyState.aiSlots[maxKey + 1] = { hero: 'random', difficulty: 'Medium', team: team };
   lobbySyncAISlotsToServer();
   lobbyRenderSlots();
 }
@@ -956,7 +1345,7 @@ function lobbySyncAISlotsToServer() {
   var keys = Object.keys(window._lobbyState.aiSlots || {});
   for (var i = 0; i < keys.length; i++) {
     var ai = window._lobbyState.aiSlots[keys[i]];
-    slots.push({ hero: ai.hero || 'random', difficulty: ai.difficulty || 'Medium' });
+    slots.push({ hero: ai.hero || 'random', difficulty: ai.difficulty || 'Medium', team: ai.team || 0 });
   }
   window._lobbySocket.emit('updateAISlots', slots);
 }
@@ -969,7 +1358,7 @@ function lobbyCollectSlotConfigs() {
   var keys = Object.keys(ls.aiSlots || {});
   for (var i = 0; i < keys.length; i++) {
     var ai = ls.aiSlots[keys[i]];
-    aiConfigs.push({ hero: ai.hero || 'random', difficulty: ai.difficulty || 'Medium' });
+    aiConfigs.push({ hero: ai.hero || 'random', difficulty: ai.difficulty || 'Medium', team: ai.team || 0 });
   }
   return { players: ls.playerList || [], aiConfigs: aiConfigs };
 }

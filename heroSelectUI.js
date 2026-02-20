@@ -45,7 +45,8 @@
   // Pre-round mode state
   var _preRoundMode = false;
   var _preRoundTimerRef = null;
-  var _preRoundConfirmed = false;
+  var _preRoundLockedIn = false;
+  var _preRoundHasSelected = false;
   var _preRoundCallbacks = null;
 
   function buildOverlay() {
@@ -108,6 +109,7 @@
     var cards = overlay.querySelectorAll('.hero-card');
     cards.forEach(function (card) {
       card.classList.remove('confirmed');
+      card.classList.remove('soft-selected');
       card.style.pointerEvents = '';
     });
     var waitingEl = document.getElementById('heroSelectWaiting');
@@ -160,33 +162,41 @@
   // ── Pre-round hero select mode ──
 
   function handlePreRoundCardClick(heroId) {
-    if (_preRoundConfirmed) return;
-    _preRoundConfirmed = true;
+    if (_preRoundLockedIn) return;
     _currentHeroId = heroId;
+    _preRoundHasSelected = true;
     updateCardSelection();
 
-    // Mark selected card as confirmed
+    // Show checkmark on selected card, but keep all cards clickable
     var overlay = document.getElementById('heroSelectOverlay');
     if (overlay) {
       var cards = overlay.querySelectorAll('.hero-card');
       cards.forEach(function (card) {
-        if (card.dataset.heroId === heroId) {
-          card.classList.add('confirmed');
-        }
-        card.style.pointerEvents = 'none';
+        card.classList.toggle('soft-selected', card.dataset.heroId === heroId);
+        card.classList.remove('confirmed');
       });
     }
 
-    if (_preRoundCallbacks && typeof _preRoundCallbacks.onConfirmed === 'function') {
-      _preRoundCallbacks.onConfirmed(heroId);
+    // Show "Waiting..." indicator
+    var waitingEl = document.getElementById('heroSelectWaiting');
+    if (waitingEl) {
+      waitingEl.textContent = 'Waiting for other players...';
+      waitingEl.classList.remove('hidden');
+    }
+
+    if (_preRoundCallbacks && typeof _preRoundCallbacks.onSelected === 'function') {
+      _preRoundCallbacks.onSelected(heroId);
     }
   }
 
   /**
    * Show pre-round hero selection overlay with countdown timer.
    * opts.seconds — countdown duration (default from GAME_CONFIG)
-   * opts.onConfirmed(heroId) — called when player clicks a card
-   * opts.onTimeout(heroId) — called when timer expires
+   * opts.onSelected(heroId) — called each time player clicks a card (soft selection)
+   * opts.onLockIn(heroId) — called once when timer expires or lockInPreRoundHeroSelect() is called
+   *
+   * Legacy support: opts.onConfirmed/onTimeout still work — onConfirmed maps to onSelected,
+   * onTimeout maps to onLockIn.
    */
   window.showPreRoundHeroSelect = function (opts) {
     opts = opts || {};
@@ -194,8 +204,12 @@
     var seconds = opts.seconds || cfg.HERO_SELECT_SECONDS || 15;
 
     _preRoundMode = true;
-    _preRoundConfirmed = false;
-    _preRoundCallbacks = { onConfirmed: opts.onConfirmed, onTimeout: opts.onTimeout };
+    _preRoundLockedIn = false;
+    _preRoundHasSelected = false;
+    _preRoundCallbacks = {
+      onSelected: opts.onSelected || opts.onConfirmed || null,
+      onLockIn: opts.onLockIn || opts.onTimeout || null
+    };
 
     buildOverlay();
     clearConfirmedState();
@@ -216,7 +230,7 @@
 
     // Hide training hint, show title
     var hintEl = document.getElementById('heroSelectHint');
-    if (hintEl) hintEl.textContent = 'Click a hero to confirm your pick';
+    if (hintEl) hintEl.textContent = 'Click a hero to select';
 
     // Notify parent (dev workbench) that hero select opened so overlay passthrough activates
     if (window._splitViewMode && window.parent !== window) {
@@ -232,10 +246,10 @@
       if (remaining <= 0) {
         clearInterval(_preRoundTimerRef);
         _preRoundTimerRef = null;
-        if (!_preRoundConfirmed) {
-          _preRoundConfirmed = true;
-          if (_preRoundCallbacks && typeof _preRoundCallbacks.onTimeout === 'function') {
-            _preRoundCallbacks.onTimeout(_currentHeroId);
+        if (!_preRoundLockedIn) {
+          _preRoundLockedIn = true;
+          if (_preRoundCallbacks && typeof _preRoundCallbacks.onLockIn === 'function') {
+            _preRoundCallbacks.onLockIn(_currentHeroId);
           }
         }
       }
@@ -243,15 +257,29 @@
   };
 
   /**
-   * Close the pre-round hero select overlay and clean up timer.
+   * Lock in current hero selection early (before timer expires).
+   * Called externally when all players have made a selection.
    */
+  window.lockInPreRoundHeroSelect = function () {
+    if (!_preRoundMode || _preRoundLockedIn) return;
+    _preRoundLockedIn = true;
+    if (_preRoundTimerRef) {
+      clearInterval(_preRoundTimerRef);
+      _preRoundTimerRef = null;
+    }
+    if (_preRoundCallbacks && typeof _preRoundCallbacks.onLockIn === 'function') {
+      _preRoundCallbacks.onLockIn(_currentHeroId);
+    }
+  };
+
   window.closePreRoundHeroSelect = function () {
     if (_preRoundTimerRef) {
       clearInterval(_preRoundTimerRef);
       _preRoundTimerRef = null;
     }
     _preRoundMode = false;
-    _preRoundConfirmed = false;
+    _preRoundLockedIn = false;
+    _preRoundHasSelected = false;
     _preRoundCallbacks = null;
 
     // Hide timer

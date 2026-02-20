@@ -246,6 +246,15 @@ window.addEventListener('message', function (evt) {
         case 'KeyR': INPUT_STATE.reloadPressed = true; break;
         case 'Space': INPUT_STATE.jump = true; break;
         case 'KeyV': INPUT_STATE.meleePressed = true; break;
+        case 'Tab': {
+          var hasRoom = window._lobbyState && window._lobbyState.roomId;
+          if (window.ffaActive || hasRoom) {
+            var sb = document.getElementById('scoreboardOverlay');
+            if (sb) sb.classList.remove('hidden');
+            if (typeof window.updateFFAScoreboard === 'function') window.updateFFAScoreboard();
+          }
+          break;
+        }
       }
       break;
     case 'svKeyUp':
@@ -255,6 +264,11 @@ window.addEventListener('message', function (evt) {
         case 'KeyS': _s = false; recomputeMoveAxes(); break;
         case 'KeyD': _d = false; recomputeMoveAxes(); break;
         case 'ShiftLeft': INPUT_STATE.sprint = false; break;
+        case 'Tab': {
+          var sb = document.getElementById('scoreboardOverlay');
+          if (sb) sb.classList.add('hidden');
+          break;
+        }
       }
       break;
     case 'svResetKeys':

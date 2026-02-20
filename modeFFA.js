@@ -302,9 +302,9 @@
   // ── AI Bot Management ──
   var _aiSlots = []; // { heroId, difficulty, name } — lobby AI slot definitions
 
-  function addAISlot(heroId, difficulty) {
+  function addAISlot(heroId, difficulty, team) {
     var name = '[AI] Bot ' + (_aiSlots.length + 1);
-    _aiSlots.push({ heroId: heroId || 'marksman', difficulty: difficulty || 'Medium', name: name });
+    _aiSlots.push({ heroId: heroId || 'marksman', difficulty: difficulty || 'Medium', name: name, team: team || 0 });
     return _aiSlots.length - 1;
   }
 
@@ -327,7 +327,7 @@
     for (var i = 0; i < _aiSlots.length; i++) {
       var slot = _aiSlots[i];
       var aiId = 'ai-' + i;
-      var team = assignTeam();
+      var team = (slot.team && slot.team > 0) ? slot.team : assignTeam();
       var spawnPos = getTeamSpawnPosition(team);
 
       var ai = new AIOpponent({
@@ -828,29 +828,65 @@
           // Notify clients to also show hero select
           if (socket) socket.emit('betweenRoundHeroSelect', { round: state.match.currentRound });
 
-          var finishRoundTransition = function (heroId) {
-            window._roundTransition = false;
-            var localEntry = state && state.players[state.localId];
-            if (localEntry) {
-              applyHeroWeapon(localEntry.entity, heroId);
-              localEntry.heroId = heroId;
-              sharedSetMeleeOnlyHUD(!!localEntry.entity.weapon.meleeOnly, state.hud.ammoDisplay, state.hud.reloadIndicator, state.hud.meleeCooldown);
+          // Track confirmations for between-round hero select
+          var _brHeroConfirmed = {};
+          function brCheckAllConfirmed() {
+            var ids = Object.keys(state.players);
+            for (var ci = 0; ci < ids.length; ci++) {
+              if (state.players[ids[ci]].isAI) continue;
+              if (!_brHeroConfirmed[ids[ci]]) return;
             }
-            if (socket) socket.emit('heroSelect', { heroId: heroId, clientId: state.localId });
-            if (typeof window.closePreRoundHeroSelect === 'function') window.closePreRoundHeroSelect();
-            resetAllPlayersForRound();
-            updateHUDForLocalPlayer();
-            startRoundCountdown(COUNTDOWN_SECONDS);
-            if (socket) socket.emit('startRound', { seconds: COUNTDOWN_SECONDS });
+            if (typeof window.lockInPreRoundHeroSelect === 'function') {
+              window.lockInPreRoundHeroSelect();
+            }
+          }
+
+          // Listen for client hero selections during between-round phase
+          var _brHeroHandler = function (payload) {
+            if (!payload || !payload.clientId) return;
+            _brHeroConfirmed[payload.clientId] = true;
+            var entry = state.players[payload.clientId];
+            if (entry) {
+              entry.heroId = payload.heroId;
+              applyHeroWeapon(entry.entity, payload.heroId);
+            }
+            brCheckAllConfirmed();
           };
+          if (socket) socket.on('heroSelect', _brHeroHandler);
 
           window.showPreRoundHeroSelect({
             seconds: 15,
-            onConfirmed: finishRoundTransition,
-            onTimeout: finishRoundTransition
+            onSelected: function (heroId) {
+              var localEntry = state && state.players[state.localId];
+              if (localEntry) {
+                applyHeroWeapon(localEntry.entity, heroId);
+                localEntry.heroId = heroId;
+                sharedSetMeleeOnlyHUD(!!localEntry.entity.weapon.meleeOnly, state.hud.ammoDisplay, state.hud.reloadIndicator, state.hud.meleeCooldown);
+              }
+              if (socket) socket.emit('heroSelect', { heroId: heroId, clientId: state.localId });
+              _brHeroConfirmed[state.localId] = true;
+              brCheckAllConfirmed();
+            },
+            onLockIn: function (heroId) {
+              // Remove the heroSelect listener to prevent stale handler accumulation
+              if (socket && _brHeroHandler) socket.off('heroSelect', _brHeroHandler);
+              window._roundTransition = false;
+              var localEntry = state && state.players[state.localId];
+              if (localEntry) {
+                applyHeroWeapon(localEntry.entity, heroId);
+                localEntry.heroId = heroId;
+                sharedSetMeleeOnlyHUD(!!localEntry.entity.weapon.meleeOnly, state.hud.ammoDisplay, state.hud.reloadIndicator, state.hud.meleeCooldown);
+              }
+              if (typeof window.closePreRoundHeroSelect === 'function') window.closePreRoundHeroSelect();
+              resetAllPlayersForRound();
+              updateHUDForLocalPlayer();
+              startRoundCountdown(COUNTDOWN_SECONDS);
+              if (socket) socket.emit('startRound', { seconds: COUNTDOWN_SECONDS });
+            }
           });
         } else {
           // Fallback: no hero select available, go straight to round
+          window._roundTransition = false;
           resetAllPlayersForRound();
           updateHUDForLocalPlayer();
           startRoundCountdown(COUNTDOWN_SECONDS);
@@ -1372,24 +1408,24 @@
       p.syncCameraFromPlayer();
 
       if (typeof playGameSound === 'function') {
-        var _chid = localEntry.heroId || undefined;
+        var _chid = entry.heroId || undefined;
         if (prevGrounded && !p.grounded) playGameSound('jump', { heroId: _chid });
         if (!prevGrounded && p.grounded) playGameSound('land', { heroId: _chid });
         var moving = (p.input.moveX !== 0 || p.input.moveZ !== 0);
         if (moving && p.grounded && typeof playFootstepIfDue === 'function') {
-          playFootstepIfDue(!!p.input.sprint, localEntry.heroId, now);
+          playFootstepIfDue(!!p.input.sprint, entry.heroId, now);
         }
       }
     }
 
     // Handle local reload completion
     if (p.weapon.reloading && now >= p.weapon.reloadEnd) {
-      if (sharedHandleReload(p.weapon, now, localEntry.heroId)) {
+      if (sharedHandleReload(p.weapon, now, entry.heroId)) {
         sharedSetReloadingUI(false, state.hud.reloadIndicator);
       }
     }
     if (p.input.reloadPressed && !p.weapon.reloading) {
-      if (sharedStartReload(p.weapon, now, localEntry.heroId)) {
+      if (sharedStartReload(p.weapon, now, entry.heroId)) {
         sharedSetReloadingUI(true, state.hud.reloadIndicator);
       }
       p.input.reloadPressed = false;
@@ -1408,7 +1444,7 @@
         clientMs.swinging = true;
         clientMs.swingEnd = now + w.meleeSwingMs;
         w.lastMeleeTime = now;
-        if (typeof playGameSound === 'function') playGameSound('melee_swing', { heroId: localEntry.heroId || undefined });
+        if (typeof playGameSound === 'function') playGameSound('melee_swing', { heroId: entry.heroId || undefined });
         if (typeof window.triggerFPMeleeSwing === 'function') window.triggerFPMeleeSwing(w.meleeSwingMs);
         if (p.triggerMeleeSwing) p.triggerMeleeSwing(w.meleeSwingMs);
       }
@@ -1803,20 +1839,27 @@
     socket.on('betweenRoundHeroSelect', function (data) {
       if (!state || state.isHost) return;
       if (typeof window.showPreRoundHeroSelect !== 'function') return;
-      var finishClientHeroSelect = function (heroId) {
-        var localEntry = state && state.players[state.localId];
-        if (localEntry) {
-          applyHeroWeapon(localEntry.entity, heroId);
-          localEntry.heroId = heroId;
-          sharedSetMeleeOnlyHUD(!!localEntry.entity.weapon.meleeOnly, state.hud.ammoDisplay, state.hud.reloadIndicator, state.hud.meleeCooldown);
-        }
-        if (socket) socket.emit('heroSelect', { heroId: heroId, clientId: state.localId });
-        if (typeof window.closePreRoundHeroSelect === 'function') window.closePreRoundHeroSelect();
-      };
       window.showPreRoundHeroSelect({
         seconds: 15,
-        onConfirmed: finishClientHeroSelect,
-        onTimeout: finishClientHeroSelect
+        onSelected: function (heroId) {
+          var localEntry = state && state.players[state.localId];
+          if (localEntry) {
+            applyHeroWeapon(localEntry.entity, heroId);
+            localEntry.heroId = heroId;
+            sharedSetMeleeOnlyHUD(!!localEntry.entity.weapon.meleeOnly, state.hud.ammoDisplay, state.hud.reloadIndicator, state.hud.meleeCooldown);
+          }
+          if (socket) socket.emit('heroSelect', { heroId: heroId, clientId: state.localId });
+        },
+        onLockIn: function (heroId) {
+          var localEntry = state && state.players[state.localId];
+          if (localEntry) {
+            applyHeroWeapon(localEntry.entity, heroId);
+            localEntry.heroId = heroId;
+            sharedSetMeleeOnlyHUD(!!localEntry.entity.weapon.meleeOnly, state.hud.ammoDisplay, state.hud.reloadIndicator, state.hud.meleeCooldown);
+          }
+          if (socket) socket.emit('heroSelect', { heroId: heroId, clientId: state.localId });
+          // Don't close or start countdown — wait for host's startRound
+        }
       });
     });
 
@@ -2035,7 +2078,7 @@
     clearAISlots();
     if (settings && settings.aiConfigs && Array.isArray(settings.aiConfigs)) {
       for (var ai = 0; ai < settings.aiConfigs.length; ai++) {
-        addAISlot(settings.aiConfigs[ai].hero || 'marksman', settings.aiConfigs[ai].difficulty || 'Medium');
+        addAISlot(settings.aiConfigs[ai].hero || 'marksman', settings.aiConfigs[ai].difficulty || 'Medium', settings.aiConfigs[ai].team || 0);
       }
     }
 
@@ -2077,31 +2120,68 @@
     state.loopHandle = requestAnimationFrame(tick);
 
     // Show hero select overlay, then start countdown
+    // Track which players have confirmed hero selection (host initial round)
+    var _heroConfirmed = {};
+    function checkAllHeroesConfirmed() {
+      var ids = Object.keys(state.players);
+      for (var ci = 0; ci < ids.length; ci++) {
+        if (state.players[ids[ci]].isAI) continue;
+        if (!_heroConfirmed[ids[ci]]) return;
+      }
+      // All humans have selected — lock in early
+      if (typeof window.lockInPreRoundHeroSelect === 'function') {
+        window.lockInPreRoundHeroSelect();
+      }
+    }
+
     if (typeof window.showPreRoundHeroSelect === 'function') {
       window.showPreRoundHeroSelect({
         seconds: 15,
-        onConfirmed: function (heroId) {
+        onSelected: function (heroId) {
           var localEntry = state && state.players[state.localId];
           if (localEntry) {
             applyHeroWeapon(localEntry.entity, heroId);
             localEntry.heroId = heroId;
+            sharedSetMeleeOnlyHUD(!!localEntry.entity.weapon.meleeOnly, state.hud.ammoDisplay, state.hud.reloadIndicator, state.hud.meleeCooldown);
           }
-          if (typeof window.closePreRoundHeroSelect === 'function') window.closePreRoundHeroSelect();
-          startRoundCountdown(3);
+          if (socket) socket.emit('heroSelect', { heroId: heroId, clientId: state.localId });
+          _heroConfirmed[state.localId] = true;
+          checkAllHeroesConfirmed();
         },
-        onTimeout: function (heroId) {
+        onLockIn: function (heroId) {
+          // Remove the heroSelect listener to prevent stale handler accumulation
+          if (socket && _initHeroHandler) socket.off('heroSelect', _initHeroHandler);
           var localEntry = state && state.players[state.localId];
           if (localEntry) {
             applyHeroWeapon(localEntry.entity, heroId);
             localEntry.heroId = heroId;
+            sharedSetMeleeOnlyHUD(!!localEntry.entity.weapon.meleeOnly, state.hud.ammoDisplay, state.hud.reloadIndicator, state.hud.meleeCooldown);
           }
           if (typeof window.closePreRoundHeroSelect === 'function') window.closePreRoundHeroSelect();
-          startRoundCountdown(3);
+          startRoundCountdown(COUNTDOWN_SECONDS);
+          if (socket) socket.emit('startRound', { seconds: COUNTDOWN_SECONDS });
         }
       });
+
+      // Listen for heroSelect from clients during initial hero select
+      var _initHeroHandler = null;
+      if (socket) {
+        _initHeroHandler = function (payload) {
+          if (!payload || !payload.clientId) return;
+          _heroConfirmed[payload.clientId] = true;
+          var entry = state.players[payload.clientId];
+          if (entry) {
+            entry.heroId = payload.heroId;
+            applyHeroWeapon(entry.entity, payload.heroId);
+          }
+          checkAllHeroesConfirmed();
+        };
+        socket.on('heroSelect', _initHeroHandler);
+      }
     } else {
       // Fallback: no hero select available, start immediately
-      startRoundCountdown(3);
+      startRoundCountdown(COUNTDOWN_SECONDS);
+      if (socket) socket.emit('startRound', { seconds: COUNTDOWN_SECONDS });
     }
   }
 
@@ -2198,11 +2278,11 @@
       state.lastTs = 0;
       state.loopHandle = requestAnimationFrame(tick);
 
-      // Show hero select overlay, then start countdown
+      // Show hero select overlay — client waits for host's startRound
       if (typeof window.showPreRoundHeroSelect === 'function') {
         window.showPreRoundHeroSelect({
           seconds: 15,
-          onConfirmed: function (heroId) {
+          onSelected: function (heroId) {
             var localEntry = state && state.players[state.localId];
             if (localEntry) {
               applyHeroWeapon(localEntry.entity, heroId);
@@ -2210,10 +2290,8 @@
               sharedSetMeleeOnlyHUD(!!localEntry.entity.weapon.meleeOnly, state.hud.ammoDisplay, state.hud.reloadIndicator, state.hud.meleeCooldown);
             }
             if (socket) socket.emit('heroSelect', { heroId: heroId, clientId: state.localId });
-            if (typeof window.closePreRoundHeroSelect === 'function') window.closePreRoundHeroSelect();
-            startRoundCountdown(3);
           },
-          onTimeout: function (heroId) {
+          onLockIn: function (heroId) {
             var localEntry = state && state.players[state.localId];
             if (localEntry) {
               applyHeroWeapon(localEntry.entity, heroId);
@@ -2221,13 +2299,11 @@
               sharedSetMeleeOnlyHUD(!!localEntry.entity.weapon.meleeOnly, state.hud.ammoDisplay, state.hud.reloadIndicator, state.hud.meleeCooldown);
             }
             if (socket) socket.emit('heroSelect', { heroId: heroId, clientId: state.localId });
-            if (typeof window.closePreRoundHeroSelect === 'function') window.closePreRoundHeroSelect();
-            startRoundCountdown(3);
+            // Don't start countdown — wait for host's startRound event
           }
         });
-      } else {
-        startRoundCountdown(3);
       }
+      // Client countdown is started by the socket 'startRound' handler
     }
 
     if (mapName && mapName !== '__default__' && typeof fetchMapData === 'function') {

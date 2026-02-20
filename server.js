@@ -570,7 +570,8 @@ function buildPlayerList(room) {
         name: 'AI Bot ' + (i + 1),
         isBot: true,
         hero: ai.hero || 'random',
-        difficulty: ai.difficulty || 'Medium'
+        difficulty: ai.difficulty || 'Medium',
+        team: ai.team || 0
       });
     }
   }
@@ -657,7 +658,8 @@ io.on('connection', (socket) => {
         var s = slots[i];
         room.aiSlots.push({
           hero: (s && typeof s.hero === 'string') ? s.hero.substring(0, 50) : 'random',
-          difficulty: (s && typeof s.difficulty === 'string') ? s.difficulty.substring(0, 10) : 'Medium'
+          difficulty: (s && typeof s.difficulty === 'string') ? s.difficulty.substring(0, 10) : 'Medium',
+          team: (s && typeof s.team === 'number' && s.team >= 0 && s.team <= 4) ? s.team : 0
         });
       }
     }

@@ -337,7 +337,7 @@
         overlay.style.pointerEvents = '';
         overlay.style.cursor = 'none';
       }
-      updateControlBarText('CONTROLLING P' + (_state.activeIndex + 1) + ' \u2014 Tab to switch');
+      updateControlBarText('CONTROLLING P' + (_state.activeIndex + 1) + ' \u2014 1 to switch');
       updateDimming();
     } else {
       // Menu mode: overlay is pass-through, user clicks directly in iframes
@@ -387,7 +387,7 @@
 
     // Only handle keys when pointer is locked (play mode)
     if (_state.locked) {
-      if (e.code === 'Tab') {
+      if (e.code === 'Digit1') {
         e.preventDefault();
         switchActiveIframe();
         return;
@@ -431,7 +431,7 @@
     _state.activeIndex = _state.activeIndex === 0 ? 1 : 0;
 
     // Update control bar
-    updateControlBarText('CONTROLLING P' + (_state.activeIndex + 1) + ' \u2014 Tab to switch');
+    updateControlBarText('CONTROLLING P' + (_state.activeIndex + 1) + ' \u2014 1 to switch');
 
     updateDimming();
   }

@@ -362,7 +362,7 @@ body {
 #lobbyPlayerList {
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    gap: 6px;
 }
 
 .player-row {
@@ -402,12 +402,14 @@ body {
     color: #ffcc00;
 }
 
-.player-row.empty-slot {
+.player-row.empty-slot,
+.player-row.lobby-open-slot {
     border-style: dashed;
     border-color: rgba(255, 255, 255, 0.04);
 }
 
-.player-row.empty-slot .player-name {
+.player-row.empty-slot .player-name,
+.player-row.lobby-open-slot .player-name {
     color: #444;
     font-style: italic;
 }
@@ -515,6 +517,84 @@ body {
     border: 1px solid #335;
     border-radius: 3px;
     background: rgba(80, 130, 200, 0.15);
+}
+
+/* ── Lobby Team Sections (drag-and-drop layout) ── */
+.lobby-team-section {
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 8px;
+    overflow: hidden;
+    transition: border-color 0.15s, background 0.15s;
+}
+
+.lobby-team-section.drag-over {
+    border-color: rgba(0, 170, 255, 0.5);
+    background: rgba(0, 170, 255, 0.04);
+}
+
+.lobby-team-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 5px 10px;
+    font-size: 11px;
+    font-weight: bold;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: #aaa;
+    background: rgba(255, 255, 255, 0.03);
+    user-select: none;
+}
+
+.lobby-team-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.lobby-team-count {
+    margin-left: auto;
+    font-size: 10px;
+    color: #555;
+    font-weight: normal;
+}
+
+.lobby-team-players {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 4px;
+    min-height: 28px;
+}
+
+.lobby-team-players .player-row {
+    border-radius: 4px;
+}
+
+.lobby-team-empty {
+    color: #444;
+    font-size: 11px;
+    font-style: italic;
+    padding: 2px 10px;
+    user-select: none;
+}
+
+.player-row[draggable="true"] {
+    cursor: grab;
+}
+
+.player-row[draggable="true"]:active {
+    cursor: grabbing;
+}
+
+.player-row.dragging {
+    opacity: 0.35;
+}
+
+.player-row.drop-target {
+    border-color: rgba(0, 170, 255, 0.6);
+    background: rgba(0, 170, 255, 0.1);
 }
 
 .ai-remove-btn {
@@ -1426,6 +1506,21 @@ body {
 
 #heroSelectTimer.hidden {
     display: none;
+}
+
+.hero-card.soft-selected {
+    border-color: #00ff88;
+    box-shadow: 0 0 16px rgba(0, 255, 136, 0.3);
+}
+
+.hero-card.soft-selected::after {
+    content: '\2713 SELECTED';
+    display: block;
+    color: #00ff88;
+    font-size: 11px;
+    font-weight: bold;
+    margin-top: 8px;
+    letter-spacing: 1px;
 }
 
 .hero-card.confirmed {
