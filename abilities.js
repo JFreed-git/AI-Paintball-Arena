@@ -251,35 +251,24 @@
 
     onActivate: function (player, params) {
       var speed = params.speed || 30;
-      var dir;
+      var yaw = 0;
+      var gotYaw = false;
 
-      // Get forward direction from camera (local player) or mesh (AI/remote)
-      if (typeof THREE !== 'undefined') {
-        var quat;
-        if (window.camera && player.cameraAttached) {
-          quat = window.camera.quaternion;
-        } else if (player._meshGroup) {
-          quat = player._meshGroup.quaternion;
-        }
-        if (quat) {
-          dir = new THREE.Vector3(0, 0, -1).applyQuaternion(quat);
-        }
+      // Get yaw from camera (local player) or mesh (AI/remote)
+      if (window.camera && player.cameraAttached) {
+        yaw = window.camera.rotation.y;
+        gotYaw = true;
+      } else if (player._meshGroup) {
+        yaw = player._meshGroup.rotation.y;
+        gotYaw = true;
       }
 
-      // Fallback: if no direction could be determined, dash forward (negative Z)
-      if (!dir) {
-        dir = { x: 0, y: 0, z: -1 };
-      }
+      // Compute horizontal dash direction from yaw (no pitch — dash is always level)
+      var dir = { x: -Math.sin(yaw), y: 0, z: -Math.cos(yaw) };
 
       // Store dash direction for onTick
-      player._dashDir = { x: dir.x, y: dir.y, z: dir.z };
+      player._dashDir = dir;
       player._dashSpeed = speed;
-
-      // Apply initial velocity burst to vertical component (half strength to prevent flying)
-      if (Math.abs(dir.y) > 0.15) {
-        player.verticalVelocity = dir.y * speed * 0.5;
-        if (player.grounded) player.grounded = false;
-      }
 
       // Play dash sound if available
       if (window.playSound) window.playSound('dash');
