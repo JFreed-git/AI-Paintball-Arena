@@ -205,4 +205,26 @@
     containerEl.classList.toggle('on-cooldown', progress < 1);
   };
 
+  /**
+   * Update the mana bar HUD.
+   * @param {number|null} mana - current mana (null to hide)
+   * @param {number|null} maxMana - max mana
+   */
+  window.updateManaHUD = function (mana, maxMana) {
+    var container = document.getElementById('manaBarContainer');
+    if (!container) return;
+
+    if (mana === null || mana === undefined || !maxMana) {
+      container.classList.add('hidden');
+      return;
+    }
+
+    container.classList.remove('hidden');
+    var fill = document.getElementById('manaFill');
+    var text = document.getElementById('manaText');
+    var pct = Math.max(0, Math.min(100, (mana / maxMana) * 100));
+    if (fill) fill.style.width = pct + '%';
+    if (text) text.textContent = Math.floor(mana) + '/' + Math.floor(maxMana);
+  };
+
 })();

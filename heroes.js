@@ -343,6 +343,10 @@
           player.abilityManager.registerAbility(hero.abilities[ai]);
         }
       }
+      // Initialize mana system if hero defines a mana config
+      if (hero.mana && typeof player.abilityManager.initMana === 'function') {
+        player.abilityManager.initMana(hero.mana);
+      }
     }
 
     return hero;
