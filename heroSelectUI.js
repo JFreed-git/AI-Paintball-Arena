@@ -49,6 +49,47 @@
   var _preRoundHasSelected = false;
   var _preRoundCallbacks = null;
 
+  // Key binding display map
+  var _keyLabels = { ability1: 'Q', ability2: 'E', ability3: 'F', ability4: 'C' };
+
+  /**
+   * Convert camelCase id to Title Case with spaces.
+   * e.g. 'doubleJump' → 'Double Jump'
+   */
+  function camelToTitle(str) {
+    return str.replace(/([A-Z])/g, ' $1').replace(/^./, function (c) { return c.toUpperCase(); });
+  }
+
+  /**
+   * Build HTML string for ability display on hero cards.
+   * Returns empty string if hero has no passives or abilities.
+   */
+  function buildAbilityHtml(hero) {
+    var parts = [];
+
+    // Passives
+    if (hero.passives && hero.passives.length > 0) {
+      var names = [];
+      for (var i = 0; i < hero.passives.length; i++) {
+        names.push(camelToTitle(hero.passives[i].id));
+      }
+      parts.push('<span style="font-style:italic;color:#aaa;">' + names.join(', ') + '</span>');
+    }
+
+    // Active abilities
+    if (hero.abilities && hero.abilities.length > 0) {
+      for (var j = 0; j < hero.abilities.length; j++) {
+        var ab = hero.abilities[j];
+        var keyLabel = _keyLabels[ab.key] || ab.key || '?';
+        var cdSec = ab.cooldownMs ? Math.round(ab.cooldownMs / 1000) + 's' : '';
+        parts.push('<span style="color:#5cf;">[' + keyLabel + '] ' + (ab.name || ab.id) + (cdSec ? ' (' + cdSec + ' CD)' : '') + '</span>');
+      }
+    }
+
+    if (parts.length === 0) return '';
+    return '<div style="margin-top:4px;font-size:11px;line-height:1.4;">' + parts.join(' &middot; ') + '</div>';
+  }
+
   function buildOverlay() {
     if (_built) return;
     _built = true;
@@ -64,6 +105,7 @@
       card.dataset.heroId = hero.id;
 
       var w = hero.weapon;
+      var abilityHtml = buildAbilityHtml(hero);
       card.innerHTML =
         '<h3>' + hero.name + '</h3>' +
         '<div class="hero-desc">' + hero.description + '</div>' +
@@ -72,7 +114,8 @@
           'Fire Rate: <span>' + Math.round(1000 / w.cooldownMs * 10) / 10 + '/s</span><br>' +
           'Mag: <span>' + w.magSize + '</span> | Reload: <span>' + w.reloadTimeSec + 's</span><br>' +
           'Range: <span>' + w.maxRange + 'm</span>' +
-        '</div>';
+        '</div>' +
+        abilityHtml;
 
       card.addEventListener('click', function () {
         if (_preRoundMode) {
