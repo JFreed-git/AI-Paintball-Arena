@@ -26,6 +26,9 @@
 
   // Stash crosshair spread values that have no form fields, so they round-trip on save
   var _stashedCrosshair = { baseSpreadPx: 8, sprintSpreadPx: 20 };
+  // Stash abilities/passives so icon edits round-trip on save
+  var _stashedPassives = [];
+  var _stashedAbilities = [];
 
   // Toggle gun/scope/tracer fields based on meleeOnly checkbox
   function toggleMeleeOnlyFields() {
@@ -1675,8 +1678,8 @@
 
       modelType: 'standard',
       weapon: weaponConfig,
-      passives: [],
-      abilities: []
+      passives: _stashedPassives,
+      abilities: _stashedAbilities
     };
 
     // Include body parts if any
@@ -1858,6 +1861,8 @@
   var _abilityKeyLabels = { ability1: 'Q', ability2: 'E', ability3: 'F', ability4: 'C' };
 
   function populateAbilitiesDisplay(passives, abilities) {
+    _stashedPassives = passives || [];
+    _stashedAbilities = abilities || [];
     var container = document.getElementById('heroAbilitiesDisplay');
     if (!container) return;
 
@@ -1890,6 +1895,23 @@
         if (ab.params && Object.keys(ab.params).length > 0) {
           html += '<div style="color:#777;font-size:10px;margin-top:2px;font-family:monospace;">' + JSON.stringify(ab.params) + '</div>';
         }
+        // Icon selector
+        var iconKeys = window.ABILITY_ICONS ? Object.keys(window.ABILITY_ICONS) : [];
+        var currentIcon = ab.icon || '';
+        html += '<div style="margin-top:4px;display:flex;align-items:center;gap:6px;">';
+        html += '<span style="color:#888;font-size:10px;">Icon:</span>';
+        html += '<select data-ability-index="' + j + '" class="ability-icon-select" style="padding:2px 4px;background:#1a1a1a;color:#ccc;border:1px solid #444;border-radius:4px;font-size:10px;">';
+        html += '<option value=""' + (currentIcon === '' ? ' selected' : '') + '>(auto)</option>';
+        for (var k = 0; k < iconKeys.length; k++) {
+          html += '<option value="' + iconKeys[k] + '"' + (currentIcon === iconKeys[k] ? ' selected' : '') + '>' + iconKeys[k] + '</option>';
+        }
+        html += '</select>';
+        if (currentIcon && window.ABILITY_ICONS && window.ABILITY_ICONS[currentIcon]) {
+          html += '<img src="data:image/svg+xml,' + encodeURIComponent(window.ABILITY_ICONS[currentIcon]) + '" style="width:20px;height:20px;" alt="">';
+        } else if (!currentIcon && window.ABILITY_ICONS && window.ABILITY_ICONS[ab.id]) {
+          html += '<img src="data:image/svg+xml,' + encodeURIComponent(window.ABILITY_ICONS[ab.id]) + '" style="width:20px;height:20px;opacity:0.5;" alt="">';
+        }
+        html += '</div>';
         html += '</div>';
       }
     } else {
@@ -1898,6 +1920,23 @@
     html += '</div>';
 
     container.innerHTML = html;
+
+    // Wire up icon selector dropdowns
+    var selects = container.querySelectorAll('.ability-icon-select');
+    for (var s = 0; s < selects.length; s++) {
+      selects[s].addEventListener('change', function () {
+        var idx = parseInt(this.getAttribute('data-ability-index'));
+        if (_stashedAbilities[idx]) {
+          if (this.value) {
+            _stashedAbilities[idx].icon = this.value;
+          } else {
+            delete _stashedAbilities[idx].icon;
+          }
+          // Re-render to update preview
+          populateAbilitiesDisplay(_stashedPassives, _stashedAbilities);
+        }
+      });
+    }
   }
 
   // --- Hero preview update ---

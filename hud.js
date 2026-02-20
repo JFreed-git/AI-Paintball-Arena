@@ -14,6 +14,7 @@
  *   sharedStartReload(weapon, now)
  *   sharedCanShoot(weapon, now, cooldownMs)
  *   sharedSetMeleeOnlyHUD(isMeleeOnly, ammoEl, reloadEl, meleeCdEl)
+ *   ABILITY_ICONS                    — SVG data URI registry for ability icons
  *
  * DEPENDENCIES: crosshair.js (setCrosshairDimmed)
  *
@@ -34,6 +35,28 @@
  */
 
 (function () {
+
+  // ========== Ability Icon Registry ==========
+
+  var ABILITY_ICONS = {
+    // Slicer
+    dash: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48"><path d="M8 24h24l-8-8M32 24l-8 8" stroke="#fff" stroke-width="3" fill="none" stroke-linecap="round"/><line x1="36" y1="12" x2="36" y2="36" stroke="#fff" stroke-width="2" opacity="0.5"/></svg>',
+
+    // Brawler
+    grappleHook: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48"><circle cx="36" cy="12" r="4" stroke="#fff" stroke-width="2" fill="none"/><path d="M32 16L16 32" stroke="#fff" stroke-width="2" stroke-dasharray="4 2"/><path d="M16 32l-4 4M16 32l4 4M16 32l0 6" stroke="#fff" stroke-width="2" fill="none"/></svg>',
+
+    // Marksman
+    unlimitedAmmo: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48"><path d="M14 34V14h6l8 10-8 10h-6z" stroke="#fff" stroke-width="2" fill="none"/><path d="M26 20h8M26 24h10M26 28h8" stroke="#fff" stroke-width="2" opacity="0.7"/></svg>',
+
+    // Mage
+    teleport: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48"><circle cx="14" cy="24" r="6" stroke="#aa88ff" stroke-width="2" fill="none" stroke-dasharray="3 2"/><circle cx="34" cy="24" r="6" stroke="#aa88ff" stroke-width="2" fill="none"/><path d="M20 24h8" stroke="#aa88ff" stroke-width="2" stroke-dasharray="2 2"/><path d="M24 20l4 4-4 4" stroke="#aa88ff" stroke-width="2" fill="none"/></svg>',
+
+    piercingBlast: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48"><circle cx="16" cy="24" r="8" stroke="#aa88ff" stroke-width="2" fill="rgba(170,136,255,0.2)"/><line x1="24" y1="24" x2="44" y2="24" stroke="#aa88ff" stroke-width="3"/><path d="M40 20l4 4-4 4" stroke="#aa88ff" stroke-width="2" fill="none"/></svg>',
+
+    meditate: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48"><circle cx="24" cy="20" r="6" stroke="#4488ff" stroke-width="2" fill="none"/><path d="M18 30c0-3 3-4 6-4s6 1 6 4" stroke="#4488ff" stroke-width="2" fill="none"/><path d="M12 38c3-2 6-3 12-3s9 1 12 3" stroke="#4488ff" stroke-width="1.5" fill="none" opacity="0.5"/><path d="M20 14l4-4 4 4" stroke="#4488ff" stroke-width="1.5" fill="none" opacity="0.6"/></svg>'
+  };
+
+  window.ABILITY_ICONS = ABILITY_ICONS;
 
   // ========== Weapon State Machine ==========
 
@@ -148,6 +171,10 @@
     while (container.children.length < hudState.length) {
       var slot = document.createElement('div');
       slot.className = 'ability-slot';
+      var icon = document.createElement('img');
+      icon.className = 'ability-icon';
+      icon.alt = '';
+      slot.appendChild(icon);
       var label = document.createElement('span');
       label.className = 'key-label';
       slot.appendChild(label);
@@ -161,10 +188,23 @@
     for (var i = 0; i < hudState.length; i++) {
       var state = hudState[i];
       var el = container.children[i];
+      var iconEl = el.querySelector('.ability-icon');
       var keyLabel = el.querySelector('.key-label');
       var cdOverlay = el.querySelector('.cooldown-overlay');
 
       keyLabel.textContent = KEY_LABELS[state.key] || state.key;
+
+      // Set icon from registry (look up by icon override, then by ability id)
+      var iconKey = state.icon || state.id;
+      var svgData = ABILITY_ICONS[iconKey];
+      if (iconEl) {
+        if (svgData) {
+          iconEl.src = 'data:image/svg+xml,' + encodeURIComponent(svgData);
+          iconEl.style.display = '';
+        } else {
+          iconEl.style.display = 'none';
+        }
+      }
 
       // Cooldown overlay: gray covers entire slot, recedes upward from bottom as cooldown progresses
       var pct = Math.max(0, Math.min(1, state.cooldownPct || 0));

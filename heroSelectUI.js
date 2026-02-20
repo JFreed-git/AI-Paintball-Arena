@@ -78,11 +78,17 @@
 
     // Active abilities
     if (hero.abilities && hero.abilities.length > 0) {
+      var icons = window.ABILITY_ICONS || {};
       for (var j = 0; j < hero.abilities.length; j++) {
         var ab = hero.abilities[j];
         var keyLabel = _keyLabels[ab.key] || ab.key || '?';
         var cdSec = ab.cooldownMs ? Math.round(ab.cooldownMs / 1000) + 's' : '';
-        parts.push('<span style="color:#5cf;">[' + keyLabel + '] ' + (ab.name || ab.id) + (cdSec ? ' (' + cdSec + ' CD)' : '') + '</span>');
+        var iconKey = ab.icon || ab.id;
+        var iconHtml = '';
+        if (icons[iconKey]) {
+          iconHtml = '<img src="data:image/svg+xml,' + encodeURIComponent(icons[iconKey]) + '" style="width:16px;height:16px;vertical-align:middle;margin-right:2px;" alt="">';
+        }
+        parts.push('<span style="color:#5cf;">' + iconHtml + '[' + keyLabel + '] ' + (ab.name || ab.id) + (cdSec ? ' (' + cdSec + ' CD)' : '') + '</span>');
       }
     }
 
