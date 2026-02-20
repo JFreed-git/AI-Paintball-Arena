@@ -74,13 +74,27 @@
   };
 
   /**
+   * Clean up all active effects by calling onEnd for each, then clear the map.
+   * Prevents leaked visuals (grapple line) and stale player properties.
+   */
+  AbilityManager.prototype._cleanupActiveEffects = function () {
+    for (var eid in this._activeEffects) {
+      var effect = _effectRegistry[eid];
+      if (effect && effect.onEnd) {
+        effect.onEnd(this._player, this._activeEffects[eid].params);
+      }
+    }
+    this._activeEffects = {};
+  };
+
+  /**
    * Remove all registered abilities and passives (used when switching heroes).
    */
   AbilityManager.prototype.clearAbilities = function () {
+    this._cleanupActiveEffects();
     this._passives = {};
     this._abilities = {};
     this._cooldowns = {};
-    this._activeEffects = {};
   };
 
   // ─── Queries ───────────────────────────────────────────────────────
@@ -222,8 +236,8 @@
    * Reset all cooldowns and active effects (called between rounds).
    */
   AbilityManager.prototype.reset = function () {
+    this._cleanupActiveEffects();
     this._cooldowns = {};
-    this._activeEffects = {};
   };
 
   window.AbilityManager = AbilityManager;
