@@ -229,5 +229,64 @@
   window.AbilityManager = AbilityManager;
 
   // === ABILITY EFFECT IMPLEMENTATIONS BELOW ===
+  // ─── Dash Effect ───────────────────────────────────────────────────
+  // Burst of velocity in the player's look direction (200ms duration).
+  // Used by Slicer hero. params.speed defaults to 30.
+
+  AbilityManager.registerEffect('dash', {
+
+    onActivate: function (player, params) {
+      var speed = params.speed || 30;
+      var dir;
+
+      // Get forward direction from camera (local player) or mesh (AI/remote)
+      if (typeof THREE !== 'undefined') {
+        var quat;
+        if (window.camera && player.cameraAttached) {
+          quat = window.camera.quaternion;
+        } else if (player.mesh) {
+          quat = player.mesh.quaternion;
+        }
+        if (quat) {
+          dir = new THREE.Vector3(0, 0, -1).applyQuaternion(quat);
+        }
+      }
+
+      // Fallback: if no direction could be determined, dash forward (negative Z)
+      if (!dir) {
+        dir = { x: 0, y: 0, z: -1 };
+      }
+
+      // Store dash direction for onTick
+      player._dashDir = { x: dir.x, y: dir.y, z: dir.z };
+      player._dashSpeed = speed;
+
+      // Apply initial velocity burst to vertical component (half strength to prevent flying)
+      if (Math.abs(dir.y) > 0.15) {
+        player.verticalVelocity = dir.y * speed * 0.5;
+        if (player.grounded) player.grounded = false;
+      }
+
+      // Play dash sound if available
+      if (window.playSound) window.playSound('dash');
+    },
+
+    onTick: function (player, params, dt) {
+      if (!player._dashDir) return;
+      var speed = player._dashSpeed || params.speed || 30;
+      // Convert dt from milliseconds to seconds for position-based movement
+      var dtSec = dt / 1000;
+
+      // Override horizontal position directly (physics has no persistent vx/vz)
+      player.position.x += player._dashDir.x * speed * dtSec;
+      player.position.z += player._dashDir.z * speed * dtSec;
+    },
+
+    onEnd: function (player) {
+      delete player._dashDir;
+      delete player._dashSpeed;
+    }
+  });
+
 
 })();
