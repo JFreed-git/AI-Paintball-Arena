@@ -1626,30 +1626,6 @@ body {
     color: #666;
 }
 
-/* Training stats display */
-#trainingStats {
-    position: absolute;
-    left: 20px;
-    bottom: 20px;
-    z-index: 150;
-    background: rgba(0, 0, 0, 0.55);
-    border: 1px solid rgba(255,255,255,0.08);
-    border-radius: 10px;
-    padding: 10px 14px;
-    backdrop-filter: blur(6px);
-    font-family: Consolas, 'Courier New', monospace;
-    font-size: 12px;
-    color: #aaa;
-    line-height: 1.6;
-}
-
-#trainingStats.hidden {
-    display: none;
-}
-
-#trainingStats span {
-    color: #fff;
-}
 
 /* Split-view mode (iframe clients) — menus are visible so user can host/join */
 

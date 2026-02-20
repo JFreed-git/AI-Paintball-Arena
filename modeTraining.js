@@ -126,11 +126,6 @@
       sprintIndicator: document.getElementById('sprintIndicator'),
       weaponNameDisplay: document.getElementById('weaponNameDisplay'),
       meleeCooldown: document.getElementById('meleeCooldown'),
-      trainingStats: document.getElementById('trainingStats'),
-      tsShotCount: document.getElementById('tsShotCount'),
-      tsHitCount: document.getElementById('tsHitCount'),
-      tsKillCount: document.getElementById('tsKillCount'),
-      tsAccuracy: document.getElementById('tsAccuracy'),
     };
   }
 
@@ -139,7 +134,6 @@
     var hud = state.hud;
     if (hud.healthContainer) hud.healthContainer.classList.toggle('hidden', !show);
     if (hud.weaponNameDisplay) hud.weaponNameDisplay.classList.toggle('hidden', !show);
-    if (hud.trainingStats) hud.trainingStats.classList.toggle('hidden', !show);
     // Hide enemy health (not used in training)
     var enemyHC = document.getElementById('enemyHealthContainer');
     if (enemyHC) enemyHC.classList.add('hidden');
@@ -160,14 +154,6 @@
     }
     sharedUpdateMeleeCooldown(state.hud.meleeCooldown, p.weapon, performance.now());
 
-    // Stats
-    if (state.hud.tsShotCount) state.hud.tsShotCount.textContent = String(state.stats.shots);
-    if (state.hud.tsHitCount) state.hud.tsHitCount.textContent = String(state.stats.hits);
-    if (state.hud.tsKillCount) state.hud.tsKillCount.textContent = String(state.stats.kills);
-    if (state.hud.tsAccuracy) {
-      var acc = state.stats.shots > 0 ? Math.round(state.stats.hits / state.stats.shots * 100) : 0;
-      state.hud.tsAccuracy.textContent = acc + '%';
-    }
   }
 
   // ── Hero switching ──
