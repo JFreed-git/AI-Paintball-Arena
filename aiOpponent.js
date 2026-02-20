@@ -31,7 +31,7 @@
  *   - Difficulty could also affect weapon stats (not just aim/reaction)
  *   - Use sharedStartReload() instead of inline reload logic
  *   - Counter-picking: AI adapts playstyle based on player's hero choice
- *   - Ability usage by AI (when ability system is implemented)
+ *   - Ability usage by AI: dash implemented (see _evaluateAbilities), expand for future abilities
  *   - Extract base BotEntity class shared with trainingBot.js
  */
 
@@ -670,6 +670,53 @@ class AIOpponent {
     return false;
   }
 
+  // --- Ability Evaluation ---
+
+  _evaluateAbilities(ctx, hasLOS, dist, dir) {
+    if (!this.player.abilityManager) return;
+    var am = this.player.abilityManager;
+
+    // Dash ability
+    if (am.isReady('dash')) {
+      var shouldDash = false;
+
+      switch (this._currentStyleName) {
+        case 'aggressive':
+          // Dash whenever ready and target in range
+          if (this._state === 'ENGAGE' && dist >= 8 && dist <= 20 && hasLOS) shouldDash = true;
+          if (this._state === 'SPAWN_RUSH') shouldDash = true;
+          break;
+
+        case 'defensive':
+          // Only dash to escape when low health
+          if (this.health < this.maxHealth * 0.5) {
+            if (this._state === 'SEEK_COVER') shouldDash = true;
+          }
+          break;
+
+        case 'melee':
+          // Always dash toward target when ready
+          if (this._state === 'ENGAGE' && dist > this._style.engageDistMax && hasLOS) shouldDash = true;
+          if (this._state === 'SPAWN_RUSH') shouldDash = true;
+          if (this._state === 'PATROL' && hasLOS && dist > 5) shouldDash = true;
+          break;
+
+        case 'balanced':
+          // Offensive: dash to close distance when healthy
+          if (this._state === 'ENGAGE' && dist >= 8 && dist <= 20 && hasLOS && this.health > this.maxHealth * 0.5) shouldDash = true;
+          // Defensive: dash to escape when low health
+          if (this._state === 'SEEK_COVER' && this.health < this.maxHealth * 0.5) shouldDash = true;
+          // Spawn rush
+          if (this._state === 'SPAWN_RUSH') shouldDash = true;
+          break;
+      }
+
+      if (shouldDash) {
+        am.activate('dash');
+      }
+    }
+  }
+
   // --- Stuck Detection ---
 
   _checkStuck(dt) {
@@ -1051,6 +1098,9 @@ class AIOpponent {
         }
         break;
     }
+
+    // Evaluate ability usage (dash, etc.)
+    this._evaluateAbilities(activeCtx, hasLOS, dist, dir);
 
     // Apply movement through physics
     this._applyMovement(moveDir, wantSprint, wantJump, dt);
