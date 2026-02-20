@@ -327,9 +327,16 @@ function updateFullPhysics(state, input, arena, dt) {
   var groundH = getGroundHeight(state.position, solids, state.feetY, state.grounded, pRadius);
 
   // 4. Jump (use per-hero _jumpVelocity if available, else global JUMP_VELOCITY)
+  if (state.grounded) state._airJumpsUsed = 0; // Reset air jumps when on ground
   if (input.jump && state.grounded) {
     state.verticalVelocity = (state._jumpVelocity != null) ? state._jumpVelocity : JUMP_VELOCITY;
     state.grounded = false;
+  } else if (input.jump && !state.grounded &&
+             (state._airJumpsUsed || 0) < 1 &&
+             state.abilityManager?.hasPassive('doubleJump')) {
+    // Air jump (double jump passive): replace current vy with jump velocity
+    state.verticalVelocity = (state._jumpVelocity != null) ? state._jumpVelocity : JUMP_VELOCITY;
+    state._airJumpsUsed = (state._airJumpsUsed || 0) + 1;
   }
 
   // Drop threshold: use hysteresis — require a larger gap before becoming airborne
@@ -346,6 +353,7 @@ function updateFullPhysics(state, input, arena, dt) {
       state.feetY = groundH;
       state.verticalVelocity = 0;
       state.grounded = true;
+      state._airJumpsUsed = 0;
     }
   } else {
     // 6. Grounded: snap to ground, detect drops

@@ -7,7 +7,7 @@
  * EXPORTS (bare global): bindPlayerControls, DEFAULT_CAMERA_POS
  * DEPENDENCIES: THREE (r128), camera/renderer globals (game.js),
  *               mouseSensitivity (menuNavigation.js), showOnlyMenu/setHUDVisible (menuNavigation.js)
- * TODO (future): Ability keybind support, ADS (right-click) input
+ * TODO (future): ADS (right-click) input
  */
 
 // Camera defaults and reset live with player controls
@@ -25,7 +25,7 @@ function resetCameraToDefaults() {
 }
 
 /* Paintball input state (inputs live here; physics elsewhere) */
-const INPUT_STATE = { fireDown: false, sprint: false, reloadPressed: false, jump: false, meleePressed: false, moveX: 0, moveZ: 0 };
+const INPUT_STATE = { fireDown: false, sprint: false, reloadPressed: false, jump: false, meleePressed: false, ability1: false, ability2: false, ability3: false, ability4: false, moveX: 0, moveZ: 0 };
 let _w = false, _a = false, _s = false, _d = false;
 function recomputeMoveAxes() {
   INPUT_STATE.moveZ = (_w ? 1 : 0) + (_s ? -1 : 0);
@@ -189,6 +189,10 @@ function onGlobalKeyDown(e) {
     case 'KeyR': INPUT_STATE.reloadPressed = true; break;
     case 'Space': INPUT_STATE.jump = true; break;
     case 'KeyV': INPUT_STATE.meleePressed = true; break;
+    case 'KeyQ': INPUT_STATE.ability1 = true; break;
+    case 'KeyE': INPUT_STATE.ability2 = true; break;
+    case 'KeyF': INPUT_STATE.ability3 = true; break;
+    case 'KeyC': INPUT_STATE.ability4 = true; break;
   }
 }
 
@@ -210,6 +214,10 @@ function onGlobalKeyUp(e) {
     case 'KeyS': _s = false; recomputeMoveAxes(); break;
     case 'KeyD': _d = false; recomputeMoveAxes(); break;
     case 'ShiftLeft': INPUT_STATE.sprint = false; break;
+    case 'KeyQ': INPUT_STATE.ability1 = false; break;
+    case 'KeyE': INPUT_STATE.ability2 = false; break;
+    case 'KeyF': INPUT_STATE.ability3 = false; break;
+    case 'KeyC': INPUT_STATE.ability4 = false; break;
   }
 }
 
@@ -246,6 +254,10 @@ window.addEventListener('message', function (evt) {
         case 'KeyR': INPUT_STATE.reloadPressed = true; break;
         case 'Space': INPUT_STATE.jump = true; break;
         case 'KeyV': INPUT_STATE.meleePressed = true; break;
+        case 'KeyQ': INPUT_STATE.ability1 = true; break;
+        case 'KeyE': INPUT_STATE.ability2 = true; break;
+        case 'KeyF': INPUT_STATE.ability3 = true; break;
+        case 'KeyC': INPUT_STATE.ability4 = true; break;
         case 'Tab': {
           var hasRoom = window._lobbyState && window._lobbyState.roomId;
           if (window.ffaActive || hasRoom) {
@@ -264,6 +276,10 @@ window.addEventListener('message', function (evt) {
         case 'KeyS': _s = false; recomputeMoveAxes(); break;
         case 'KeyD': _d = false; recomputeMoveAxes(); break;
         case 'ShiftLeft': INPUT_STATE.sprint = false; break;
+        case 'KeyQ': INPUT_STATE.ability1 = false; break;
+        case 'KeyE': INPUT_STATE.ability2 = false; break;
+        case 'KeyF': INPUT_STATE.ability3 = false; break;
+        case 'KeyC': INPUT_STATE.ability4 = false; break;
         case 'Tab': {
           var sb = document.getElementById('scoreboardOverlay');
           if (sb) sb.classList.add('hidden');
@@ -275,6 +291,10 @@ window.addEventListener('message', function (evt) {
       _w = _a = _s = _d = false;
       INPUT_STATE.sprint = false;
       INPUT_STATE.fireDown = false;
+      INPUT_STATE.ability1 = false;
+      INPUT_STATE.ability2 = false;
+      INPUT_STATE.ability3 = false;
+      INPUT_STATE.ability4 = false;
       recomputeMoveAxes();
       break;
   }

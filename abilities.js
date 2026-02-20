@@ -1,96 +1,95 @@
 /**
  * abilities.js — Ability system runtime
  *
- * PURPOSE: Manages ability state (cooldowns, activation, effect dispatch) for heroes
- * and weapons during gameplay. Ability DEFINITIONS live on hero/weapon configs in
- * heroes.js and weapon.js. This file handles the RUNTIME: tracking which abilities
- * are on cooldown, processing activation inputs, and triggering effects.
+ * PURPOSE: Manages ability state (cooldowns, activation, effect dispatch) for heroes.
+ * Ability DEFINITIONS live on hero configs in heroes.js. This file handles the
+ * RUNTIME: registering abilities, tracking cooldowns, processing activation,
+ * dispatching effect callbacks, and reporting HUD state.
  *
  * EXPORTS (window):
  *   AbilityManager — constructor for per-player ability tracking
  *
  * DEPENDENCIES: None (standalone — timing and input are passed in via update())
- *
- * ABILITY TYPES:
- *
- *   Passive abilities (defined on hero.passives[]):
- *     - Always active, no cooldown, no activation input
- *     - Checked by relevant systems (e.g. physics.js checks 'doubleJump')
- *     - Examples: doubleJump, damageResistance, quickReload
- *     - Shape: { id: 'doubleJump', type: 'passive', description: '...' }
- *
- *   Active abilities (defined on hero.abilities[] or weapon.abilities[]):
- *     - Triggered by keybind, have cooldown duration
- *     - Effect dispatched through callback system
- *     - Examples: dash, shield, chargedShot
- *     - Shape: {
- *         id: 'dash',
- *         type: 'active',
- *         cooldownSec: 8,
- *         duration: 0.3,        // how long the effect lasts (seconds), 0 for instant
- *         keybind: 'q',         // keyboard key to activate
- *         description: '...'
- *       }
- *
- * USAGE (future):
- *   var mgr = new AbilityManager(heroAbilities, weaponAbilities);
- *   // Each frame:
- *   mgr.update(dt, inputState, callbacks);
- *   // Check passives:
- *   mgr.hasPassive('doubleJump'); // returns true/false
- *   // Check cooldowns for HUD display:
- *   mgr.getCooldownPercent('dash'); // returns 0.0 - 1.0
- *
- * TODO (implement):
- *   - AbilityManager.activate(abilityId): manually trigger an ability
- *   - Effect callback registry: { 'dash': function(player, dt) { ... } }
- *   - Input-driven activation in update() (check keybinds, activate if ready)
- *   - Integration with physics.js for movement abilities
- *   - Integration with projectiles.js for weapon abilities
- *   - HUD integration in hud.js (cooldown indicators)
- *   - Networking: ability activation events for LAN mode
- *   - Ultimate abilities (charge-based, not cooldown-based) — lower priority
  */
 
 (function () {
 
+  // === Static effect registry (shared across all AbilityManager instances) ===
+  // Registered once at load time via AbilityManager.registerEffect()
+  // Shape: { abilityId: { onActivate, onTick?, onEnd? } }
+  var _effectRegistry = {};
+
   /**
    * AbilityManager — tracks ability state for a single player.
    *
-   * @param {Array} heroPassives   - passive ability definitions from hero config
-   * @param {Array} heroAbilities  - active ability definitions from hero config
-   * @param {Array} weaponAbilities - active ability definitions from weapon config
+   * @param {Object} player - the player this manager belongs to
    */
-  function AbilityManager(heroPassives, heroAbilities, weaponAbilities) {
-    this._passives = heroPassives || [];
-    this._actives = [].concat(heroAbilities || [], weaponAbilities || []);
+  function AbilityManager(player) {
+    this._player = player;
 
-    // Cooldown tracking: { abilityId: { remaining: seconds, total: seconds } }
+    // Passive set: { passiveId: {id} }
+    this._passives = {};
+
+    // Ability registry: { abilityId: {id, name, key, cooldownMs, duration?, params?} }
+    this._abilities = {};
+
+    // Cooldown tracking: { abilityId: { remaining: ms, total: ms } }
     this._cooldowns = {};
 
-    // Active effect tracking: { abilityId: { remaining: seconds } }
+    // Active effect tracking: { abilityId: { remaining: ms, params: {} } }
     this._activeEffects = {};
   }
 
+  // ─── Static: Effect Registry ───────────────────────────────────────
+
   /**
-   * Check if this player has a specific passive ability.
-   * Used by systems like physics.js to check for movement passives.
+   * Register effect callbacks for an ability type (static/module-level).
+   * Called once at load time, shared across all AbilityManager instances.
+   *
+   * @param {string} abilityId - the ability this effect handles
+   * @param {Object} callbacks - { onActivate(player, params), onTick?(player, params, dt), onEnd?(player, params) }
    */
-  AbilityManager.prototype.hasPassive = function (passiveId) {
-    for (var i = 0; i < this._passives.length; i++) {
-      if (this._passives[i].id === passiveId) return true;
-    }
-    return false;
+  AbilityManager.registerEffect = function (abilityId, callbacks) {
+    _effectRegistry[abilityId] = callbacks;
+  };
+
+  // ─── Registration ──────────────────────────────────────────────────
+
+  /**
+   * Register a passive ability.
+   * @param {Object} passiveDef - { id }
+   */
+  AbilityManager.prototype.registerPassive = function (passiveDef) {
+    if (!passiveDef || !passiveDef.id) return;
+    this._passives[passiveDef.id] = passiveDef;
   };
 
   /**
-   * Get cooldown progress for an ability (0 = ready, 1 = just activated).
-   * Used by hud.js to render cooldown indicators.
+   * Register an active ability.
+   * @param {Object} abilityDef - { id, name, key, cooldownMs, duration?, params? }
    */
-  AbilityManager.prototype.getCooldownPercent = function (abilityId) {
-    var cd = this._cooldowns[abilityId];
-    if (!cd || cd.total <= 0) return 0;
-    return Math.max(0, Math.min(1, cd.remaining / cd.total));
+  AbilityManager.prototype.registerAbility = function (abilityDef) {
+    if (!abilityDef || !abilityDef.id) return;
+    this._abilities[abilityDef.id] = abilityDef;
+  };
+
+  /**
+   * Remove all registered abilities and passives (used when switching heroes).
+   */
+  AbilityManager.prototype.clearAbilities = function () {
+    this._passives = {};
+    this._abilities = {};
+    this._cooldowns = {};
+    this._activeEffects = {};
+  };
+
+  // ─── Queries ───────────────────────────────────────────────────────
+
+  /**
+   * Check if this player has a specific passive ability.
+   */
+  AbilityManager.prototype.hasPassive = function (passiveId) {
+    return !!this._passives[passiveId];
   };
 
   /**
@@ -102,14 +101,71 @@
   };
 
   /**
-   * Update cooldowns and active effects each frame.
-   * TODO: Also check input state and fire ability callbacks.
-   *
-   * @param {number} dt - delta time in seconds
-   * @param {Object} inputState - current input (from input.js)
-   * @param {Object} callbacks - { abilityId: function(player, dt) } effect handlers
+   * Check if an ability is currently active (effect in progress).
    */
-  AbilityManager.prototype.update = function (dt /*, inputState, callbacks */) {
+  AbilityManager.prototype.isActive = function (abilityId) {
+    return !!this._activeEffects[abilityId];
+  };
+
+  /**
+   * Get cooldown progress for an ability (0.0 = ready, 1.0 = just activated).
+   */
+  AbilityManager.prototype.getCooldownPercent = function (abilityId) {
+    var cd = this._cooldowns[abilityId];
+    if (!cd || cd.total <= 0) return 0;
+    return Math.max(0, Math.min(1, cd.remaining / cd.total));
+  };
+
+  // ─── Activation ────────────────────────────────────────────────────
+
+  /**
+   * Activate an ability by ID.
+   * Checks cooldown, dispatches onActivate callback, starts cooldown and duration tracking.
+   *
+   * @param {string} abilityId
+   * @returns {boolean} true if the ability was activated
+   */
+  AbilityManager.prototype.activate = function (abilityId) {
+    var def = this._abilities[abilityId];
+    if (!def) return false;
+
+    // Must be off cooldown
+    if (!this.isReady(abilityId)) return false;
+
+    // Look up effect callbacks
+    var effect = _effectRegistry[abilityId];
+
+    // Call onActivate if registered
+    if (effect && effect.onActivate) {
+      effect.onActivate(this._player, def.params || {});
+    }
+
+    // Start cooldown
+    this._cooldowns[abilityId] = {
+      remaining: def.cooldownMs,
+      total: def.cooldownMs
+    };
+
+    // If the ability has a duration, track it as an active effect
+    if (def.duration && def.duration > 0) {
+      this._activeEffects[abilityId] = {
+        remaining: def.duration,
+        params: def.params || {}
+      };
+    }
+
+    return true;
+  };
+
+  // ─── Update ────────────────────────────────────────────────────────
+
+  /**
+   * Tick all cooldowns and active effect durations each frame.
+   * Calls onTick for active effects, and onEnd when effects expire.
+   *
+   * @param {number} dt - delta time in milliseconds
+   */
+  AbilityManager.prototype.update = function (dt) {
     // Tick down cooldowns
     for (var id in this._cooldowns) {
       if (this._cooldowns[id].remaining > 0) {
@@ -119,17 +175,48 @@
 
     // Tick down active effects
     for (var eid in this._activeEffects) {
-      if (this._activeEffects[eid].remaining > 0) {
-        this._activeEffects[eid].remaining -= dt;
-        if (this._activeEffects[eid].remaining <= 0) {
-          delete this._activeEffects[eid];
+      var ae = this._activeEffects[eid];
+      var effect = _effectRegistry[eid];
+
+      // Call onTick while active
+      if (effect && effect.onTick) {
+        effect.onTick(this._player, ae.params, dt);
+      }
+
+      ae.remaining -= dt;
+      if (ae.remaining <= 0) {
+        // Effect expired — call onEnd
+        if (effect && effect.onEnd) {
+          effect.onEnd(this._player, ae.params);
         }
+        delete this._activeEffects[eid];
       }
     }
-
-    // TODO: Check inputState for ability keybinds and activate if ready
-    // TODO: Call effect callbacks for active effects
   };
+
+  // ─── HUD State ─────────────────────────────────────────────────────
+
+  /**
+   * Returns HUD-ready state for all registered abilities (not passives).
+   * @returns {Array} [{id, name, key, cooldownPct, isActive, isReady}]
+   */
+  AbilityManager.prototype.getHUDState = function () {
+    var result = [];
+    for (var id in this._abilities) {
+      var def = this._abilities[id];
+      result.push({
+        id: def.id,
+        name: def.name,
+        key: def.key,
+        cooldownPct: this.getCooldownPercent(def.id),
+        isActive: this.isActive(def.id),
+        isReady: this.isReady(def.id)
+      });
+    }
+    return result;
+  };
+
+  // ─── Lifecycle ─────────────────────────────────────────────────────
 
   /**
    * Reset all cooldowns and active effects (called between rounds).
@@ -140,5 +227,7 @@
   };
 
   window.AbilityManager = AbilityManager;
+
+  // === ABILITY EFFECT IMPLEMENTATIONS BELOW ===
 
 })();
