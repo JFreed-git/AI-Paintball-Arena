@@ -38,6 +38,14 @@
 
     // Active effect tracking: { abilityId: { remaining: ms, params: {} } }
     this._activeEffects = {};
+
+    // Mana system (initialized via initMana if hero uses mana)
+    this._mana = 0;
+    this._maxMana = 0;
+    this._manaRegenRate = 0;
+    this._manaRegenDelay = 0;
+    this._manaRegenTimer = 0;
+    this._hasMana = false;
   }
 
   // ─── Static: Effect Registry ───────────────────────────────────────
@@ -206,6 +214,15 @@
         delete this._activeEffects[eid];
       }
     }
+
+    // Mana regen
+    if (this._hasMana) {
+      if (this._manaRegenTimer > 0) {
+        this._manaRegenTimer -= dt;
+      } else if (this._mana < this._maxMana) {
+        this._mana = Math.min(this._maxMana, this._mana + this._manaRegenRate * (dt / 1000));
+      }
+    }
   };
 
   // ─── HUD State ─────────────────────────────────────────────────────
@@ -227,6 +244,9 @@
         isReady: this.isReady(def.id)
       });
     }
+    // Attach mana info if this hero uses mana
+    result._mana = this._hasMana ? this._mana : null;
+    result._maxMana = this._hasMana ? this._maxMana : null;
     return result;
   };
 
@@ -238,6 +258,68 @@
   AbilityManager.prototype.reset = function () {
     this._cleanupActiveEffects();
     this._cooldowns = {};
+    if (this._hasMana) {
+      this._mana = this._maxMana;
+      this._manaRegenTimer = 0;
+    }
+  };
+
+  // ─── Mana System ──────────────────────────────────────────────────
+
+  /**
+   * Initialize the mana system for this player.
+   * Called from applyHeroToPlayer() if the hero defines a mana config.
+   * @param {Object} manaConfig - { maxMana, regenRate, regenDelay }
+   */
+  AbilityManager.prototype.initMana = function (manaConfig) {
+    if (!manaConfig) return;
+    this._hasMana = true;
+    this._maxMana = manaConfig.maxMana || 100;
+    this._mana = this._maxMana;
+    this._manaRegenRate = manaConfig.regenRate || 10;
+    this._manaRegenDelay = manaConfig.regenDelay || 2000;
+    this._manaRegenTimer = 0;
+  };
+
+  AbilityManager.prototype.hasMana = function () {
+    return this._hasMana;
+  };
+
+  AbilityManager.prototype.getMana = function () {
+    return this._mana;
+  };
+
+  AbilityManager.prototype.getMaxMana = function () {
+    return this._maxMana;
+  };
+
+  /**
+   * Consume mana. Returns false if insufficient, otherwise deducts and resets regen timer.
+   * @param {number} amount
+   * @returns {boolean}
+   */
+  AbilityManager.prototype.consumeMana = function (amount) {
+    if (!this._hasMana) return false;
+    if (this._mana < amount) return false;
+    this._mana -= amount;
+    this._manaRegenTimer = this._manaRegenDelay;
+    return true;
+  };
+
+  /**
+   * Add mana (capped at maxMana).
+   * @param {number} amount
+   */
+  AbilityManager.prototype.addMana = function (amount) {
+    if (!this._hasMana) return;
+    this._mana = Math.min(this._maxMana, this._mana + amount);
+  };
+
+  /**
+   * Reset the mana regen delay timer (called when mana is consumed externally).
+   */
+  AbilityManager.prototype.resetManaRegenDelay = function () {
+    this._manaRegenTimer = this._manaRegenDelay;
   };
 
   window.AbilityManager = AbilityManager;
