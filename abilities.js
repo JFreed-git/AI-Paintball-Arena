@@ -255,16 +255,20 @@
       var gotYaw = false;
 
       // Get yaw from camera (local player) or mesh (AI/remote)
+      // Camera convention: yaw=0 → facing -Z, forward = (-sin(yaw), -cos(yaw))
+      // Mesh convention (faceToward): yaw = atan2(dx,dz), forward = (sin(yaw), cos(yaw))
+      var dir;
       if (window.camera && player.cameraAttached) {
         yaw = window.camera.rotation.y;
+        dir = { x: -Math.sin(yaw), y: 0, z: -Math.cos(yaw) };
         gotYaw = true;
       } else if (player._meshGroup) {
         yaw = player._meshGroup.rotation.y;
+        dir = { x: Math.sin(yaw), y: 0, z: Math.cos(yaw) };
         gotYaw = true;
+      } else {
+        dir = { x: -Math.sin(yaw), y: 0, z: -Math.cos(yaw) };
       }
-
-      // Compute horizontal dash direction from yaw (no pitch — dash is always level)
-      var dir = { x: -Math.sin(yaw), y: 0, z: -Math.cos(yaw) };
 
       // Store dash direction for onTick
       player._dashDir = dir;
@@ -337,16 +341,15 @@
       var CONE_HALF_ANGLE = 0.3; // radians
 
       // Get aim direction
+      // Camera convention: forward = (0,0,-1) rotated by camera quaternion
+      // Mesh convention (faceToward): yaw = atan2(dx,dz), forward = (sin(yaw), 0, cos(yaw))
       var dir;
       if (typeof THREE !== 'undefined') {
-        var quat;
         if (window.camera && player.cameraAttached) {
-          quat = window.camera.quaternion;
+          dir = new THREE.Vector3(0, 0, -1).applyQuaternion(window.camera.quaternion);
         } else if (player._meshGroup) {
-          quat = player._meshGroup.quaternion;
-        }
-        if (quat) {
-          dir = new THREE.Vector3(0, 0, -1).applyQuaternion(quat);
+          var meshYaw = player._meshGroup.rotation.y;
+          dir = new THREE.Vector3(Math.sin(meshYaw), 0, Math.cos(meshYaw));
         }
       }
       if (!dir) dir = new THREE.Vector3(0, 0, -1);
