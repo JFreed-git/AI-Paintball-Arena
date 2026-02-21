@@ -170,9 +170,10 @@
 
     // If the ability has a duration, track it as an active effect
     if (def.duration && def.duration > 0) {
+      var effectParams = Object.assign({ duration: def.duration }, def.params || {});
       this._activeEffects[abilityId] = {
         remaining: def.duration,
-        params: def.params || {}
+        params: effectParams
       };
     }
 
@@ -330,23 +331,44 @@
 
     onActivate: function (player, params) {
       var speed = params.speed || 30;
-      var yaw = 0;
-      var gotYaw = false;
 
-      // Get yaw from camera (local player) or mesh (AI/remote)
-      // Camera convention: yaw=0 → facing -Z, forward = (-sin(yaw), -cos(yaw))
-      // Mesh convention (faceToward): yaw = atan2(dx,dz), forward = (sin(yaw), cos(yaw))
-      var dir;
-      if (window.camera && player.cameraAttached) {
-        yaw = window.camera.rotation.y;
-        dir = { x: -Math.sin(yaw), y: 0, z: -Math.cos(yaw) };
-        gotYaw = true;
-      } else if (player._meshGroup) {
-        yaw = player._meshGroup.rotation.y;
-        dir = { x: Math.sin(yaw), y: 0, z: Math.cos(yaw) };
-        gotYaw = true;
-      } else {
-        dir = { x: -Math.sin(yaw), y: 0, z: -Math.cos(yaw) };
+      // Dash in movement direction (WASD-relative), falling back to look direction
+      var dir = null;
+      var moveX = player.input ? (player.input.moveX || 0) : 0;
+      var moveZ = player.input ? (player.input.moveZ || 0) : 0;
+      var hasMovement = (moveX !== 0 || moveZ !== 0);
+
+      if (hasMovement && window.camera && player.cameraAttached) {
+        // Build world-space move direction from WASD input + camera yaw (XZ only)
+        var fwd = new THREE.Vector3();
+        window.camera.getWorldDirection(fwd);
+        fwd.y = 0;
+        if (fwd.lengthSq() < 1e-6) fwd.set(0, 0, -1);
+        fwd.normalize();
+        var right = new THREE.Vector3().crossVectors(fwd, new THREE.Vector3(0, 1, 0));
+        if (right.lengthSq() < 1e-6) right.set(1, 0, 0);
+        right.normalize();
+        var d = new THREE.Vector3();
+        d.addScaledVector(fwd, moveZ);
+        d.addScaledVector(right, moveX);
+        if (d.lengthSq() > 1e-6) {
+          d.normalize();
+          dir = { x: d.x, y: 0, z: d.z };
+        }
+      }
+
+      // Fallback: look direction (also used for AI/remote)
+      if (!dir) {
+        var yaw = 0;
+        if (window.camera && player.cameraAttached) {
+          yaw = window.camera.rotation.y;
+          dir = { x: -Math.sin(yaw), y: 0, z: -Math.cos(yaw) };
+        } else if (player._meshGroup) {
+          yaw = player._meshGroup.rotation.y;
+          dir = { x: Math.sin(yaw), y: 0, z: Math.cos(yaw) };
+        } else {
+          dir = { x: 0, y: 0, z: -1 };
+        }
       }
 
       // Store dash direction for onTick
@@ -1343,9 +1365,8 @@
       var am = player.abilityManager;
       if (am && am.hasMana && am.hasMana() && am.addMana) {
         var duration = params.duration || 5000;
-        var restoreFraction = params.manaRestoreFraction || 0.5;
-        var maxMana = am.getMaxMana();
-        var manaPerMs = maxMana * restoreFraction / duration;
+        var restoreAmount = params.manaRestoreAmount || 50;
+        var manaPerMs = restoreAmount / duration;
         am.addMana(manaPerMs * dt);
       }
 

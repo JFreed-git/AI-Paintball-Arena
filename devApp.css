@@ -1464,3 +1464,502 @@ body {
     font-size: 14px;
     padding: 40px 0;
 }
+
+/* ===== Hero Hub View ===== */
+
+#heroHubView.viewport-mode {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 5;
+    overflow-y: auto;
+    padding: 24px 32px;
+    box-sizing: border-box;
+    background: #111;
+}
+
+.hero-hub-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 20px;
+}
+
+.hero-hub-header-actions {
+    display: flex;
+    gap: 8px;
+}
+
+.hero-hub-identity {
+    margin-bottom: 20px;
+}
+
+.hero-hub-identity-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 6px;
+}
+
+.hero-hub-color-swatch {
+    width: 32px;
+    height: 32px;
+    border-radius: 6px;
+    border: 2px solid #444;
+    cursor: pointer;
+    flex-shrink: 0;
+    padding: 0;
+    background: transparent;
+}
+
+.hero-hub-color-swatch input[type="color"] {
+    opacity: 0;
+    width: 0;
+    height: 0;
+    position: absolute;
+}
+
+.hero-hub-name-input {
+    font-size: 22px;
+    font-weight: bold;
+    color: #fff;
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 4px;
+    padding: 2px 6px;
+    outline: none;
+    flex: 1;
+    min-width: 0;
+}
+
+.hero-hub-name-input:hover {
+    border-color: #444;
+}
+
+.hero-hub-name-input:focus {
+    border-color: #00ff88;
+    background: #1a1a1a;
+}
+
+.hero-hub-desc-input {
+    font-size: 13px;
+    color: #aaa;
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 4px;
+    padding: 2px 6px;
+    outline: none;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.hero-hub-desc-input:hover {
+    border-color: #444;
+}
+
+.hero-hub-desc-input:focus {
+    border-color: #00ff88;
+    background: #1a1a1a;
+    color: #ccc;
+}
+
+.hero-hub-id {
+    font-size: 11px;
+    color: #555;
+    margin-top: 2px;
+    padding-left: 6px;
+}
+
+/* Stats row */
+.hero-hub-stats {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-bottom: 24px;
+}
+
+.hero-hub-stat {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    background: #1a1a1a;
+    border: 1px solid #333;
+    border-radius: 6px;
+    padding: 4px 10px;
+}
+
+.hero-hub-stat-label {
+    font-size: 11px;
+    color: #888;
+    font-weight: bold;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.hero-hub-stat-input {
+    width: 50px;
+    font-size: 13px;
+    font-weight: bold;
+    color: #fff;
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 3px;
+    padding: 2px 4px;
+    outline: none;
+    text-align: center;
+}
+
+.hero-hub-stat-input:hover {
+    border-color: #444;
+}
+
+.hero-hub-stat-input:focus {
+    border-color: #00ff88;
+    background: #1a1a1a;
+}
+
+/* Section titles */
+.hero-hub-section-title {
+    font-size: 11px;
+    font-weight: bold;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: #666;
+    margin: 20px 0 8px;
+}
+
+/* Clickable cards */
+.hero-hub-card {
+    display: flex;
+    align-items: center;
+    background: #1a1a1a;
+    border: 1px solid #333;
+    border-radius: 8px;
+    padding: 12px 16px;
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s, transform 0.1s;
+    margin-bottom: 8px;
+}
+
+.hero-hub-card:hover {
+    border-color: #555;
+    background: #222;
+    transform: translateX(2px);
+}
+
+.hero-hub-card-icon {
+    font-size: 20px;
+    margin-right: 12px;
+    flex-shrink: 0;
+    width: 28px;
+    text-align: center;
+}
+
+.hero-hub-card-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.hero-hub-card-title {
+    font-size: 14px;
+    font-weight: bold;
+    color: #fff;
+    margin-bottom: 2px;
+}
+
+.hero-hub-card-detail {
+    font-size: 12px;
+    color: #888;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.hero-hub-card-arrow {
+    color: #555;
+    font-size: 16px;
+    margin-left: 12px;
+    flex-shrink: 0;
+    transition: color 0.15s;
+}
+
+.hero-hub-card:hover .hero-hub-card-arrow {
+    color: #00ff88;
+}
+
+/* Ability key badge */
+.hero-hub-ability-key {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 22px;
+    background: #222;
+    border: 1px solid #555;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: bold;
+    color: #ccc;
+    margin-right: 10px;
+    flex-shrink: 0;
+}
+
+/* Passive item (non-clickable) */
+.hero-hub-passive-item {
+    display: flex;
+    align-items: center;
+    padding: 6px 16px;
+    font-size: 12px;
+    color: #888;
+    gap: 8px;
+}
+
+.hero-hub-passive-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #555;
+    flex-shrink: 0;
+}
+
+/* Hub actions (bottom buttons) */
+.hero-hub-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 24px;
+    padding-top: 16px;
+    border-top: 1px solid #222;
+}
+
+/* Ability subview — full viewport */
+#heroAbilitySubview.viewport-mode {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 5;
+    overflow-y: auto;
+    padding: 24px 32px;
+    box-sizing: border-box;
+    background: #111;
+}
+
+#heroEditorView.viewport-mode {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 5;
+    overflow-y: auto;
+    padding: 24px 32px;
+    box-sizing: border-box;
+    background: #111;
+}
+
+#heroEditorView.viewport-mode #heroEditorForm {
+    max-width: 600px;
+}
+
+#heroEditorView.viewport-mode .dev-section-header {
+    color: #aaa;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-top: 20px;
+}
+
+#heroEditorView.viewport-mode .dev-field label {
+    min-width: 130px;
+}
+
+#heroEditorView.viewport-mode #heroPreviewContainer {
+    display: none;
+}
+
+.hero-ability-detail {
+    max-width: 600px;
+}
+
+.hero-ability-detail-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 20px;
+}
+
+.hero-ability-detail-name {
+    font-size: 22px;
+    font-weight: bold;
+    color: #fff;
+}
+
+.hero-ability-detail-icon-preview {
+    width: 32px;
+    height: 32px;
+    flex-shrink: 0;
+}
+
+.hero-ability-detail-key-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 4px 12px;
+    background: #222;
+    border: 1px solid #555;
+    border-radius: 5px;
+    font-size: 12px;
+    font-weight: bold;
+    color: #ccc;
+}
+
+.ability-edit-section {
+    margin-bottom: 20px;
+}
+
+.ability-edit-section-title {
+    font-size: 11px;
+    font-weight: bold;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: #666;
+    margin-bottom: 8px;
+    padding-bottom: 4px;
+    border-bottom: 1px solid #2a2a2a;
+}
+
+.ability-edit-field {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 6px 0;
+}
+
+.ability-edit-field label {
+    font-size: 12px;
+    color: #aaa;
+    min-width: 120px;
+    flex-shrink: 0;
+}
+
+.ability-edit-field input[type="text"],
+.ability-edit-field input[type="number"] {
+    flex: 1;
+    min-width: 0;
+    padding: 5px 8px;
+    background: #1a1a1a;
+    color: #fff;
+    border: 1px solid #444;
+    border-radius: 4px;
+    font-size: 12px;
+    outline: none;
+}
+
+.ability-edit-field input:focus {
+    border-color: #00ff88;
+}
+
+.ability-edit-field select {
+    flex: 1;
+    min-width: 0;
+    padding: 5px 8px;
+    background: #1a1a1a;
+    color: #fff;
+    border: 1px solid #444;
+    border-radius: 4px;
+    font-size: 12px;
+    outline: none;
+}
+
+.ability-edit-field select:focus {
+    border-color: #00ff88;
+}
+
+.ability-edit-field input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    accent-color: #00ff88;
+}
+
+.ability-param-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 4px 0;
+}
+
+.ability-param-row label {
+    font-size: 12px;
+    color: #aaa;
+    min-width: 120px;
+    flex-shrink: 0;
+    font-family: Consolas, 'Courier New', monospace;
+}
+
+.ability-param-row input {
+    flex: 1;
+    min-width: 0;
+    padding: 5px 8px;
+    background: #1a1a1a;
+    color: #fff;
+    border: 1px solid #444;
+    border-radius: 4px;
+    font-size: 12px;
+    outline: none;
+}
+
+.ability-param-row input:focus {
+    border-color: #00ff88;
+}
+
+.ability-param-row .ability-param-remove {
+    background: transparent;
+    border: 1px solid #cc3333;
+    color: #ff6666;
+    border-radius: 3px;
+    padding: 2px 6px;
+    cursor: pointer;
+    font-size: 12px;
+    flex-shrink: 0;
+}
+
+.ability-param-row .ability-param-remove:hover {
+    background: #331111;
+}
+
+.ability-add-param-row {
+    display: flex;
+    gap: 6px;
+    margin-top: 6px;
+}
+
+.ability-add-param-row input {
+    flex: 1;
+    min-width: 0;
+    padding: 4px 8px;
+    background: #1a1a1a;
+    color: #ccc;
+    border: 1px solid #333;
+    border-radius: 4px;
+    font-size: 11px;
+    outline: none;
+}
+
+.ability-add-param-row button {
+    padding: 4px 10px;
+    background: #222;
+    color: #ccc;
+    border: 1px solid #444;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 11px;
+    font-weight: bold;
+    white-space: nowrap;
+}
+
+.ability-add-param-row button:hover {
+    background: #333;
+}

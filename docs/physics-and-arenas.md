@@ -6,7 +6,7 @@ Consult this doc when working on: movement, gravity, jumping, collision, ground 
 
 Movement is full 3D — horizontal XZ walking plus vertical gravity, jumping, and ramp traversal. `updateFullPhysics` handles the complete cycle: horizontal movement → ground detection via `getGroundHeight` (downward raycast against `arena.solids`) → jump/gravity → ground snapping → unified 3D collision resolution → ground recheck.
 
-- Gravity constant is in `physics.js` (`GRAVITY = 20`), NOT in config.js.
+- Gravity constant is in `physics.js` (`GRAVITY = -20`), NOT in config.js.
 - Per-hero jump velocity is supported via `state._jumpVelocity` (defaults to `JUMP_VELOCITY` from physics.js).
 - **Unified 3D collision** (`resolveCollisions3D`): single resolver handles walls, ceilings, and block-tops. Treats each collider as a solid volume — if the player overlaps it, pushes out along the axis of minimum penetration (6 directions: ±X, ±Z, up, down). Ceiling hits push the player down and zero upward velocity. Wall hits push sideways. Block-top hits push up and ground the player. Multi-pass (up to 3) handles being wedged between blocks.
 - Colliders are skipped when the player stands on top of them. When grounded the tolerance is generous (`feetY + MAX_STEP_HEIGHT >= box.max.y`) so ramp staircase steps are reliably skipped even on steeper slopes; when airborne the tolerance tightens to 0.1m to prevent clipping.

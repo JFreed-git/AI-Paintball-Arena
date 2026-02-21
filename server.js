@@ -805,11 +805,13 @@ io.on('connection', (socket) => {
 
 function sanitizeSettings(s) {
   s = s || {};
+  const VALID_MODES = ['ffa', 'tdm', 'arena'];
   const out = {
     roundsToWin: clampInt(s.roundsToWin, 1, 10, 2),
     maxPlayers: clampInt(s.maxPlayers, 2, 8, 8),
     killLimit: clampInt(s.killLimit, 1, 50, 10),
   };
+  if (s.mode && typeof s.mode === 'string' && VALID_MODES.indexOf(s.mode) !== -1) out.mode = s.mode;
   if (s.mapName && typeof s.mapName === 'string') out.mapName = s.mapName.substring(0, 100);
   return out;
 }

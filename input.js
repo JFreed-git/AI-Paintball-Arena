@@ -39,11 +39,11 @@ var _defaultKeymap = {
   'Space':      { action: 'jump',     type: 'oneShot' },
   'KeyR':       { action: 'reloadPressed', type: 'oneShot' },
   'KeyV':       { action: 'meleePressed',  type: 'oneShot' },
-  // Abilities (true while held)
-  'KeyQ':       { action: 'ability1', type: 'toggle' },
-  'KeyE':       { action: 'ability2', type: 'toggle' },
-  'KeyF':       { action: 'ability3', type: 'toggle' },
-  'KeyC':       { action: 'ability4', type: 'toggle' }
+  // Abilities (fire once per keypress)
+  'KeyQ':       { action: 'ability1', type: 'oneShot' },
+  'KeyE':       { action: 'ability2', type: 'oneShot' },
+  'KeyF':       { action: 'ability3', type: 'oneShot' },
+  'KeyC':       { action: 'ability4', type: 'oneShot' }
 };
 var _keymap = JSON.parse(JSON.stringify(_defaultKeymap));
 
@@ -52,7 +52,7 @@ var _keymap = JSON.parse(JSON.stringify(_defaultKeymap));
 var _heldAxisKeys = {}; // { 'KeyW': true, 'KeyS': true, ... }
 
 /* Paintball input state (inputs live here; physics elsewhere) */
-const INPUT_STATE = { fireDown: false, secondaryDown: false, sprint: false, reloadPressed: false, jump: false, meleePressed: false, ability1: false, ability2: false, ability3: false, ability4: false, moveX: 0, moveZ: 0 };
+const INPUT_STATE = { fireDown: false, secondaryDown: false, sprint: false, reloadPressed: false, jump: false, jumpHeld: false, meleePressed: false, ability1: false, ability2: false, ability3: false, ability4: false, moveX: 0, moveZ: 0 };
 
 // Recompute an axis value from all currently held keys for that axis
 function recomputeAxis(axisAction) {
@@ -87,6 +87,10 @@ function getInputState() {
     out.meleePressed = true;
     INPUT_STATE.meleePressed = false;
   }
+  if (INPUT_STATE.ability1) { out.ability1 = true; INPUT_STATE.ability1 = false; }
+  if (INPUT_STATE.ability2) { out.ability2 = true; INPUT_STATE.ability2 = false; }
+  if (INPUT_STATE.ability3) { out.ability3 = true; INPUT_STATE.ability3 = false; }
+  if (INPUT_STATE.ability4) { out.ability4 = true; INPUT_STATE.ability4 = false; }
   return out;
 }
 // Expose to paintball mode
@@ -199,6 +203,8 @@ function applyKeyDown(code) {
   } else {
     INPUT_STATE[binding.action] = true;
   }
+  // Track physical held state for jump (separate from one-shot)
+  if (binding.action === 'jump') INPUT_STATE.jumpHeld = true;
   return true;
 }
 
@@ -217,6 +223,8 @@ function applyKeyUp(code) {
   } else if (binding.type !== 'oneShot') {
     INPUT_STATE[binding.action] = false;
   }
+  // Track physical held state for jump (separate from one-shot)
+  if (binding.action === 'jump') INPUT_STATE.jumpHeld = false;
   return true;
 }
 

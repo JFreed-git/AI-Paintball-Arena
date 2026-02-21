@@ -50,6 +50,55 @@
     if (meleeHeader) meleeHeader.textContent = isMeleeOnly ? 'Weapon (Melee)' : 'Melee';
   }
 
+  // Toggle lock-on fields based on enabled checkbox
+  function _toggleLockOnFields() {
+    var enabled = document.getElementById('heLockOnEnabled');
+    var fields = document.getElementById('heLockOnFields');
+    if (enabled && fields) fields.style.display = enabled.checked ? '' : 'none';
+    if (enabled && enabled.checked) _drawLockOnConeVis();
+  }
+
+  // Draw cone angle visualization on the small canvas
+  function _drawLockOnConeVis() {
+    var canvas = document.getElementById('heLockOnConeVis');
+    if (!canvas) return;
+    var ctx = canvas.getContext('2d');
+    var w = canvas.width, h = canvas.height;
+    ctx.clearRect(0, 0, w, h);
+
+    var angleDeg = parseFloat(document.getElementById('heLockOnConeAngle').value) || 15;
+    var angleRad = angleDeg * Math.PI / 180;
+    var cx = w / 2, cy = h - 4;
+    var len = h - 8;
+
+    // Draw cone wedge
+    ctx.beginPath();
+    ctx.moveTo(cx, cy);
+    var leftAngle = -Math.PI / 2 - angleRad;
+    var rightAngle = -Math.PI / 2 + angleRad;
+    ctx.arc(cx, cy, len, leftAngle, rightAngle);
+    ctx.closePath();
+    ctx.fillStyle = 'rgba(136, 85, 255, 0.3)';
+    ctx.fill();
+    ctx.strokeStyle = '#8855ff';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+
+    // Center aim line
+    ctx.beginPath();
+    ctx.moveTo(cx, cy);
+    ctx.lineTo(cx, cy - len);
+    ctx.strokeStyle = 'rgba(255,255,255,0.5)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+
+    // Angle label
+    ctx.fillStyle = '#ccc';
+    ctx.font = '9px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText(angleDeg + '\u00B0', cx, 10);
+  }
+
   // Hitbox segment state (now includes offsetX, offsetZ, shape, radius)
   // shape: 'box' (default), 'sphere', 'cylinder', 'capsule'
   var _hitboxSegments = [
@@ -1650,6 +1699,16 @@
     if (fpOffset) weaponConfig.fpOffset = fpOffset;
     if (fpRotation) weaponConfig.fpRotation = fpRotation;
 
+    // Lock-On config
+    var lockOnEnabledEl = document.getElementById('heLockOnEnabled');
+    if (lockOnEnabledEl && lockOnEnabledEl.checked) {
+      weaponConfig.lockOn = {
+        coneAngle: parseFloat(document.getElementById('heLockOnConeAngle').value) || 15,
+        maxRange: parseInt(document.getElementById('heLockOnMaxRange').value) || 100,
+        turnRate: parseFloat(document.getElementById('heLockOnTurnRate').value) || 3.0
+      };
+    }
+
     var config = {
       id: document.getElementById('heId').value || 'custom_hero',
       name: document.getElementById('heName').value || 'Custom Hero',
@@ -1868,6 +1927,22 @@
     for (var fk in fpFields) {
       var el = document.getElementById(fk);
       if (el && typeof fpFields[fk] === 'number') el.value = fpFields[fk];
+    }
+
+    // Lock-On fields
+    var lockOn = w.lockOn || null;
+    var lockOnEnabledEl = document.getElementById('heLockOnEnabled');
+    if (lockOnEnabledEl) {
+      lockOnEnabledEl.checked = !!lockOn;
+      _toggleLockOnFields();
+      if (lockOn) {
+        var lockFields = { 'heLockOnConeAngle': lockOn.coneAngle, 'heLockOnMaxRange': lockOn.maxRange, 'heLockOnTurnRate': lockOn.turnRate };
+        for (var lk in lockFields) {
+          var el = document.getElementById(lk);
+          if (el && typeof lockFields[lk] === 'number') el.value = lockFields[lk];
+        }
+        _drawLockOnConeVis();
+      }
     }
 
     // Stash mana config
@@ -2324,6 +2399,18 @@
     if (meleeOnlyCb) {
       meleeOnlyCb.addEventListener('change', function () { toggleMeleeOnlyFields(); });
     }
+
+    // Toggle lock-on fields when enabled checkbox changes
+    var lockOnCb = document.getElementById('heLockOnEnabled');
+    if (lockOnCb) {
+      lockOnCb.addEventListener('change', function () { _toggleLockOnFields(); });
+    }
+    // Redraw cone vis when angle changes
+    var lockOnAngleEl = document.getElementById('heLockOnConeAngle');
+    if (lockOnAngleEl) {
+      lockOnAngleEl.addEventListener('input', function () { _drawLockOnConeVis(); });
+    }
+    _toggleLockOnFields();
 
     // Live preview on any input change
     var inputIds = ['heColor', 'heModelType', 'heTracerColor'];

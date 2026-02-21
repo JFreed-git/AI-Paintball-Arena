@@ -334,6 +334,30 @@ function getPanelElementId(panelId) {
       heroPanel.insertBefore(heroGallery, heroPanel.firstChild);
     }
 
+    // Return hero hub to its panel
+    var heroHub = document.getElementById('heroHubView');
+    if (heroHub && heroPanel && heroHub.classList.contains('viewport-mode')) {
+      heroHub.classList.remove('viewport-mode');
+      heroHub.classList.add('hidden');
+      heroPanel.appendChild(heroHub);
+    }
+
+    // Return ability subview to its panel
+    var abilitySubview = document.getElementById('heroAbilitySubview');
+    if (abilitySubview && heroPanel && abilitySubview.classList.contains('viewport-mode')) {
+      abilitySubview.classList.remove('viewport-mode');
+      abilitySubview.classList.add('hidden');
+      heroPanel.appendChild(abilitySubview);
+    }
+
+    // Return editor view to its panel (weapon subview case)
+    var editorView = document.getElementById('heroEditorView');
+    if (editorView && heroPanel && editorView.classList.contains('viewport-mode')) {
+      editorView.classList.remove('viewport-mode');
+      editorView.classList.add('hidden');
+      heroPanel.appendChild(editorView);
+    }
+
     // Return map gallery to its panel
     var mapGallery = document.getElementById('mapGalleryView');
     var mapPanel = document.getElementById('panelMapEditor');

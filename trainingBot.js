@@ -56,6 +56,9 @@
     if (typeof window.applyHeroToPlayer === 'function') {
       window.applyHeroToPlayer(this.player, 'marksman');
     }
+
+    // Expose player.position directly so lock-on target acquisition can find this bot
+    this.position = this.player.position;
   }
 
   TrainingBot.prototype.update = function (dt, cameraPos) {

@@ -112,6 +112,12 @@
     Object.defineProperty(targetObj, 'alive', {
       get: function () { return targetObj.active; }
     });
+    // Expose head center position for lock-on target acquisition
+    targetObj.position = new THREE.Vector3(
+      grp.position.x,
+      grp.position.y + 1.0 + TARGET_RADIUS,
+      grp.position.z
+    );
     return targetObj;
   }
 
@@ -382,6 +388,8 @@
 
     // Propagate input flags to player.input for ability effects to read
     if (!state.player.input) state.player.input = {};
+    state.player.input.moveX = input.moveX || 0;
+    state.player.input.moveZ = input.moveZ || 0;
     state.player.input.secondaryDown = !!input.secondaryDown;
     state.player.input.ability1 = !!input.ability1;
     state.player.input.fireDown = !!input.fireDown;
@@ -401,7 +409,7 @@
     var prevGrounded = state.player.grounded;
     updateFullPhysics(
       state.player,
-      { moveX: input.moveX || 0, moveZ: input.moveZ || 0, sprint: !!input.sprint, jump: !!input.jump },
+      { moveX: input.moveX || 0, moveZ: input.moveZ || 0, sprint: !!input.sprint, jump: !!input.jump, jumpHeld: !!input.jumpHeld },
       { colliders: state.arena.colliders, solids: state.arena.solids },
       dt
     );
@@ -652,6 +660,8 @@
     }
 
     if (state) showTrainingHUD(false);
+    if (typeof window.updateAbilityHUD === 'function') window.updateAbilityHUD([]);
+    if (typeof window.updateManaHUD === 'function') window.updateManaHUD(null);
 
     if (typeof clearAllProjectiles === 'function') clearAllProjectiles();
     if (typeof window.sharedClearBursts === 'function') window.sharedClearBursts();

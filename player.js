@@ -692,6 +692,7 @@
     }
 
     this.weapon.reset();
+    if (this.abilityManager) this.abilityManager.reset();
 
     this._meshGroup.visible = !this.cameraAttached;
     this._syncMeshPosition();
@@ -704,9 +705,53 @@
     this._meshGroup.visible = visible;
   };
 
+  // --- Team Outline ---
+
+  Player.prototype.setTeamOutline = function (color) {
+    // Remove existing outlines
+    this.removeTeamOutline();
+    if (color === null || color === undefined) return;
+
+    this._outlineMeshes = [];
+    var outlineColor = new THREE.Color(color);
+    var children = this._meshGroup.children.slice();
+
+    for (var i = 0; i < children.length; i++) {
+      var child = children[i];
+      if (!child.userData.isBodyPart) continue;
+      if (!child.geometry) continue;
+
+      var outlineMat = new THREE.MeshBasicMaterial({
+        color: outlineColor,
+        side: THREE.BackSide,
+        transparent: true,
+        opacity: 0.5
+      });
+      var outlineMesh = new THREE.Mesh(child.geometry, outlineMat);
+      outlineMesh.position.copy(child.position);
+      outlineMesh.rotation.copy(child.rotation);
+      outlineMesh.scale.set(1.15, 1.15, 1.15);
+      outlineMesh.userData.isOutline = true;
+      outlineMesh.renderOrder = -1;
+      this._meshGroup.add(outlineMesh);
+      this._outlineMeshes.push(outlineMesh);
+    }
+  };
+
+  Player.prototype.removeTeamOutline = function () {
+    if (!this._outlineMeshes) return;
+    for (var i = 0; i < this._outlineMeshes.length; i++) {
+      var m = this._outlineMeshes[i];
+      if (m.parent) m.parent.remove(m);
+      if (m.material) m.material.dispose();
+    }
+    this._outlineMeshes = null;
+  };
+
   // --- Cleanup ---
 
   Player.prototype.destroy = function () {
+    this.removeTeamOutline();
     if (this._healthBarGroup) {
       if (this._healthBarFill) {
         this._healthBarFill.geometry.dispose();

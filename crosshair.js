@@ -114,6 +114,11 @@
     var el = document.getElementById('crosshair');
     if (el) {
       el.style.setProperty('--spread', px + 'px');
+      // Hide ring when spread is 0 in circle mode (just show center dot)
+      if (_currentStyle === 'circle') {
+        var ring = el.querySelector('.ch-ring');
+        if (ring) ring.style.display = px <= 0 ? 'none' : '';
+      }
     }
   }
 

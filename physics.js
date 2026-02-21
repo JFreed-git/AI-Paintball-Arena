@@ -327,17 +327,22 @@ function updateFullPhysics(state, input, arena, dt) {
   var groundH = getGroundHeight(state.position, solids, state.feetY, state.grounded, pRadius);
 
   // 4. Jump (use per-hero _jumpVelocity if available, else global JUMP_VELOCITY)
+  // jumpHeld tracks the physical key state (true while Space is down, false on release).
+  // This is reliable unlike the one-shot jump flag which depends on keydown repeat timing.
+  var jumpHeld = !!input.jumpHeld;
+  var jumpFresh = jumpHeld && !state._prevJumpHeld; // true only on the frame Space is first pressed
   if (state.grounded) state._airJumpsUsed = 0; // Reset air jumps when on ground
   if (input.jump && state.grounded) {
     state.verticalVelocity = (state._jumpVelocity != null) ? state._jumpVelocity : JUMP_VELOCITY;
     state.grounded = false;
-  } else if (input.jump && !state.grounded &&
+  } else if (jumpFresh && !state.grounded &&
              (state._airJumpsUsed || 0) < 1 &&
              state.abilityManager?.hasPassive('doubleJump')) {
-    // Air jump (double jump passive): replace current vy with jump velocity
+    // Air jump (double jump passive): only on fresh press, not hold
     state.verticalVelocity = (state._jumpVelocity != null) ? state._jumpVelocity : JUMP_VELOCITY;
     state._airJumpsUsed = (state._airJumpsUsed || 0) + 1;
   }
+  state._prevJumpHeld = jumpHeld;
 
   // Drop threshold: use hysteresis — require a larger gap before becoming airborne
   // to prevent oscillation at block edges where ground detection may flicker

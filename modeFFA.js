@@ -199,6 +199,21 @@
     return TEAM_NAMES[(team - 1) % TEAM_NAMES.length] || ('Team ' + team);
   }
 
+  // Apply team-colored outlines to all non-local player meshes
+  function applyTeamOutlines() {
+    if (!state || !state.players) return;
+    var ids = Object.keys(state.players);
+    for (var i = 0; i < ids.length; i++) {
+      var entry = state.players[ids[i]];
+      if (!entry || !entry.entity) continue;
+      // Skip camera-attached (local) player — they can't see their own mesh
+      if (entry.entity.cameraAttached) continue;
+      if (entry.team > 0 && typeof entry.entity.setTeamOutline === 'function') {
+        entry.entity.setTeamOutline(getTeamColor(entry.team));
+      }
+    }
+  }
+
   // Compute team total kills
   function getTeamKills(team) {
     if (!state || !state.match || !state.match.scores) return 0;
@@ -571,7 +586,7 @@
       var id = ids[i];
       var entry = state.players[id];
       if (!entry || !entry.entity) continue;
-      var spawnPos = entry.team ? getTeamSpawnPosition(entry.team) : getSpawnPosition(state._spawnIndex++);
+      var spawnPos = (entry.team > 0) ? getTeamSpawnPosition(entry.team) : getSpawnPosition(state._spawnIndex++);
       entry.entity.resetForRound(spawnPos);
       entry.alive = true;
       entry.respawnAt = 0;
@@ -594,7 +609,7 @@
   function respawnPlayer(id) {
     if (!state || !state.players[id]) return;
     var entry = state.players[id];
-    var spawnPos = entry.team ? getTeamSpawnPosition(entry.team) : getSpawnPosition(state._spawnIndex++);
+    var spawnPos = (entry.team > 0) ? getTeamSpawnPosition(entry.team) : getSpawnPosition(state._spawnIndex++);
     entry.entity.resetForRound(spawnPos);
     entry.alive = true;
     entry.respawnAt = 0;
@@ -1234,7 +1249,7 @@
         var prevGrounded = entry.entity.grounded;
         updateFullPhysics(
           entry.entity,
-          { moveX: entry.entity.input.moveX, moveZ: entry.entity.input.moveZ, sprint: entry.entity.input.sprint, jump: entry.entity.input.jump },
+          { moveX: entry.entity.input.moveX, moveZ: entry.entity.input.moveZ, sprint: entry.entity.input.sprint, jump: entry.entity.input.jump, jumpHeld: !!localInput.jumpHeld },
           { colliders: state.arena.colliders, solids: state.arena.solids },
           dt
         );
@@ -1443,11 +1458,28 @@
 
     var playersSnap = {};
     var ids = Object.keys(state.players);
+
+    // Build set of entities currently being grappled so we can flag them
+    var grappledEntities = {};
+    for (var gi = 0; gi < ids.length; gi++) {
+      var ge = state.players[ids[gi]];
+      if (ge && ge.entity && ge.entity._grappleTarget) {
+        // Find which player id this target entity belongs to
+        for (var gj = 0; gj < ids.length; gj++) {
+          var ge2 = state.players[ids[gj]];
+          if (ge2 && ge2.entity === ge.entity._grappleTarget) {
+            grappledEntities[ids[gj]] = true;
+            break;
+          }
+        }
+      }
+    }
+
     for (var i = 0; i < ids.length; i++) {
       var id = ids[i];
       var entry = state.players[id];
       if (!entry || !entry.entity) continue;
-      playersSnap[id] = {
+      var snap = {
         pos: [entry.entity.position.x, entry.entity.position.y, entry.entity.position.z],
         feetY: entry.entity.feetY,
         grounded: entry.entity.grounded,
@@ -1461,6 +1493,8 @@
         team: entry.team || 0,
         heroId: entry.heroId || 'marksman'
       };
+      if (grappledEntities[id]) snap.grappled = true;
+      playersSnap[id] = snap;
     }
 
     socket.emit('snapshot', {
@@ -1518,7 +1552,7 @@
 
       updateFullPhysics(
         p,
-        { moveX: p.input.moveX, moveZ: p.input.moveZ, sprint: p.input.sprint, jump: p.input.jump },
+        { moveX: p.input.moveX, moveZ: p.input.moveZ, sprint: p.input.sprint, jump: p.input.jump, jumpHeld: !!rawInput.jumpHeld },
         { colliders: state.arena.colliders, solids: state.arena.solids },
         dt
       );
@@ -1695,6 +1729,9 @@
         var localEntry = state.players[id];
         if (!localEntry || !localEntry.entity) continue;
 
+        // Sync team from host (client may have auto-assigned wrong team)
+        if (sp.team !== undefined) localEntry.team = sp.team;
+
         localEntry.entity.health = sp.health;
         if (!sp.alive && localEntry.entity.alive) {
           localEntry.entity.alive = false;
@@ -1721,7 +1758,8 @@
           var dz = _predictedPos.z - serverPos.z;
           var dy = _predictedFeetY - sp.feetY;
           var distSq = dx * dx + dy * dy + dz * dz;
-          if (distSq > SNAP_THRESHOLD_SQ) {
+          // When being grappled, snap hard to server position (host controls the pull)
+          if (sp.grappled || distSq > SNAP_THRESHOLD_SQ) {
             _predictedPos.copy(serverPos);
             _predictedFeetY = sp.feetY;
             _predictedVVel = 0;
@@ -1760,6 +1798,10 @@
         if (remoteHeroId !== 'marksman' && typeof window.applyHeroToPlayer === 'function') {
           window.applyHeroToPlayer(rp, remoteHeroId);
         }
+        // Apply team outline
+        if (remoteTeam > 0 && typeof rp.setTeamOutline === 'function') {
+          rp.setTeamOutline(getTeamColor(remoteTeam));
+        }
       }
 
       // Sync hero if it changed (e.g. between rounds)
@@ -1767,6 +1809,11 @@
         re.heroId = sp.heroId;
         if (typeof window.applyHeroToPlayer === 'function') {
           window.applyHeroToPlayer(re.entity, sp.heroId);
+        }
+        // Reapply team outline after hero mesh rebuild
+        var reTeam = re.team || (sp.team || 0);
+        if (reTeam > 0 && typeof re.entity.setTeamOutline === 'function') {
+          re.entity.setTeamOutline(getTeamColor(reTeam));
         }
       }
 
@@ -2163,6 +2210,10 @@
     state._meleeSwingState[clientId] = { swinging: false, swingEnd: 0 };
     state._remoteInputs[clientId] = {};
     state._remoteInputPending[clientId] = { jump: false, reload: false, melee: false };
+    // Apply team outline
+    if (team > 0 && typeof p.setTeamOutline === 'function') {
+      p.setTeamOutline(getTeamColor(team));
+    }
   }
 
   function removePlayer(id) {
@@ -2272,6 +2323,9 @@
         }
       }
     }
+
+    // Apply team outlines to all non-local players
+    applyTeamOutlines();
 
     // Setup HUD
     setHUDVisible(true);
@@ -2560,6 +2614,8 @@
         state.arena.group.parent.remove(state.arena.group);
       }
       showFFAHUD(false);
+      if (typeof window.updateAbilityHUD === 'function') window.updateAbilityHUD([]);
+      if (typeof window.updateManaHUD === 'function') window.updateManaHUD(null);
       clearKillFeed();
       if (typeof clearAllProjectiles === 'function') clearAllProjectiles();
       if (typeof window.sharedClearBursts === 'function') window.sharedClearBursts();

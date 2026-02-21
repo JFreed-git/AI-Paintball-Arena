@@ -8,114 +8,125 @@ $ARGUMENTS
 ## Instructions
 
 First, read these files to understand the current system:
-- `abilities.js` — AbilityManager runtime (cooldown tracking exists, activation/effects are TODO)
+- `abilities.js` — AbilityManager runtime: effect registry, cooldown tracking, activation, mana system, and 6 existing registered effects (dash, grappleHook, unlimitedAmmo, teleport, piercingBlast, meditate)
 - `heroes.js` — Hero definitions with `passives[]` and `abilities[]` arrays
 - `weapon.js` — Weapon class with `abilities[]` array
-- `input.js` — Keyboard/mouse input handling (needs keybind support for abilities)
-- `physics.js` — Movement engine (`updateFullPhysics`) for movement abilities
-- `projectiles.js` — `sharedFireWeapon` for combat abilities
-- `hud.js` — HUD management (needs cooldown indicator support)
-- `player.js` — Player class (may need new state for ability effects)
-- `modeFFA.js`, `modeTraining.js` — Game loops that call `update(dt)`
+- `input.js` — Keyboard/mouse input with remappable keymap (Q/E/F/C for abilities, RMB for secondaryDown)
+- `hud.js` — Ability HUD (`updateAbilityHUD`), mana bar (`updateManaHUD`), `ABILITY_ICONS` SVG registry
+- `player.js` — Player class with `abilityManager` instance
+- `docs/heroes-and-combat.md` — Full ability system documentation
 
 ## Ability Architecture
 
-There are two kinds of abilities:
+The ability system is fully implemented. There are two kinds of abilities:
 
 ### Passive Abilities
 - Always active, no cooldown, no input
-- Defined on `hero.passives[]`
-- Checked by game systems (e.g. physics checks 'doubleJump')
-- Shape: `{ id: 'doubleJump', type: 'passive', description: '...' }`
-- Implementation: add a check in the relevant system file (physics.js for movement passives, projectiles.js for combat passives, etc.)
+- Defined on `hero.passives[]` as `{ id: 'passiveName' }`
+- Checked by game systems via `player.abilityManager.hasPassive('passiveName')`
 
 ### Active Abilities
-- Triggered by keybind, have cooldown
-- Defined on `hero.abilities[]` (hero abilities) or `weapon.abilities[]` (weapon abilities)
-- Shape:
-```js
+- Triggered by keybind, have cooldown, optional duration
+- Defined on `hero.abilities[]` in the hero JSON:
+```json
 {
-  id: 'dash',
-  type: 'active',
-  cooldownSec: 8,        // seconds between uses
-  duration: 0.3,         // how long effect lasts (0 for instant)
-  keybind: 'q',          // key to activate
-  description: 'Quick forward dash'
+  "id": "myAbility",
+  "name": "My Ability",
+  "key": "ability1",
+  "cooldownMs": 10000,
+  "duration": 500,
+  "params": { "speed": 30 }
 }
 ```
+- `key` maps to input actions: `ability1` (Q), `ability2` (E), `ability3` (F), `ability4` (C), `secondaryDown` (RMB)
+- `duration` controls how long the effect stays active (0 or absent = instant, only `onActivate` fires)
+- `params` is passed through to effect callbacks
 
-## Current State of the System
+## Current System (Fully Implemented)
 
-The `AbilityManager` in `abilities.js` already has:
-- `hasPassive(id)` — checks if a passive exists
-- `getCooldownPercent(id)` — returns 0.0-1.0 for HUD
-- `isReady(id)` — checks if off cooldown
-- `update(dt)` — ticks down cooldowns and active effects
-- `reset()` — clears all state between rounds
+The `AbilityManager` in `abilities.js` has:
+- `registerAbility(def)` / `registerPassive(def)` — called by `applyHeroToPlayer()`
+- `activate(abilityId)` — checks cooldown, dispatches `onActivate`, starts cooldown + duration
+- `update(dt)` — ticks cooldowns, ticks active effects (`onTick`), calls `onEnd` on expiry, mana regen
+- `isReady(id)` / `isActive(id)` / `getCooldownPercent(id)` — queries
+- `getHUDState()` — returns array for ability HUD rendering
+- `reset()` / `clearAbilities()` — lifecycle management
+- Mana system: `initMana()`, `consumeMana()`, `addMana()`, `hasMana()`, `getMana()`, `getMaxMana()`
 
-What's NOT implemented yet (you'll need to build what's needed):
-- **Input capture**: `input.js` doesn't capture ability keybinds (Q, E, etc.)
-- **Activation logic**: `AbilityManager.update()` doesn't check input or fire callbacks
-- **Effect system**: No callback registry for ability effects
-- **Player integration**: Player class doesn't create or hold an AbilityManager
-- **Game mode integration**: Mode tick functions don't call `abilityManager.update()`
-- **HUD**: No cooldown indicator UI
-- **Networking**: No ability activation events for LAN mode
+**Already wired up:**
+- Input capture: `input.js` captures Q/E/F/C as `ability1`-`ability4` one-shot inputs, RMB as `secondaryDown` toggle
+- Player integration: Every `Player` has `this.abilityManager = new AbilityManager(this)`
+- Game mode integration: Both `modeFFA.js` and `modeTraining.js` call `abilityManager.update(dt)` and handle ability activation in their tick functions
+- HUD: `updateAbilityHUD()` renders cooldown slots with SVG icons from `ABILITY_ICONS` registry
+- Mana bar: `updateManaHUD()` for heroes with mana
 
 ## Implementation Steps
 
-For each new ability, you need to:
+To add a new ability:
 
-1. **Define the ability data** on the appropriate hero/weapon in `heroes.js`
+1. **Register the effect** in `abilities.js` at the bottom (after existing effects):
+```js
+AbilityManager.registerEffect('myAbility', {
+  onActivate: function(player, params) {
+    // Called when ability activates. Return false to abort.
+    // Set up state on the player object.
+  },
+  onTick: function(player, params, dt) {
+    // Called every frame while active (only if duration > 0).
+    // dt is in milliseconds.
+  },
+  onEnd: function(player, params) {
+    // Called when duration expires or effect is force-ended.
+    // Clean up any state/visuals set on the player.
+  }
+});
+```
 
-2. **Wire up AbilityManager** (if not already done for a prior ability):
-   - Create AbilityManager in Player constructor or in `applyHeroToPlayer()`
-   - Call `mgr.update(dt, inputState)` in game mode tick functions
-   - Handle keybind input in `input.js` (add ability key states to `getInputState()`)
+2. **Add the ability to a hero JSON** in `heroes/`:
+```json
+{
+  "abilities": [
+    {
+      "id": "myAbility",
+      "name": "My Ability",
+      "key": "ability1",
+      "cooldownMs": 10000,
+      "duration": 500,
+      "params": { "customParam": 42 }
+    }
+  ]
+}
+```
 
-3. **Implement the effect** in the relevant system file:
-   - Movement abilities (dash, double jump, wall climb) → `physics.js`
-   - Combat abilities (charged shot, alt-fire) → `projectiles.js`
-   - Defensive abilities (shield, heal) → `player.js`
-   - The effect function receives the player and dt, modifies state directly
+3. **Add an SVG icon** to `ABILITY_ICONS` in `hud.js` (keyed by the ability ID):
+```js
+myAbility: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48">...</svg>'
+```
 
-4. **Add activation logic** in `AbilityManager.update()`:
-   - Check if keybind pressed and ability is ready
-   - Start cooldown, start active effect duration
-   - Call the effect callback
+4. **If the ability uses mana**, add a `mana` config to the hero JSON:
+```json
+"mana": { "maxMana": 100, "regenRate": 10, "regenDelay": 2000 }
+```
+And consume mana in `onActivate`: `player.abilityManager.consumeMana(params.manaCost)`
 
-5. **Add the ability to a hero** in `heroes.js`
+5. **Update `docs/heroes-and-combat.md`** with the new ability in the Registered Effects table
 
-6. **Update CLAUDE.md** with any new exports, architecture changes, or API additions
+## Existing Effects (Reference)
 
-## Example: Implementing a Dash Ability
-
-This is a reference for how a movement ability would work:
-
-1. In `heroes.js`, add to a hero's `abilities[]`:
-   ```js
-   { id: 'dash', type: 'active', cooldownSec: 6, duration: 0.15, keybind: 'q', description: 'Burst of speed forward' }
-   ```
-
-2. In `input.js`, add ability key tracking to `getInputState()`:
-   ```js
-   ability1Pressed: _keys['q'] || false
-   ```
-
-3. In `abilities.js`, add activation in `update()`:
-   ```js
-   // Check keybind → if ready → start cooldown → call effect
-   ```
-
-4. In `physics.js` or the game mode tick, apply the dash effect:
-   ```js
-   // Temporarily boost player velocity in camera forward direction
-   ```
+| Effect ID | Hero | Description |
+|-----------|------|-------------|
+| `dash` | Slicer | Burst velocity in look direction (200ms). Uses `_dashDir`/`_dashSpeed` on player. |
+| `grappleHook` | Brawler | Pulls nearest enemy in aim cone. Green chain visual. Wall collision on pulled target. |
+| `unlimitedAmmo` | Marksman | Weapon stops consuming ammo for duration. |
+| `teleport` | Mage | Two-phase: Q shows ghost preview, Q/click confirms, RMB cancels. 3D cursor-targeted. |
+| `piercingBlast` | Mage | Hold RMB to charge (drains mana), release to fire hitscan beam. Damage scales with mana spent. |
+| `meditate` | Mage | Channel: freezes player, restores mana, interrupted by damage. Blue ring visual. |
 
 ## Important Notes
 
 - Keep the IIFE module pattern. Expose new APIs on `window.*`.
 - Follow existing code style (var declarations, no ES6 classes except AIOpponent).
-- The ability system is being built incrementally — only implement what's needed for this specific ability. Don't over-architect for hypothetical future abilities.
-- If this is the FIRST ability being implemented, you'll need to wire up the foundational infrastructure (AbilityManager on Player, input capture, game mode integration). Document what you added.
-- Test that the ability works in FFA mode (modeFFA.js) at minimum.
+- Clean up ALL state and visuals in `onEnd` — this is called on hero switch, round reset, and effect expiry.
+- Use `player.cameraAttached` to check if the player is the local player (for screen overlays, sounds).
+- Get game state for raycasting/candidates via `window.getFFAState()` and `window.getTrainingRangeState()` (see grappleHook helpers for pattern).
+- Test that the ability works in both FFA mode and Training Range.

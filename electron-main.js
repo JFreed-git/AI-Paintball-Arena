@@ -19,7 +19,7 @@ app.whenReady().then(() => {
   // Cmd+R / Ctrl+R to reload, Cmd+Shift+I / Ctrl+Shift+I for DevTools
   win.webContents.on('before-input-event', (event, input) => {
     if (input.meta || input.control) {
-      if (input.key === 'r' && !input.shift) { win.reload(); event.preventDefault(); }
+      if (input.key === 'r' && !input.shift) { session.defaultSession.clearCache().then(() => win.reload()); event.preventDefault(); }
       if (input.key === 'I' && input.shift) { win.webContents.toggleDevTools(); event.preventDefault(); }
     }
   });

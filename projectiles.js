@@ -517,32 +517,6 @@
       var projTargetEntities = opts.projectileTargetEntities || [];
       var projResults = [];
 
-      // Lock-on: find target near crosshair at fire time
-      var lockOnTarget = null;
-      var lockOnTurnRate = 0;
-      var lockCfg = weapon.lockOn;
-      if (lockCfg && projTargetEntities.length > 0) {
-        var coneHalf = (lockCfg.coneAngle || 15) * Math.PI / 180;
-        var lockRange = lockCfg.maxRange || 60;
-        lockOnTurnRate = lockCfg.turnRate || 3.0;
-        var bestDist = lockRange + 1;
-        var aimDir = baseDir.clone().normalize();
-
-        for (var li = 0; li < projTargetEntities.length; li++) {
-          var le = projTargetEntities[li];
-          if (!le || !le.alive || !le.position) continue;
-          var toE = le.position.clone().sub(origin);
-          var eDist = toE.length();
-          if (eDist > lockRange || eDist < 1) continue;
-          toE.normalize();
-          var angle = Math.acos(Math.max(-1, Math.min(1, aimDir.dot(toE))));
-          if (angle <= coneHalf && eDist < bestDist) {
-            bestDist = eDist;
-            lockOnTarget = le;
-          }
-        }
-      }
-
       for (var pi = 0; pi < pelletCount; pi++) {
         var projDir = applySpread(baseDir, spread);
         var vel = projDir.clone().multiplyScalar(projSpeed);

@@ -30,8 +30,8 @@
  */
 
 // Global scene/camera/renderer (shared across scripts)
-let scene, camera, renderer;
-let raycaster, mouse;
+var scene, camera, renderer;
+var raycaster, mouse;
 
 // ------- First-person weapon viewmodel -------
 var _fpWeaponGroup = null;

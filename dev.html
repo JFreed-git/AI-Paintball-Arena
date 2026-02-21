@@ -101,6 +101,20 @@
                         </div>
                     </div>
 
+                    <h4 class="dev-section-header" data-hub-group="weapon">Lock-On</h4>
+                    <div class="dev-section-content">
+                        <div class="dev-field"><label>Enabled</label><input type="checkbox" id="heLockOnEnabled" /></div>
+                        <div id="heLockOnFields">
+                            <div class="dev-field">
+                                <label>Cone Angle (&deg;)</label>
+                                <input type="number" id="heLockOnConeAngle" value="15" step="1" min="1" max="90" />
+                                <canvas id="heLockOnConeVis" width="60" height="40" style="margin-left:8px;vertical-align:middle;border-radius:4px;background:#111;"></canvas>
+                            </div>
+                            <div class="dev-field"><label>Max Range</label><input type="number" id="heLockOnMaxRange" value="100" min="1" /></div>
+                            <div class="dev-field"><label>Turn Rate</label><input type="number" id="heLockOnTurnRate" value="3.0" step="0.1" min="0.1" /></div>
+                        </div>
+                    </div>
+
                     <h4 class="dev-section-header" id="heMeleeHeader" data-hub-group="melee">Melee</h4>
                     <div class="dev-section-content">
                         <div class="dev-field"><label>Melee-Only (Sword)</label><input type="checkbox" id="heMeleeOnly" /></div>

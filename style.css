@@ -2251,6 +2251,9 @@ body {
     z-index: 150;
     pointer-events: none;
 }
+#manaBarContainer.hidden {
+    display: none;
+}
 #manaBar {
     width: 180px;
     height: 10px;

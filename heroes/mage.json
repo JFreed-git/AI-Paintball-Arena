@@ -41,6 +41,11 @@
     "projectileSpeed": 80,
     "projectileGravity": 0,
     "manaCostPerShot": 1,
+    "lockOn": {
+      "coneAngle": 15,
+      "maxRange": 100,
+      "turnRate": 3.0
+    },
     "splashRadius": 0,
     "meleeOnly": false,
     "meleeDamage": 20,
@@ -108,7 +113,7 @@
       "cooldownMs": 15000,
       "duration": 2000,
       "params": {
-        "manaRestoreFraction": 0.75,
+        "manaRestoreAmount": 75,
         "interruptOnDamage": true
       }
     }
