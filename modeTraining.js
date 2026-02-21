@@ -264,6 +264,15 @@
       return;
     }
 
+    // Mana-per-shot check: block firing if not enough mana
+    if (input.fireDown && w.manaCostPerShot > 0 && state.player.abilityManager) {
+      var _amTR = state.player.abilityManager;
+      if (_amTR.hasMana && _amTR.hasMana() && _amTR.getMana() < w.manaCostPerShot) {
+        if (typeof playGameSound === 'function') playGameSound('dry_fire', { heroId: state.currentHeroId || undefined });
+        return;
+      }
+    }
+
     if (input.fireDown && sharedCanShoot(w, now, w.cooldownMs)) {
       // Build multi-target array from static targets and bots
       var allTargets = [];
@@ -318,6 +327,12 @@
         result = sharedFireWeapon(w, camera.position.clone(), dir, fireOpts);
       }
 
+      // Consume mana per shot if applicable
+      if (w.manaCostPerShot > 0 && state.player.abilityManager) {
+        var _amShot = state.player.abilityManager;
+        if (_amShot.consumeMana) _amShot.consumeMana(w.manaCostPerShot);
+      }
+
       state.stats.shots++;
       for (var i = 0; i < state.bots.length; i++) {
         if (!state.bots[i].alive && !state.bots[i]._countedKill) {
@@ -365,6 +380,20 @@
       else { state.inputArmed = true; }
     }
 
+    // Propagate input flags to player.input for ability effects to read
+    if (!state.player.input) state.player.input = {};
+    state.player.input.secondaryDown = !!input.secondaryDown;
+    state.player.input.ability1 = !!input.ability1;
+    state.player.input.fireDown = !!input.fireDown;
+
+    // Meditate freeze: block movement BEFORE physics so player can't slide
+    if (state.player._meditating) {
+      input.moveX = 0;
+      input.moveZ = 0;
+      input.sprint = false;
+      input.jump = false;
+    }
+
     sharedSetCrosshairBySprint(!!input.sprint, state.player.weapon.spreadRad, state.player.weapon.sprintSpreadRad);
     sharedSetSprintUI(!!input.sprint, state.hud.sprintIndicator);
 
@@ -406,13 +435,17 @@
     // Ability update + input activation
     if (state.player.abilityManager) {
       state.player.abilityManager.update(dt * 1000);
+      var secondaryJustPressed = !!input.secondaryDown && !state._prevSecondaryDown;
       var abilities = state.player.abilityManager.getHUDState();
       for (var ai = 0; ai < abilities.length; ai++) {
-        if (input[abilities[ai].key]) {
+        var abilityKey = abilities[ai].key;
+        var keyActive = abilityKey === 'secondaryDown' ? secondaryJustPressed : input[abilityKey];
+        if (keyActive) {
           state.player.abilityManager.activate(abilities[ai].id);
         }
       }
     }
+    state._prevSecondaryDown = !!input.secondaryDown;
 
     // Scope/ADS: if hero has weapon.scope and no ability consumed secondaryDown
     _trainingScopeResult = { adsActive: false, spreadMultiplier: 1.0 };
@@ -442,12 +475,8 @@
       input.fireDown = false;
       input.meleePressed = false;
     }
-    // Meditate freeze: block all input while meditating
+    // Meditate freeze: block combat input (movement already blocked before physics)
     if (state.player._meditating) {
-      input.moveX = 0;
-      input.moveZ = 0;
-      input.sprint = false;
-      input.jump = false;
       input.fireDown = false;
       input.secondaryDown = false;
       input.meleePressed = false;

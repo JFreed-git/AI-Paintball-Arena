@@ -50,7 +50,7 @@
   var _preRoundCallbacks = null;
 
   // Key binding display map
-  var _keyLabels = { ability1: 'Q', ability2: 'E', ability3: 'F', ability4: 'C' };
+  var _keyLabels = { ability1: 'Q', ability2: 'E', ability3: 'F', ability4: 'C', secondaryDown: 'RMB' };
 
   /**
    * Convert camelCase id to Title Case with spaces.
@@ -118,7 +118,7 @@
         '<div class="hero-stats">' +
           'Damage: <span>' + w.damage + (w.pellets > 1 ? ' x' + w.pellets : '') + '</span><br>' +
           'Fire Rate: <span>' + Math.round(1000 / w.cooldownMs * 10) / 10 + '/s</span><br>' +
-          'Mag: <span>' + w.magSize + '</span> | Reload: <span>' + w.reloadTimeSec + 's</span><br>' +
+          'Mag: <span>' + (w.magSize === 0 ? '\u221E' : w.magSize) + '</span>' + (w.magSize !== 0 ? ' | Reload: <span>' + w.reloadTimeSec + 's</span>' : '') + '<br>' +
           'Range: <span>' + w.maxRange + 'm</span>' +
         '</div>' +
         abilityHtml;

@@ -29,6 +29,13 @@
   // Stash abilities/passives so icon edits round-trip on save
   var _stashedPassives = [];
   var _stashedAbilities = [];
+  // Stash mana config so it round-trips on save
+  var _stashedMana = null;
+
+  // Hub navigation state
+  var _currentHeroId = null;
+  var _currentSubview = null;       // null | 'weapon' | 'ability' | 'model'
+  var _currentAbilityIndex = -1;
 
   // Toggle gun/scope/tracer fields based on meleeOnly checkbox
   function toggleMeleeOnlyFields() {
@@ -1611,7 +1618,7 @@
 
     var weaponConfig = {
       cooldownMs: parseInt(document.getElementById('heCooldownMs').value) || 166,
-      magSize: parseInt(document.getElementById('heMagSize').value) || 6,
+      magSize: (function() { var v = parseInt(document.getElementById('heMagSize').value); return isNaN(v) ? 6 : v; })(),
       reloadTimeSec: parseFloat(document.getElementById('heReloadTime').value) || 2.5,
       damage: parseInt(document.getElementById('heDamage').value) || 20,
       spreadRad: parseFloat(document.getElementById('heSpreadRad').value) || 0,
@@ -1620,6 +1627,7 @@
       pellets: parseInt(document.getElementById('hePellets').value) || 1,
       projectileSpeed: parseFloat(document.getElementById('heProjectileSpeed').value) || 0,
       projectileGravity: parseFloat(document.getElementById('heProjectileGravity').value) || 0,
+      manaCostPerShot: parseInt(document.getElementById('heManaCostPerShot').value) || 0,
       splashRadius: 0,
       meleeOnly: document.getElementById('heMeleeOnly').checked,
       meleeDamage: parseInt(document.getElementById('heMeleeDamage').value) || 30,
@@ -1681,6 +1689,15 @@
       passives: _stashedPassives,
       abilities: _stashedAbilities
     };
+
+    // Include mana config if present
+    if (_stashedMana) {
+      config.mana = {
+        maxMana: _stashedMana.maxMana,
+        regenRate: _stashedMana.regenRate,
+        regenDelay: _stashedMana.regenDelay
+      };
+    }
 
     // Include body parts if any
     if (_bodyParts.length > 0) {
@@ -1808,7 +1825,7 @@
 
     var w = hero.weapon || {};
     document.getElementById('heCooldownMs').value = w.cooldownMs || 166;
-    document.getElementById('heMagSize').value = w.magSize || 6;
+    document.getElementById('heMagSize').value = (typeof w.magSize === 'number') ? w.magSize : 6;
     document.getElementById('heReloadTime').value = w.reloadTimeSec || 2.5;
     document.getElementById('heDamage').value = w.damage || 20;
     document.getElementById('heSpreadRad').value = (typeof w.spreadRad === 'number') ? w.spreadRad : 0;
@@ -1817,6 +1834,7 @@
     document.getElementById('hePellets').value = w.pellets || 1;
     document.getElementById('heProjectileSpeed').value = (typeof w.projectileSpeed === 'number') ? w.projectileSpeed : 120;
     document.getElementById('heProjectileGravity').value = (typeof w.projectileGravity === 'number') ? w.projectileGravity : 0;
+    document.getElementById('heManaCostPerShot').value = (typeof w.manaCostPerShot === 'number') ? w.manaCostPerShot : 0;
 
     document.getElementById('heMeleeOnly').checked = !!w.meleeOnly;
     toggleMeleeOnlyFields();
@@ -1852,13 +1870,20 @@
       if (el && typeof fpFields[fk] === 'number') el.value = fpFields[fk];
     }
 
+    // Stash mana config
+    _stashedMana = hero.mana ? {
+      maxMana: hero.mana.maxMana || 100,
+      regenRate: hero.mana.regenRate || 10,
+      regenDelay: hero.mana.regenDelay || 2000
+    } : null;
+
     // Populate abilities display
     populateAbilitiesDisplay(hero.passives, hero.abilities);
   }
 
   // --- Abilities display (read-only) ---
 
-  var _abilityKeyLabels = { ability1: 'Q', ability2: 'E', ability3: 'F', ability4: 'C' };
+  var _abilityKeyLabels = { ability1: 'Q', ability2: 'E', ability3: 'F', ability4: 'C', secondaryDown: 'RMB' };
 
   function populateAbilitiesDisplay(passives, abilities) {
     _stashedPassives = passives || [];
@@ -3396,6 +3421,985 @@
   window._applyHeroViewMode = function () { setViewMode(_viewMode); };
 
   // ========================
+  // HERO HUB
+  // ========================
+
+  function showHeroHub(heroId) {
+    _currentHeroId = heroId;
+    _currentSubview = null;
+    _currentAbilityIndex = -1;
+
+    // Load hero data into form (populates _stashedAbilities, _hitboxSegments, etc.)
+    var hero = (typeof getHeroById === 'function') ? getHeroById(heroId) : null;
+    if (hero) {
+      setFormFromHeroConfig(hero);
+    }
+
+    // Select the hero in the dropdown (for save compatibility)
+    if (typeof populateHeroDropdown === 'function') {
+      populateHeroDropdown('heHeroSelect');
+    }
+    var heSelect = document.getElementById('heHeroSelect');
+    if (heSelect) heSelect.value = heroId;
+
+    // Hide gallery, show hub
+    var galleryView = document.getElementById('heroGalleryView');
+    var hubView = document.getElementById('heroHubView');
+    var editorView = document.getElementById('heroEditorView');
+
+    // Move gallery back to panel (out of viewport)
+    var panel = document.getElementById('panelHeroEditor');
+    if (galleryView && panel) {
+      panel.insertBefore(galleryView, panel.firstChild);
+      galleryView.classList.remove('viewport-mode');
+    }
+    if (galleryView) galleryView.classList.add('hidden');
+    if (editorView) editorView.classList.add('hidden');
+    if (hubView) hubView.classList.remove('hidden');
+
+    // Move hub to viewport for full-size display
+    var viewport = document.getElementById('devViewport');
+    if (hubView && viewport) {
+      viewport.appendChild(hubView);
+      hubView.classList.add('viewport-mode');
+    }
+
+    renderHeroHub();
+  }
+
+  function renderHeroHub() {
+    var container = document.getElementById('heroHubContent');
+    if (!container) return;
+
+    // Use live form state so in-flight edits (stats, name, etc.) are preserved
+    var hero = getHeroConfigFromForm();
+    if (!hero || !hero.id) {
+      // Fallback: load from saved data
+      hero = (typeof getHeroById === 'function') ? getHeroById(_currentHeroId) : null;
+    }
+
+    var colorHex;
+    if (typeof hero.color === 'string') {
+      colorHex = hero.color;
+    } else {
+      colorHex = '#' + (hero.color || 0x66ffcc).toString(16).padStart(6, '0');
+    }
+    var w = hero.weapon || {};
+
+    var html = '';
+
+    // Header row
+    html += '<div class="hero-hub-header">';
+    html += '<button class="gallery-back-btn" id="hubBackToGallery">&larr; Back to Heroes</button>';
+    html += '<div class="hero-hub-header-actions">';
+    html += '<button class="dev-btn-danger" id="hubDelete">Delete</button>';
+    html += '<button class="dev-btn-primary" id="hubSave">Save</button>';
+    html += '</div>';
+    html += '</div>';
+
+    // Identity
+    html += '<div class="hero-hub-identity">';
+    html += '<div class="hero-hub-identity-row">';
+    html += '<div class="hero-hub-color-swatch" id="hubColorSwatch" style="background:' + colorHex + ';">';
+    html += '<input type="color" id="hubColor" value="' + colorHex + '">';
+    html += '</div>';
+    html += '<input type="text" class="hero-hub-name-input" id="hubName" value="' + escapeAttr(hero.name || '') + '">';
+    html += '</div>';
+    html += '<input type="text" class="hero-hub-desc-input" id="hubDesc" value="' + escapeAttr(hero.description || '') + '" placeholder="Description...">';
+    html += '<div class="hero-hub-id">id: ' + escapeHtml(hero.id || '') + '</div>';
+    html += '</div>';
+
+    // Stats row
+    html += '<div class="hero-hub-stats">';
+    var stats = [
+      { label: 'HP', id: 'hubHP', value: hero.maxHealth || 100, step: 1 },
+      { label: 'Walk', id: 'hubWalk', value: hero.walkSpeed || 4.5, step: 0.1 },
+      { label: 'Sprint', id: 'hubSprint', value: hero.sprintSpeed || 8.5, step: 0.1 },
+      { label: 'Jump', id: 'hubJump', value: hero.jumpVelocity || 8.5, step: 0.5 }
+    ];
+    for (var i = 0; i < stats.length; i++) {
+      var s = stats[i];
+      html += '<div class="hero-hub-stat">';
+      html += '<span class="hero-hub-stat-label">' + s.label + ':</span>';
+      html += '<input type="number" class="hero-hub-stat-input" id="' + s.id + '" value="' + s.value + '" step="' + s.step + '">';
+      html += '</div>';
+    }
+    html += '</div>';
+
+    // Weapon card
+    html += '<div class="hero-hub-section-title">WEAPON</div>';
+    var weaponTitle = w.meleeOnly ? 'Melee Weapon' : (w.modelType || 'Rifle');
+    var weaponDetail = '';
+    if (w.meleeOnly) {
+      weaponDetail = (w.meleeDamage || 30) + ' dmg &middot; ' + (w.meleeCooldownMs || 600) + 'ms cd &middot; ' + (w.meleeRange || 2.5) + 'm range';
+    } else {
+      weaponDetail = (w.damage || 20) + ' dmg &middot; ' + (w.cooldownMs || 166) + 'ms cd &middot; ' + (w.magSize === 0 ? '&infin;' : (w.magSize || 6)) + ' mag';
+    }
+    html += '<div class="hero-hub-card" id="hubWeaponCard">';
+    html += '<div class="hero-hub-card-icon">&#9876;</div>';
+    html += '<div class="hero-hub-card-info">';
+    html += '<div class="hero-hub-card-title">' + escapeHtml(weaponTitle) + '</div>';
+    html += '<div class="hero-hub-card-detail">' + weaponDetail + '</div>';
+    html += '</div>';
+    html += '<div class="hero-hub-card-arrow">&rsaquo;</div>';
+    html += '</div>';
+
+    // Abilities
+    var abilities = _stashedAbilities || [];
+    var passives = _stashedPassives || [];
+
+    if (abilities.length > 0 || passives.length > 0) {
+      html += '<div class="hero-hub-section-title">ABILITIES</div>';
+
+      for (var j = 0; j < abilities.length; j++) {
+        var ab = abilities[j];
+        var keyLabel = _abilityKeyLabels[ab.key] || ab.key || '?';
+        var abDetail = ((ab.cooldownMs || 0) / 1000) + 's cd';
+        if (ab.params && ab.params.manaCost) abDetail += ' &middot; ' + ab.params.manaCost + ' mana';
+        if (ab.duration) abDetail += ' &middot; ' + ab.duration + 'ms';
+
+        html += '<div class="hero-hub-card hub-ability-card" data-ability-index="' + j + '">';
+        html += '<div class="hero-hub-ability-key">' + keyLabel + '</div>';
+        html += '<div class="hero-hub-card-info">';
+        html += '<div class="hero-hub-card-title">' + escapeHtml(ab.name || ab.id || 'Unnamed') + '</div>';
+        html += '<div class="hero-hub-card-detail">' + abDetail + '</div>';
+        html += '</div>';
+        html += '<div class="hero-hub-card-arrow">&rsaquo;</div>';
+        html += '</div>';
+      }
+
+      // Passives
+      if (passives.length > 0) {
+        html += '<div class="hero-hub-section-title" style="margin-top:12px;">PASSIVES</div>';
+        for (var p = 0; p < passives.length; p++) {
+          var pid = passives[p].id || 'unknown';
+          var displayName = pid.replace(/([A-Z])/g, ' $1').replace(/^./, function (c) { return c.toUpperCase(); });
+          var passiveParamCount = passives[p].params ? Object.keys(passives[p].params).length : 0;
+          var passiveDetail = passiveParamCount > 0 ? passiveParamCount + ' param' + (passiveParamCount !== 1 ? 's' : '') : 'passive';
+
+          html += '<div class="hero-hub-card hub-passive-card" data-passive-index="' + p + '">';
+          html += '<div class="hero-hub-card-icon" style="font-size:14px;color:#888;">&#9679;</div>';
+          html += '<div class="hero-hub-card-info">';
+          html += '<div class="hero-hub-card-title">' + escapeHtml(displayName) + '</div>';
+          html += '<div class="hero-hub-card-detail">' + passiveDetail + '</div>';
+          html += '</div>';
+          html += '<div class="hero-hub-card-arrow">&rsaquo;</div>';
+          html += '</div>';
+        }
+      }
+    }
+
+    // Character Model card
+    html += '<div class="hero-hub-section-title">CHARACTER MODEL</div>';
+    var segCount = _hitboxSegments ? _hitboxSegments.length : 0;
+    var partCount = _bodyParts ? _bodyParts.length : 0;
+    html += '<div class="hero-hub-card" id="hubModelCard">';
+    html += '<div class="hero-hub-card-icon">&#9634;</div>';
+    html += '<div class="hero-hub-card-info">';
+    html += '<div class="hero-hub-card-title">Hitbox &amp; Body Parts</div>';
+    html += '<div class="hero-hub-card-detail">' + segCount + ' hitbox segment' + (segCount !== 1 ? 's' : '') + ' &middot; ' + partCount + ' body part' + (partCount !== 1 ? 's' : '') + '</div>';
+    html += '</div>';
+    html += '<div class="hero-hub-card-arrow">&rsaquo;</div>';
+    html += '</div>';
+
+    // Bottom actions
+    html += '<div class="hero-hub-actions">';
+    html += '<button class="dev-btn-secondary" id="hubApply">Apply to P1</button>';
+    html += '</div>';
+
+    container.innerHTML = html;
+
+    // Wire up events
+    var backBtn = document.getElementById('hubBackToGallery');
+    if (backBtn) backBtn.addEventListener('click', function () { backToHeroGallery(); });
+
+    var saveBtn = document.getElementById('hubSave');
+    if (saveBtn) saveBtn.addEventListener('click', function () { hubSave(); });
+
+    var deleteBtn = document.getElementById('hubDelete');
+    if (deleteBtn) deleteBtn.addEventListener('click', function () { hubDelete(); });
+
+    var applyBtn = document.getElementById('hubApply');
+    if (applyBtn) applyBtn.addEventListener('click', function () {
+      syncHubFieldsToForm();
+      var btn = document.getElementById('heApplySS');
+      if (btn) btn.click();
+    });
+
+    var weaponCard = document.getElementById('hubWeaponCard');
+    if (weaponCard) weaponCard.addEventListener('click', function () { openWeaponSubview(); });
+
+    var modelCard = document.getElementById('hubModelCard');
+    if (modelCard) modelCard.addEventListener('click', function () { openModelSubview(); });
+
+    // Ability cards
+    var abilityCards = container.querySelectorAll('.hub-ability-card');
+    for (var ac = 0; ac < abilityCards.length; ac++) {
+      abilityCards[ac].addEventListener('click', function () {
+        var idx = parseInt(this.getAttribute('data-ability-index'));
+        openAbilitySubview(idx);
+      });
+    }
+
+    // Passive cards
+    var passiveCards = container.querySelectorAll('.hub-passive-card');
+    for (var pc = 0; pc < passiveCards.length; pc++) {
+      passiveCards[pc].addEventListener('click', function () {
+        var idx = parseInt(this.getAttribute('data-passive-index'));
+        openPassiveSubview(idx);
+      });
+    }
+
+    // Color swatch click -> open color picker
+    var colorSwatch = document.getElementById('hubColorSwatch');
+    var colorInput = document.getElementById('hubColor');
+    if (colorSwatch && colorInput) {
+      colorSwatch.addEventListener('click', function () { colorInput.click(); });
+      colorInput.addEventListener('input', function () {
+        colorSwatch.style.background = this.value;
+      });
+    }
+  }
+
+  function escapeHtml(str) {
+    return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+
+  function escapeAttr(str) {
+    return String(str).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+
+  function syncHubFieldsToForm() {
+    var nameEl = document.getElementById('hubName');
+    var descEl = document.getElementById('hubDesc');
+    var colorEl = document.getElementById('hubColor');
+    var hpEl = document.getElementById('hubHP');
+    var walkEl = document.getElementById('hubWalk');
+    var sprintEl = document.getElementById('hubSprint');
+    var jumpEl = document.getElementById('hubJump');
+
+    if (nameEl) document.getElementById('heName').value = nameEl.value;
+    if (descEl) document.getElementById('heDesc').value = descEl.value;
+    if (colorEl) document.getElementById('heColor').value = colorEl.value;
+    if (hpEl) document.getElementById('heMaxHealth').value = hpEl.value;
+    if (walkEl) document.getElementById('heWalkSpeed').value = walkEl.value;
+    if (sprintEl) document.getElementById('heSprintSpeed').value = sprintEl.value;
+    if (jumpEl) document.getElementById('heJumpVelocity').value = jumpEl.value;
+  }
+
+  function hubSave() {
+    syncHubFieldsToForm();
+    // Trigger the existing save button handler
+    var btn = document.getElementById('heSave');
+    if (btn) btn.click();
+  }
+
+  function hubDelete() {
+    var heroId = _currentHeroId;
+    if (!heroId) return;
+    var hero = (typeof getHeroById === 'function') ? getHeroById(heroId) : null;
+    var heroName = hero ? (hero.name || heroId) : heroId;
+    if (!confirm('Delete hero "' + heroName + '"?')) return;
+
+    fetch('/api/heroes/' + encodeURIComponent(heroId), { method: 'DELETE' })
+      .then(function (r) { return r.json(); })
+      .then(function () {
+        window.HEROES = (window.HEROES || []).filter(function (h) { return h.id !== heroId; });
+        window.dispatchEvent(new Event('heroesUpdated'));
+        backToHeroGallery();
+      })
+      .catch(function () { alert('Failed to delete hero'); });
+  }
+
+  // --- Sub-view navigation ---
+
+  function showFormSectionsForGroup(groups) {
+    var form = document.getElementById('heroEditorForm');
+    if (!form) return;
+    var headers = form.querySelectorAll('[data-hub-group]');
+    for (var i = 0; i < headers.length; i++) {
+      var el = headers[i];
+      var group = el.getAttribute('data-hub-group');
+      var show = groups.indexOf(group) >= 0;
+
+      // Show/hide the header
+      el.style.display = show ? '' : 'none';
+
+      // Show/hide the following content section
+      var next = el.nextElementSibling;
+      if (next && (next.classList.contains('dev-section-content') || next.id === 'heGunFields')) {
+        next.style.display = show ? '' : 'none';
+      }
+
+      // For wrapper divs like #heScopeSection
+      if (el.tagName === 'DIV' && el.id) {
+        el.style.display = show ? '' : 'none';
+      }
+    }
+
+    // Also show/hide the save/apply actions at bottom of form based on subview
+    var formActions = form.querySelectorAll('.dev-actions');
+    for (var j = 0; j < formActions.length; j++) {
+      formActions[j].style.display = 'none';
+    }
+  }
+
+  function openWeaponSubview() {
+    syncHubFieldsToForm();
+    _currentSubview = 'weapon';
+
+    var hubView = document.getElementById('heroHubView');
+    var editorView = document.getElementById('heroEditorView');
+    var abilitySubview = document.getElementById('heroAbilitySubview');
+    var editorTitle = document.getElementById('heroEditorTitle');
+    var panel = document.getElementById('panelHeroEditor');
+
+    // Hide hub, return to panel
+    if (hubView) {
+      hubView.classList.add('hidden');
+      hubView.classList.remove('viewport-mode');
+      if (panel) panel.appendChild(hubView);
+    }
+    if (abilitySubview) abilitySubview.classList.add('hidden');
+
+    // Show only weapon-related form sections
+    showFormSectionsForGroup(['weapon']);
+
+    // Hide editor list (hero select dropdown) and form action buttons
+    var editorList = document.getElementById('heroEditorList');
+    if (editorList) editorList.style.display = 'none';
+    if (editorTitle) editorTitle.style.display = 'none';
+
+    // Move editor view to viewport for full-scene display
+    var viewport = document.getElementById('devViewport');
+    if (editorView && viewport) {
+      editorView.classList.remove('hidden');
+      editorView.classList.add('viewport-mode');
+      viewport.appendChild(editorView);
+    }
+
+    // No sidebar, no 3D preview, no right panel, no toolbar
+    var sidebar = document.getElementById('devSidebar');
+    if (sidebar) sidebar.classList.remove('expanded');
+
+    var rightPanel = document.getElementById('devRightPanel');
+    if (rightPanel) rightPanel.classList.add('hidden');
+    var rightExpandTab = document.getElementById('devRightPanelExpand');
+    if (rightExpandTab) rightExpandTab.classList.add('hidden');
+    var heToolbar = document.getElementById('heViewportToolbar');
+    if (heToolbar) heToolbar.classList.add('hidden');
+
+    // Update back button
+    updateBackButton('hub');
+  }
+
+  function openAbilitySubview(index) {
+    syncHubFieldsToForm();
+    _currentSubview = 'ability';
+    _currentAbilityIndex = index;
+
+    // Hide hub (return to panel)
+    var hubView = document.getElementById('heroHubView');
+    var panel = document.getElementById('panelHeroEditor');
+    if (hubView) {
+      hubView.classList.add('hidden');
+      hubView.classList.remove('viewport-mode');
+      if (panel) panel.appendChild(hubView);
+    }
+
+    // Don't show editorView — ability subview goes directly to viewport
+    var editorView = document.getElementById('heroEditorView');
+    if (editorView) editorView.classList.add('hidden');
+
+    // Show ability subview in viewport
+    var abilitySubview = document.getElementById('heroAbilitySubview');
+    var viewport = document.getElementById('devViewport');
+    if (abilitySubview && viewport) {
+      viewport.appendChild(abilitySubview);
+      abilitySubview.classList.remove('hidden');
+      abilitySubview.classList.add('viewport-mode');
+    }
+
+    // No sidebar expansion, no right panel, no toolbar, no 3D preview
+    var rightPanel = document.getElementById('devRightPanel');
+    if (rightPanel) rightPanel.classList.add('hidden');
+    var rightExpandTab = document.getElementById('devRightPanelExpand');
+    if (rightExpandTab) rightExpandTab.classList.add('hidden');
+    var heToolbar = document.getElementById('heViewportToolbar');
+    if (heToolbar) heToolbar.classList.add('hidden');
+
+    // Build ability detail content
+    renderAbilitySubviewContent(index);
+  }
+
+  function renderAbilitySubviewContent(index) {
+    var container = document.getElementById('heroAbilitySubviewContent');
+    if (!container) return;
+
+    var ab = _stashedAbilities[index];
+    if (!ab) { container.innerHTML = '<div style="color:#888;">Ability not found.</div>'; return; }
+
+    var keyLabel = _abilityKeyLabels[ab.key] || ab.key || '?';
+
+    var html = '';
+
+    // Back button
+    html += '<div class="hero-hub-header">';
+    html += '<button class="gallery-back-btn" id="abilityBackToHub">&larr; Back to Hub</button>';
+    html += '</div>';
+
+    // Header with icon + name
+    html += '<div class="hero-ability-detail">';
+    html += '<div class="hero-ability-detail-header">';
+    var currentIcon = ab.icon || '';
+    var autoIcon = ab.id || '';
+    var iconSrc = '';
+    if (currentIcon && window.ABILITY_ICONS && window.ABILITY_ICONS[currentIcon]) {
+      iconSrc = 'data:image/svg+xml,' + encodeURIComponent(window.ABILITY_ICONS[currentIcon]);
+    } else if (!currentIcon && window.ABILITY_ICONS && window.ABILITY_ICONS[autoIcon]) {
+      iconSrc = 'data:image/svg+xml,' + encodeURIComponent(window.ABILITY_ICONS[autoIcon]);
+    }
+    if (iconSrc) {
+      html += '<img class="hero-ability-detail-icon-preview" src="' + iconSrc + '" alt="">';
+    }
+    html += '<span class="hero-ability-detail-name">' + escapeHtml(ab.name || ab.id || 'Unnamed') + '</span>';
+    html += '<span class="hero-ability-detail-key-badge">' + escapeHtml(keyLabel) + '</span>';
+    html += '</div>';
+
+    // Core fields
+    html += '<div class="ability-edit-section">';
+    html += '<div class="ability-edit-section-title">GENERAL</div>';
+    html += '<div class="ability-edit-field"><label>Name</label><input type="text" id="abEditName" value="' + escapeAttr(ab.name || '') + '"></div>';
+    html += '<div class="ability-edit-field"><label>ID</label><input type="text" id="abEditId" value="' + escapeAttr(ab.id || '') + '"></div>';
+    html += '<div class="ability-edit-field"><label>Key Binding</label>';
+    html += '<select id="abEditKey">';
+    var keyOpts = [
+      { value: 'ability1', label: 'Q (ability1)' },
+      { value: 'ability2', label: 'E (ability2)' },
+      { value: 'ability3', label: 'F (ability3)' },
+      { value: 'ability4', label: 'C (ability4)' },
+      { value: 'secondaryDown', label: 'RMB (secondaryDown)' }
+    ];
+    for (var ki = 0; ki < keyOpts.length; ki++) {
+      html += '<option value="' + keyOpts[ki].value + '"' + (ab.key === keyOpts[ki].value ? ' selected' : '') + '>' + keyOpts[ki].label + '</option>';
+    }
+    html += '</select></div>';
+    html += '<div class="ability-edit-field"><label>Cooldown (ms)</label><input type="number" id="abEditCooldown" value="' + (ab.cooldownMs || 0) + '" min="0" step="100"></div>';
+    html += '<div class="ability-edit-field"><label>Duration (ms)</label><input type="number" id="abEditDuration" value="' + (ab.duration || 0) + '" min="0" step="100"></div>';
+    html += '</div>';
+
+    // Icon selector
+    html += '<div class="ability-edit-section">';
+    html += '<div class="ability-edit-section-title">ICON</div>';
+    var iconKeys = window.ABILITY_ICONS ? Object.keys(window.ABILITY_ICONS) : [];
+    html += '<div class="ability-edit-field"><label>Icon</label>';
+    html += '<select id="abEditIcon">';
+    html += '<option value=""' + (currentIcon === '' ? ' selected' : '') + '>(auto)</option>';
+    for (var ik = 0; ik < iconKeys.length; ik++) {
+      html += '<option value="' + iconKeys[ik] + '"' + (currentIcon === iconKeys[ik] ? ' selected' : '') + '>' + iconKeys[ik] + '</option>';
+    }
+    html += '</select></div>';
+    html += '</div>';
+
+    // Params (each as an editable field)
+    html += '<div class="ability-edit-section">';
+    html += '<div class="ability-edit-section-title">PARAMS</div>';
+    var params = ab.params || {};
+    var paramKeys = Object.keys(params);
+    for (var pi = 0; pi < paramKeys.length; pi++) {
+      var pk = paramKeys[pi];
+      var pv = params[pk];
+      var inputType = (typeof pv === 'boolean') ? 'checkbox' : (typeof pv === 'number') ? 'number' : 'text';
+
+      html += '<div class="ability-param-row" data-param-key="' + escapeAttr(pk) + '">';
+      html += '<label>' + escapeHtml(pk) + '</label>';
+      if (inputType === 'checkbox') {
+        html += '<input type="checkbox" class="ab-param-input" data-param-key="' + escapeAttr(pk) + '"' + (pv ? ' checked' : '') + '>';
+      } else {
+        html += '<input type="' + inputType + '" class="ab-param-input" data-param-key="' + escapeAttr(pk) + '" value="' + escapeAttr(String(pv)) + '"' + (inputType === 'number' ? ' step="any"' : '') + '>';
+      }
+      html += '<button class="ability-param-remove" data-param-key="' + escapeAttr(pk) + '" title="Remove param">&times;</button>';
+      html += '</div>';
+    }
+    // Add param row
+    html += '<div class="ability-add-param-row">';
+    html += '<input type="text" id="abNewParamKey" placeholder="paramName">';
+    html += '<input type="text" id="abNewParamValue" placeholder="value">';
+    html += '<button id="abAddParam">+ Add</button>';
+    html += '</div>';
+    html += '</div>';
+
+    html += '</div>'; // /.hero-ability-detail
+
+    container.innerHTML = html;
+
+    // Wire back button
+    var backBtn = document.getElementById('abilityBackToHub');
+    if (backBtn) backBtn.addEventListener('click', function () { backToHub(); });
+
+    // Wire core field changes — update _stashedAbilities on input
+    wireAbilityField('abEditName', 'name', 'text', index);
+    wireAbilityField('abEditId', 'id', 'text', index);
+    wireAbilityField('abEditCooldown', 'cooldownMs', 'int', index);
+    wireAbilityField('abEditDuration', 'duration', 'int', index);
+
+    var keySelect = document.getElementById('abEditKey');
+    if (keySelect) {
+      keySelect.addEventListener('change', function () {
+        _stashedAbilities[index].key = this.value;
+      });
+    }
+
+    // Wire icon selector
+    var iconSelect = document.getElementById('abEditIcon');
+    if (iconSelect) {
+      iconSelect.addEventListener('change', function () {
+        if (this.value) {
+          _stashedAbilities[index].icon = this.value;
+        } else {
+          delete _stashedAbilities[index].icon;
+        }
+        renderAbilitySubviewContent(index);
+      });
+    }
+
+    // Wire param inputs
+    var paramInputs = container.querySelectorAll('.ab-param-input');
+    for (var pi2 = 0; pi2 < paramInputs.length; pi2++) {
+      paramInputs[pi2].addEventListener('change', function () {
+        var key = this.getAttribute('data-param-key');
+        if (!_stashedAbilities[index].params) _stashedAbilities[index].params = {};
+        if (this.type === 'checkbox') {
+          _stashedAbilities[index].params[key] = this.checked;
+        } else if (this.type === 'number') {
+          _stashedAbilities[index].params[key] = parseFloat(this.value) || 0;
+        } else {
+          _stashedAbilities[index].params[key] = this.value;
+        }
+      });
+    }
+
+    // Wire param remove buttons
+    var removeButtons = container.querySelectorAll('.ability-param-remove');
+    for (var ri = 0; ri < removeButtons.length; ri++) {
+      removeButtons[ri].addEventListener('click', function () {
+        var key = this.getAttribute('data-param-key');
+        if (_stashedAbilities[index].params) {
+          delete _stashedAbilities[index].params[key];
+        }
+        renderAbilitySubviewContent(index);
+      });
+    }
+
+    // Wire add param
+    var addParamBtn = document.getElementById('abAddParam');
+    if (addParamBtn) {
+      addParamBtn.addEventListener('click', function () {
+        var keyEl = document.getElementById('abNewParamKey');
+        var valEl = document.getElementById('abNewParamValue');
+        if (!keyEl || !keyEl.value.trim()) return;
+        if (!_stashedAbilities[index].params) _stashedAbilities[index].params = {};
+        var newVal = valEl ? valEl.value : '';
+        // Auto-detect type
+        if (newVal === 'true') newVal = true;
+        else if (newVal === 'false') newVal = false;
+        else if (newVal !== '' && !isNaN(Number(newVal))) newVal = Number(newVal);
+        _stashedAbilities[index].params[keyEl.value.trim()] = newVal;
+        renderAbilitySubviewContent(index);
+      });
+    }
+  }
+
+  function wireAbilityField(elementId, prop, type, index) {
+    var el = document.getElementById(elementId);
+    if (!el) return;
+    el.addEventListener('change', function () {
+      if (type === 'int') {
+        _stashedAbilities[index][prop] = parseInt(this.value) || 0;
+      } else if (type === 'float') {
+        _stashedAbilities[index][prop] = parseFloat(this.value) || 0;
+      } else {
+        _stashedAbilities[index][prop] = this.value;
+      }
+    });
+  }
+
+  // --- Passive sub-view ---
+
+  var _currentPassiveIndex = -1;
+
+  function openPassiveSubview(index) {
+    syncHubFieldsToForm();
+    _currentSubview = 'passive';
+    _currentPassiveIndex = index;
+
+    // Hide hub (return to panel)
+    var hubView = document.getElementById('heroHubView');
+    var panel = document.getElementById('panelHeroEditor');
+    if (hubView) {
+      hubView.classList.add('hidden');
+      hubView.classList.remove('viewport-mode');
+      if (panel) panel.appendChild(hubView);
+    }
+
+    // Don't show editorView — passive subview goes directly to viewport
+    var editorView = document.getElementById('heroEditorView');
+    if (editorView) editorView.classList.add('hidden');
+
+    // Reuse the ability subview container for passives (same viewport slot)
+    var abilitySubview = document.getElementById('heroAbilitySubview');
+    var viewport = document.getElementById('devViewport');
+    if (abilitySubview && viewport) {
+      viewport.appendChild(abilitySubview);
+      abilitySubview.classList.remove('hidden');
+      abilitySubview.classList.add('viewport-mode');
+    }
+
+    // No sidebar expansion, no right panel, no toolbar
+    var rightPanel = document.getElementById('devRightPanel');
+    if (rightPanel) rightPanel.classList.add('hidden');
+    var rightExpandTab = document.getElementById('devRightPanelExpand');
+    if (rightExpandTab) rightExpandTab.classList.add('hidden');
+    var heToolbar = document.getElementById('heViewportToolbar');
+    if (heToolbar) heToolbar.classList.add('hidden');
+
+    renderPassiveSubviewContent(index);
+  }
+
+  function renderPassiveSubviewContent(index) {
+    var container = document.getElementById('heroAbilitySubviewContent');
+    if (!container) return;
+
+    var passive = _stashedPassives[index];
+    if (!passive) { container.innerHTML = '<div style="color:#888;">Passive not found.</div>'; return; }
+
+    var displayName = (passive.id || 'unknown').replace(/([A-Z])/g, ' $1').replace(/^./, function (c) { return c.toUpperCase(); });
+
+    var html = '';
+
+    // Back button
+    html += '<div class="hero-hub-header">';
+    html += '<button class="gallery-back-btn" id="passiveBackToHub">&larr; Back to Hub</button>';
+    html += '</div>';
+
+    html += '<div class="hero-ability-detail">';
+
+    // Header
+    html += '<div class="hero-ability-detail-header">';
+    html += '<span class="hero-ability-detail-name">' + escapeHtml(displayName) + '</span>';
+    html += '<span class="hero-ability-detail-key-badge">Passive</span>';
+    html += '</div>';
+
+    // Core field: ID
+    html += '<div class="ability-edit-section">';
+    html += '<div class="ability-edit-section-title">GENERAL</div>';
+    html += '<div class="ability-edit-field"><label>ID</label><input type="text" id="passiveEditId" value="' + escapeAttr(passive.id || '') + '"></div>';
+    html += '</div>';
+
+    // Mana config section (shown when passive is manaRegen, or when hero has mana config)
+    if (passive.id === 'manaRegen' || _stashedMana) {
+      var mana = _stashedMana || { maxMana: 100, regenRate: 10, regenDelay: 2000 };
+      // Initialize stash if not present
+      if (!_stashedMana) _stashedMana = { maxMana: mana.maxMana, regenRate: mana.regenRate, regenDelay: mana.regenDelay };
+
+      html += '<div class="ability-edit-section">';
+      html += '<div class="ability-edit-section-title">MANA CONFIG</div>';
+      html += '<div class="ability-edit-field"><label>Max Mana</label><input type="number" id="passiveManaMax" value="' + mana.maxMana + '" min="1" step="1"></div>';
+      html += '<div class="ability-edit-field"><label>Regen Rate</label><input type="number" id="passiveManaRegen" value="' + mana.regenRate + '" min="0" step="1"></div>';
+      html += '<div class="ability-edit-field"><label>Regen Delay (ms)</label><input type="number" id="passiveManaDelay" value="' + mana.regenDelay + '" min="0" step="100"></div>';
+      html += '</div>';
+    }
+
+    // Params (editable, same pattern as abilities)
+    html += '<div class="ability-edit-section">';
+    html += '<div class="ability-edit-section-title">PARAMS</div>';
+    var params = passive.params || {};
+    var paramKeys = Object.keys(params);
+    if (paramKeys.length === 0) {
+      html += '<div style="color:#666;font-size:12px;margin-bottom:8px;">No params yet. Add params below to configure this passive.</div>';
+    }
+    for (var pi = 0; pi < paramKeys.length; pi++) {
+      var pk = paramKeys[pi];
+      var pv = params[pk];
+      var inputType = (typeof pv === 'boolean') ? 'checkbox' : (typeof pv === 'number') ? 'number' : 'text';
+
+      html += '<div class="ability-param-row" data-param-key="' + escapeAttr(pk) + '">';
+      html += '<label>' + escapeHtml(pk) + '</label>';
+      if (inputType === 'checkbox') {
+        html += '<input type="checkbox" class="passive-param-input" data-param-key="' + escapeAttr(pk) + '"' + (pv ? ' checked' : '') + '>';
+      } else {
+        html += '<input type="' + inputType + '" class="passive-param-input" data-param-key="' + escapeAttr(pk) + '" value="' + escapeAttr(String(pv)) + '"' + (inputType === 'number' ? ' step="any"' : '') + '>';
+      }
+      html += '<button class="ability-param-remove passive-param-remove" data-param-key="' + escapeAttr(pk) + '" title="Remove param">&times;</button>';
+      html += '</div>';
+    }
+    // Add param row
+    html += '<div class="ability-add-param-row">';
+    html += '<input type="text" id="passiveNewParamKey" placeholder="paramName">';
+    html += '<input type="text" id="passiveNewParamValue" placeholder="value">';
+    html += '<button id="passiveAddParam">+ Add</button>';
+    html += '</div>';
+    html += '</div>';
+
+    html += '</div>'; // /.hero-ability-detail
+
+    container.innerHTML = html;
+
+    // Wire back button
+    var backBtn = document.getElementById('passiveBackToHub');
+    if (backBtn) backBtn.addEventListener('click', function () { backToHub(); });
+
+    // Wire ID field
+    var idEl = document.getElementById('passiveEditId');
+    if (idEl) {
+      idEl.addEventListener('change', function () {
+        _stashedPassives[index].id = this.value;
+      });
+    }
+
+    // Wire mana config fields
+    var manaMaxEl = document.getElementById('passiveManaMax');
+    var manaRegenEl = document.getElementById('passiveManaRegen');
+    var manaDelayEl = document.getElementById('passiveManaDelay');
+    if (manaMaxEl) {
+      manaMaxEl.addEventListener('change', function () {
+        if (!_stashedMana) _stashedMana = { maxMana: 100, regenRate: 10, regenDelay: 2000 };
+        _stashedMana.maxMana = parseInt(this.value) || 100;
+      });
+    }
+    if (manaRegenEl) {
+      manaRegenEl.addEventListener('change', function () {
+        if (!_stashedMana) _stashedMana = { maxMana: 100, regenRate: 10, regenDelay: 2000 };
+        _stashedMana.regenRate = parseInt(this.value) || 10;
+      });
+    }
+    if (manaDelayEl) {
+      manaDelayEl.addEventListener('change', function () {
+        if (!_stashedMana) _stashedMana = { maxMana: 100, regenRate: 10, regenDelay: 2000 };
+        _stashedMana.regenDelay = parseInt(this.value) || 2000;
+      });
+    }
+
+    // Wire param inputs
+    var paramInputs = container.querySelectorAll('.passive-param-input');
+    for (var pi2 = 0; pi2 < paramInputs.length; pi2++) {
+      paramInputs[pi2].addEventListener('change', function () {
+        var key = this.getAttribute('data-param-key');
+        if (!_stashedPassives[index].params) _stashedPassives[index].params = {};
+        if (this.type === 'checkbox') {
+          _stashedPassives[index].params[key] = this.checked;
+        } else if (this.type === 'number') {
+          _stashedPassives[index].params[key] = parseFloat(this.value) || 0;
+        } else {
+          _stashedPassives[index].params[key] = this.value;
+        }
+      });
+    }
+
+    // Wire param remove buttons
+    var removeButtons = container.querySelectorAll('.passive-param-remove');
+    for (var ri = 0; ri < removeButtons.length; ri++) {
+      removeButtons[ri].addEventListener('click', function () {
+        var key = this.getAttribute('data-param-key');
+        if (_stashedPassives[index].params) {
+          delete _stashedPassives[index].params[key];
+        }
+        renderPassiveSubviewContent(index);
+      });
+    }
+
+    // Wire add param
+    var addParamBtn = document.getElementById('passiveAddParam');
+    if (addParamBtn) {
+      addParamBtn.addEventListener('click', function () {
+        var keyEl = document.getElementById('passiveNewParamKey');
+        var valEl = document.getElementById('passiveNewParamValue');
+        if (!keyEl || !keyEl.value.trim()) return;
+        if (!_stashedPassives[index].params) _stashedPassives[index].params = {};
+        var newVal = valEl ? valEl.value : '';
+        // Auto-detect type
+        if (newVal === 'true') newVal = true;
+        else if (newVal === 'false') newVal = false;
+        else if (newVal !== '' && !isNaN(Number(newVal))) newVal = Number(newVal);
+        _stashedPassives[index].params[keyEl.value.trim()] = newVal;
+        renderPassiveSubviewContent(index);
+      });
+    }
+  }
+
+  function openModelSubview() {
+    syncHubFieldsToForm();
+    _currentSubview = 'model';
+
+    var hubView = document.getElementById('heroHubView');
+    var editorView = document.getElementById('heroEditorView');
+    var abilitySubview = document.getElementById('heroAbilitySubview');
+    var editorTitle = document.getElementById('heroEditorTitle');
+
+    if (hubView) {
+      hubView.classList.add('hidden');
+      hubView.classList.remove('viewport-mode');
+      var panel = document.getElementById('panelHeroEditor');
+      if (panel) panel.appendChild(hubView);
+    }
+    if (editorView) editorView.classList.remove('hidden');
+    if (abilitySubview) abilitySubview.classList.add('hidden');
+    if (editorTitle) editorTitle.textContent = 'Character Model';
+
+    // Show only identity+stats form sections (for reference)
+    showFormSectionsForGroup(['identity', 'stats']);
+
+    var editorList = document.getElementById('heroEditorList');
+    if (editorList) editorList.style.display = 'none';
+
+    // Expand sidebar, show 3D preview, show right panel + toolbar (full 3D editing)
+    var sidebar = document.getElementById('devSidebar');
+    if (sidebar) sidebar.classList.add('expanded');
+
+    var heroContainer = document.getElementById('heroPreviewContainer');
+    var viewport = document.getElementById('devViewport');
+    if (heroContainer && viewport) {
+      viewport.appendChild(heroContainer);
+      heroContainer.classList.add('viewport-mode');
+      setTimeout(function () {
+        if (typeof window._resizeHeroEditorPreview === 'function') {
+          window._resizeHeroEditorPreview();
+        }
+      }, 50);
+    }
+
+    var rightPanel = document.getElementById('devRightPanel');
+    var rightExpandTab = document.getElementById('devRightPanelExpand');
+    if (rightPanel) {
+      rightPanel.classList.remove('hidden');
+      if (rightExpandTab) rightExpandTab.classList.toggle('hidden', !rightPanel.classList.contains('collapsed'));
+    }
+    var heToolbar = document.getElementById('heViewportToolbar');
+    if (heToolbar) heToolbar.classList.remove('hidden');
+
+    // Apply view mode (sets correct right panel content)
+    if (typeof window._applyHeroViewMode === 'function') {
+      window._applyHeroViewMode();
+    }
+
+    updateBackButton('hub');
+    updateHeroPreview();
+  }
+
+  function backToHub() {
+    // Sync form changes back
+    _currentSubview = null;
+    _currentAbilityIndex = -1;
+    _currentPassiveIndex = -1;
+
+    var editorView = document.getElementById('heroEditorView');
+    var abilitySubview = document.getElementById('heroAbilitySubview');
+    var editorTitle = document.getElementById('heroEditorTitle');
+
+    // Restore hidden form/editorList
+    var form = document.getElementById('heroEditorForm');
+    if (form) form.style.display = '';
+    if (editorTitle) { editorTitle.style.display = ''; editorTitle.textContent = 'Hero Editor'; }
+    var editorList = document.getElementById('heroEditorList');
+    if (editorList) editorList.style.display = '';
+
+    // Restore all form section visibility
+    var headers = form ? form.querySelectorAll('[data-hub-group]') : [];
+    for (var i = 0; i < headers.length; i++) {
+      headers[i].style.display = '';
+      var next = headers[i].nextElementSibling;
+      if (next && (next.classList.contains('dev-section-content') || next.id === 'heGunFields')) {
+        next.style.display = '';
+      }
+      if (headers[i].tagName === 'DIV' && headers[i].id) {
+        headers[i].style.display = '';
+      }
+    }
+    // Restore form action buttons
+    if (form) {
+      var formActions = form.querySelectorAll('.dev-actions');
+      for (var j = 0; j < formActions.length; j++) {
+        formActions[j].style.display = '';
+      }
+    }
+
+    // Return editor view from viewport to panel (weapon subview case)
+    var heroPanel = document.getElementById('panelHeroEditor');
+    if (editorView && editorView.classList.contains('viewport-mode')) {
+      editorView.classList.remove('viewport-mode');
+      if (heroPanel) heroPanel.appendChild(editorView);
+    }
+    if (editorView) editorView.classList.add('hidden');
+
+    // Return ability subview from viewport to panel
+    if (abilitySubview) {
+      abilitySubview.classList.add('hidden');
+      abilitySubview.classList.remove('viewport-mode');
+      if (heroPanel) heroPanel.appendChild(abilitySubview);
+    }
+
+    // Collapse editor layout
+    var heroContainer = document.getElementById('heroPreviewContainer');
+    if (heroContainer && heroPanel && heroContainer.classList.contains('viewport-mode')) {
+      heroContainer.classList.remove('viewport-mode');
+      heroPanel.appendChild(heroContainer);
+    }
+
+    var sidebar = document.getElementById('devSidebar');
+    if (sidebar) sidebar.classList.remove('expanded');
+
+    var rightPanel = document.getElementById('devRightPanel');
+    if (rightPanel) rightPanel.classList.add('hidden');
+    var rightExpandTab = document.getElementById('devRightPanelExpand');
+    if (rightExpandTab) rightExpandTab.classList.add('hidden');
+    var heToolbar = document.getElementById('heViewportToolbar');
+    if (heToolbar) heToolbar.classList.add('hidden');
+
+    // Show hub WITHOUT reloading hero data from disk — preserve in-flight edits
+    returnToHub();
+
+    if (typeof resizeRenderer === 'function') setTimeout(resizeRenderer, 50);
+  }
+
+  // Like showHeroHub but skips setFormFromHeroConfig — keeps stashed edits intact
+  function returnToHub() {
+    _currentSubview = null;
+    _currentAbilityIndex = -1;
+    _currentPassiveIndex = -1;
+
+    var galleryView = document.getElementById('heroGalleryView');
+    var hubView = document.getElementById('heroHubView');
+    var editorView = document.getElementById('heroEditorView');
+
+    var panel = document.getElementById('panelHeroEditor');
+    if (galleryView && panel) {
+      panel.insertBefore(galleryView, panel.firstChild);
+      galleryView.classList.remove('viewport-mode');
+    }
+    if (galleryView) galleryView.classList.add('hidden');
+    if (editorView) editorView.classList.add('hidden');
+    if (hubView) hubView.classList.remove('hidden');
+
+    var viewport = document.getElementById('devViewport');
+    if (hubView && viewport) {
+      viewport.appendChild(hubView);
+      hubView.classList.add('viewport-mode');
+    }
+
+    renderHeroHub();
+  }
+
+  function updateBackButton(target) {
+    var btn = document.getElementById('heroBackToGallery');
+    if (!btn) return;
+    if (target === 'hub') {
+      btn.innerHTML = '&larr; Back to Hub';
+    } else {
+      btn.innerHTML = '&larr; Back to Heroes';
+    }
+  }
+
+  // ========================
   // HERO GALLERY
   // ========================
 
@@ -3583,74 +4587,69 @@
   }
 
   function openHeroEditor(heroId) {
-    var galleryView = document.getElementById('heroGalleryView');
-    var editorView = document.getElementById('heroEditorView');
-
-    // Move gallery back to panel (out of viewport)
-    var panel = document.getElementById('panelHeroEditor');
-    if (galleryView && panel) {
-      panel.insertBefore(galleryView, panel.firstChild);
-      galleryView.classList.remove('viewport-mode');
-    }
-    if (galleryView) galleryView.classList.add('hidden');
-    if (editorView) editorView.classList.remove('hidden');
-
-    // Expand sidebar and show right panel/toolbar (existing hero editor layout)
-    var sidebar = document.getElementById('devSidebar');
-    if (sidebar) sidebar.classList.add('expanded');
-
-    var heroContainer = document.getElementById('heroPreviewContainer');
-    var viewport = document.getElementById('devViewport');
-    if (heroContainer && viewport) {
-      viewport.appendChild(heroContainer);
-      heroContainer.classList.add('viewport-mode');
-      setTimeout(function () {
-        if (typeof window._resizeHeroEditorPreview === 'function') {
-          window._resizeHeroEditorPreview();
-        }
-      }, 50);
-    }
-
-    // Show right panel and toolbar
-    var rightPanel = document.getElementById('devRightPanel');
-    var rightExpandTab = document.getElementById('devRightPanelExpand');
-    if (rightPanel) {
-      rightPanel.classList.remove('hidden');
-      if (rightExpandTab) rightExpandTab.classList.toggle('hidden', !rightPanel.classList.contains('collapsed'));
-    }
-    var heToolbar = document.getElementById('heViewportToolbar');
-    if (heToolbar) heToolbar.classList.remove('hidden');
-
-    // Apply view mode (sets correct right panel content)
-    if (typeof window._applyHeroViewMode === 'function') {
-      window._applyHeroViewMode();
-    }
-
-    // Select the hero in the dropdown
-    if (typeof populateHeroDropdown === 'function') {
-      populateHeroDropdown('heHeroSelect');
-    }
-    var heSelect = document.getElementById('heHeroSelect');
-    if (heSelect) {
-      heSelect.value = heroId;
-    }
-
-    // Directly load hero data (don't rely on dropdown change event)
-    var hero = (typeof getHeroById === 'function') ? getHeroById(heroId) : null;
-    if (hero) {
-      setFormFromHeroConfig(hero);
-      updateHeroPreview();
-    }
+    showHeroHub(heroId);
   }
 
   function backToHeroGallery() {
+    _currentHeroId = null;
+    _currentSubview = null;
+    _currentAbilityIndex = -1;
+    _currentPassiveIndex = -1;
+
     var galleryView = document.getElementById('heroGalleryView');
     var editorView = document.getElementById('heroEditorView');
+    var hubView = document.getElementById('heroHubView');
+    var abilitySubview = document.getElementById('heroAbilitySubview');
+    var editorTitle = document.getElementById('heroEditorTitle');
+
+    // Return editor view from viewport to panel (weapon subview case)
+    var heroPanel = document.getElementById('panelHeroEditor');
+    if (editorView && editorView.classList.contains('viewport-mode')) {
+      editorView.classList.remove('viewport-mode');
+      if (heroPanel) heroPanel.appendChild(editorView);
+    }
     if (editorView) editorView.classList.add('hidden');
+
+    // Restore hidden form/editorList/title (in case we came from a subview)
+    var form = document.getElementById('heroEditorForm');
+    if (form) form.style.display = '';
+    if (editorTitle) { editorTitle.style.display = ''; editorTitle.textContent = 'Hero Editor'; }
+    var editorList = document.getElementById('heroEditorList');
+    if (editorList) editorList.style.display = '';
+
+    // Restore all form section visibility
+    if (form) {
+      var headers = form.querySelectorAll('[data-hub-group]');
+      for (var i = 0; i < headers.length; i++) {
+        headers[i].style.display = '';
+        var next = headers[i].nextElementSibling;
+        if (next && (next.classList.contains('dev-section-content') || next.id === 'heGunFields')) {
+          next.style.display = '';
+        }
+        if (headers[i].tagName === 'DIV' && headers[i].id) {
+          headers[i].style.display = '';
+        }
+      }
+      var formActions = form.querySelectorAll('.dev-actions');
+      for (var j = 0; j < formActions.length; j++) {
+        formActions[j].style.display = '';
+      }
+    }
+
+    // Return ability subview from viewport to panel
+    if (abilitySubview) {
+      abilitySubview.classList.add('hidden');
+      abilitySubview.classList.remove('viewport-mode');
+      if (heroPanel) heroPanel.appendChild(abilitySubview);
+    }
+    if (hubView) {
+      hubView.classList.add('hidden');
+      hubView.classList.remove('viewport-mode');
+      if (heroPanel) heroPanel.appendChild(hubView);
+    }
 
     // Collapse editor layout — return preview to panel, hide right panel/toolbar
     var heroContainer = document.getElementById('heroPreviewContainer');
-    var heroPanel = document.getElementById('panelHeroEditor');
     if (heroContainer && heroPanel && heroContainer.classList.contains('viewport-mode')) {
       heroContainer.classList.remove('viewport-mode');
       heroPanel.appendChild(heroContainer);
@@ -3666,6 +4665,7 @@
     var heToolbar = document.getElementById('heViewportToolbar');
     if (heToolbar) heToolbar.classList.add('hidden');
 
+    updateBackButton('gallery');
     showHeroGallery();
     if (typeof resizeRenderer === 'function') setTimeout(resizeRenderer, 50);
   }
@@ -3719,13 +4719,18 @@
   var heroBackBtn = document.getElementById('heroBackToGallery');
   if (heroBackBtn) {
     heroBackBtn.addEventListener('click', function () {
-      backToHeroGallery();
+      if (_currentSubview) {
+        backToHub();
+      } else {
+        backToHeroGallery();
+      }
     });
   }
 
-  // Expose gallery functions for devApp.js
+  // Expose gallery/hub functions for devApp.js
   window._showHeroGallery = showHeroGallery;
   window._backToHeroGallery = backToHeroGallery;
   window._openHeroEditor = openHeroEditor;
+  window._showHeroHub = showHeroHub;
 
 })();

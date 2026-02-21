@@ -1063,6 +1063,14 @@
       }
       return;
     }
+    // Mana-per-shot check: block firing if not enough mana
+    if (w.manaCostPerShot > 0 && entry.entity && entry.entity.abilityManager) {
+      var _amFFA = entry.entity.abilityManager;
+      if (_amFFA.hasMana && _amFFA.hasMana() && _amFFA.getMana() < w.manaCostPerShot) {
+        if (id === state.localId && typeof playGameSound === 'function') playGameSound('dry_fire');
+        return;
+      }
+    }
 
     var hitInfo = buildHitTargets(id);
     var tracerColor = (id === state.localId) ? 0x66ffcc : 0x66aaff;
@@ -1153,6 +1161,11 @@
       result = sharedFireWeapon(w, origin, dir, fireOpts);
     }
 
+    // Consume mana per shot if applicable
+    if (w.manaCostPerShot > 0 && entry.entity && entry.entity.abilityManager) {
+      var _amShot = entry.entity.abilityManager;
+      if (_amShot.consumeMana) _amShot.consumeMana(w.manaCostPerShot);
+    }
     if (id === state.localId) updateHUDForLocalPlayer();
     if (result.magazineEmpty) {
       if (sharedStartReload(w, now, entry.heroId)) {
@@ -1167,6 +1180,7 @@
     if (!state) return;
     var ids = Object.keys(state.players);
     var now = performance.now();
+    var _cachedLocalInput = null; // cached for reuse in ability phase
 
     // Phase 1: Apply inputs and update physics for all players
     for (var i = 0; i < ids.length; i++) {
@@ -1186,6 +1200,7 @@
       // Apply local or remote input
       if (id === state.localId) {
         var localInput = window.getInputState ? window.getInputState() : {};
+        _cachedLocalInput = localInput; // cache for ability phase (one-shot flags consumed here)
         var enabledLocal = !!state.inputEnabled;
         entry.entity.input.moveX = enabledLocal ? (localInput.moveX || 0) : 0;
         entry.entity.input.moveZ = enabledLocal ? (localInput.moveZ || 0) : 0;
@@ -1193,7 +1208,17 @@
         entry.entity.input.jump = enabledLocal && !!localInput.jump;
         entry.entity.input.fireDown = enabledLocal && !!localInput.fireDown;
         entry.entity.input.meleeDown = enabledLocal && !!localInput.meleePressed;
+        entry.entity.input.secondaryDown = enabledLocal && !!localInput.secondaryDown;
+        entry.entity.input.ability1 = enabledLocal && !!localInput.ability1;
         if (enabledLocal && localInput.reloadPressed) entry.entity.input.reloadPressed = true;
+
+        // Meditate freeze: block movement BEFORE physics so player can't slide
+        if (entry.entity._meditating) {
+          entry.entity.input.moveX = 0;
+          entry.entity.input.moveZ = 0;
+          entry.entity.input.sprint = false;
+          entry.entity.input.jump = false;
+        }
 
         // Hide respawn hero prompt on first movement (500ms grace period for stale input)
         if (state._respawnHeroPromptActive
@@ -1309,19 +1334,23 @@
       if (!entry || !entry.entity || !entry.entity.abilityManager) continue;
       entry.entity.abilityManager.update(dtMs);
     }
-    // Ability input activation for local player
+    // Ability input activation for local player (reuse cached input — getInputState() clears one-shot flags)
     var localEntry = state.players[state.localId];
     var _localSecondaryDown = false;
     if (localEntry && localEntry.entity && localEntry.entity.abilityManager && state.inputEnabled) {
-      var localInput = window.getInputState ? window.getInputState() : {};
+      var localInput = _cachedLocalInput || {};
       _localSecondaryDown = !!localInput.secondaryDown;
+      var secondaryJustPressed = _localSecondaryDown && !state._prevSecondaryDown;
       var abState = localEntry.entity.abilityManager.getHUDState();
       for (var ai = 0; ai < abState.length; ai++) {
-        if (localInput[abState[ai].key]) {
+        var abilityKey = abState[ai].key;
+        var keyActive = abilityKey === 'secondaryDown' ? secondaryJustPressed : localInput[abilityKey];
+        if (keyActive) {
           localEntry.entity.abilityManager.activate(abState[ai].id);
         }
       }
     }
+    state._prevSecondaryDown = _localSecondaryDown;
 
     // Scope/ADS for local player: if hero has weapon.scope and no ability consumed secondaryDown
     state._scopeResult = { adsActive: false, spreadMultiplier: 1.0 };
@@ -1355,12 +1384,8 @@
         entry.entity.input.fireDown = false;
         entry.entity.input.meleeDown = false;
       }
-      // Meditate freeze: block all input while meditating
+      // Meditate freeze: block combat input (movement already blocked before physics)
       if (entry.entity._meditating) {
-        entry.entity.input.moveX = 0;
-        entry.entity.input.moveZ = 0;
-        entry.entity.input.sprint = false;
-        entry.entity.input.jump = false;
         entry.entity.input.fireDown = false;
         entry.entity.input.secondaryDown = false;
         entry.entity.input.meleeDown = false;

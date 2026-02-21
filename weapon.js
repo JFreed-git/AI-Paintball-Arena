@@ -45,7 +45,8 @@
 
     // --- Combat Stats ---
     this.cooldownMs      = opts.cooldownMs      || 166;      // ms between shots
-    this.magSize         = opts.magSize         || 6;         // rounds per magazine
+    this.magSize         = (typeof opts.magSize === 'number') ? opts.magSize : 6; // rounds per magazine (0 = infinite)
+    this.manaCostPerShot = (typeof opts.manaCostPerShot === 'number') ? opts.manaCostPerShot : 0; // mana consumed per shot (0 = none)
     this.reloadTimeSec   = opts.reloadTimeSec   || 2.5;       // seconds to reload
     this.damage          = opts.damage          || 20;        // damage per pellet
     this.spreadRad       = (typeof opts.spreadRad === 'number') ? opts.spreadRad : 0;        // base spread (radians)
@@ -95,7 +96,7 @@
     this.abilities = opts.abilities || [];
 
     // --- Per-Instance Mutable State ---
-    this.ammo         = this.magSize;
+    this.ammo         = this.magSize === 0 ? Infinity : this.magSize;
     this.reloading    = false;
     this.reloadEnd    = 0;
     this.lastShotTime = 0;
@@ -107,7 +108,7 @@
    * Does NOT change static stats — those are defined by the weapon type.
    */
   Weapon.prototype.reset = function () {
-    this.ammo         = this.magSize;
+    this.ammo         = this.magSize === 0 ? Infinity : this.magSize;
     this.reloading    = false;
     this.reloadEnd    = 0;
     this.lastShotTime = 0;

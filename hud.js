@@ -79,6 +79,7 @@
    * Returns true if reload was initiated.
    */
   window.sharedStartReload = function (weapon, now, heroId) {
+    if (weapon.magSize === 0) return false; // infinite ammo — no reload
     if (weapon.reloading || weapon.ammo >= weapon.magSize) return false;
     weapon.reloading = true;
     var reloadSec = weapon.reloadTimeSec || 2.5;
@@ -133,7 +134,11 @@
    */
   window.sharedUpdateAmmoDisplay = function (ammoEl, current, magSize) {
     if (!ammoEl) return;
-    ammoEl.textContent = current + '/' + magSize;
+    if (magSize === 0) {
+      ammoEl.textContent = '\u221E'; // infinity symbol
+    } else {
+      ammoEl.textContent = current + '/' + magSize;
+    }
   };
 
   /**
@@ -149,7 +154,7 @@
 
   // ========== Ability HUD ==========
 
-  var KEY_LABELS = { ability1: 'Q', ability2: 'E', ability3: 'F', ability4: 'C' };
+  var KEY_LABELS = { ability1: 'Q', ability2: 'E', ability3: 'F', ability4: 'C', secondaryDown: 'RMB' };
 
   /**
    * Update ability cooldown HUD slots.

@@ -45,10 +45,18 @@
                     </div>
                     <div id="heroGalleryGrid" class="gallery-grid"></div>
                 </div>
+                <!-- Hub View (intermediate between gallery and editor) -->
+                <div id="heroHubView" class="hidden">
+                    <div id="heroHubContent"></div>
+                </div>
+                <!-- Ability Sub-view (full viewport) -->
+                <div id="heroAbilitySubview" class="hidden">
+                    <div id="heroAbilitySubviewContent"></div>
+                </div>
                 <!-- Editor View (hidden by default) -->
                 <div id="heroEditorView" class="hidden">
                 <button id="heroBackToGallery" class="gallery-back-btn">&larr; Back to Heroes</button>
-                <h3>Hero Editor</h3>
+                <h3 id="heroEditorTitle">Hero Editor</h3>
                 <div id="heroEditorList">
                     <div class="dev-field">
                         <label>Hero</label>
@@ -60,7 +68,7 @@
                     </div>
                 </div>
                 <div id="heroEditorForm" class="dev-scrollable">
-                    <h4 class="dev-section-header">Character</h4>
+                    <h4 class="dev-section-header" data-hub-group="identity">Character</h4>
                     <div class="dev-section-content">
                         <div class="dev-field"><label>ID</label><input type="text" id="heId" /></div>
                         <div class="dev-field"><label>Name</label><input type="text" id="heName" /></div>
@@ -68,7 +76,7 @@
                         <div class="dev-field"><label>Color</label><input type="color" id="heColor" value="#66ffcc" /></div>
                     </div>
 
-                    <h4 class="dev-section-header">Stats</h4>
+                    <h4 class="dev-section-header" data-hub-group="stats">Stats</h4>
                     <div class="dev-section-content">
                         <div class="dev-field"><label>Max Health</label><input type="number" id="heMaxHealth" value="100" min="1" /></div>
                         <div class="dev-field"><label>Walk Speed</label><input type="number" id="heWalkSpeed" value="4.5" step="0.1" /></div>
@@ -76,11 +84,11 @@
                         <div class="dev-field"><label>Jump Velocity</label><input type="number" id="heJumpVelocity" value="8.5" step="0.5" /></div>
                     </div>
 
-                    <h4 class="dev-section-header">Weapon</h4>
+                    <h4 class="dev-section-header" data-hub-group="weapon">Weapon</h4>
                     <div class="dev-section-content">
                         <div id="heGunFields">
                             <div class="dev-field"><label>Cooldown (ms)</label><input type="number" id="heCooldownMs" value="166" min="1" /></div>
-                            <div class="dev-field"><label>Mag Size</label><input type="number" id="heMagSize" value="6" min="1" /></div>
+                            <div class="dev-field"><label>Mag Size</label><input type="number" id="heMagSize" value="6" min="0" /></div>
                             <div class="dev-field"><label>Reload (sec)</label><input type="number" id="heReloadTime" value="2.5" step="0.1" /></div>
                             <div class="dev-field"><label>Damage</label><input type="number" id="heDamage" value="20" min="1" /></div>
                             <div class="dev-field"><label>Spread (rad)</label><input type="number" id="heSpreadRad" value="0" step="0.005" min="0" /></div>
@@ -89,10 +97,11 @@
                             <div class="dev-field"><label>Pellets</label><input type="number" id="hePellets" value="1" min="1" /></div>
                             <div class="dev-field"><label>Projectile Speed</label><input type="number" id="heProjectileSpeed" value="120" step="10" min="0" /></div>
                             <div class="dev-field"><label>Proj. Gravity</label><input type="number" id="heProjectileGravity" value="0" step="1" min="0" /></div>
+                            <div class="dev-field"><label>Mana Cost/Shot</label><input type="number" id="heManaCostPerShot" value="0" step="1" min="0" /></div>
                         </div>
                     </div>
 
-                    <h4 class="dev-section-header" id="heMeleeHeader">Melee</h4>
+                    <h4 class="dev-section-header" id="heMeleeHeader" data-hub-group="melee">Melee</h4>
                     <div class="dev-section-content">
                         <div class="dev-field"><label>Melee-Only (Sword)</label><input type="checkbox" id="heMeleeOnly" /></div>
                         <div class="dev-field"><label>Damage</label><input type="number" id="heMeleeDamage" value="30" min="0" /></div>
@@ -102,8 +111,8 @@
                         <div class="dev-field"><label>Use Hit Multiplier</label><input type="checkbox" id="heMeleeUseHitMult" checked /></div>
                     </div>
 
-                    <div id="heScopeSection">
-                        <h4 class="dev-section-header">Scope</h4>
+                    <div id="heScopeSection" data-hub-group="scope">
+                        <h4 class="dev-section-header" data-hub-group="scope">Scope</h4>
                         <div class="dev-section-content">
                             <div class="dev-field">
                                 <label>Type</label>
@@ -118,7 +127,7 @@
                         </div>
                     </div>
 
-                    <h4 class="dev-section-header">Crosshair</h4>
+                    <h4 class="dev-section-header" data-hub-group="crosshair">Crosshair</h4>
                     <div class="dev-section-content">
                         <div class="dev-field">
                             <label>Style</label>
@@ -130,7 +139,7 @@
                         <div class="dev-field"><label>Color</label><input type="color" id="heCrosshairColor" value="#00ffaa" /></div>
                     </div>
 
-                    <h4 class="dev-section-header">Visual</h4>
+                    <h4 class="dev-section-header" data-hub-group="visual">Visual</h4>
                     <div class="dev-section-content">
                         <div class="dev-field">
                             <label>Model Type</label>
@@ -141,7 +150,7 @@
                         </div>
                     </div>
 
-                    <h4 class="dev-section-header">FP Weapon</h4>
+                    <h4 class="dev-section-header" data-hub-group="fpweapon">FP Weapon</h4>
                     <div class="dev-section-content">
                         <div class="dev-field"><label>Offset X</label><input type="number" id="heFPOffsetX" value="0.28" step="0.01" /></div>
                         <div class="dev-field"><label>Offset Y</label><input type="number" id="heFPOffsetY" value="-0.22" step="0.01" /></div>
@@ -151,7 +160,7 @@
                         <div class="dev-field"><label>Rot Z</label><input type="number" id="heFPRotZ" value="0" step="0.01" /></div>
                     </div>
 
-                    <h4 class="dev-section-header">Abilities</h4>
+                    <h4 class="dev-section-header" data-hub-group="abilities">Abilities</h4>
                     <div class="dev-section-content">
                         <div id="heroAbilitiesDisplay" style="font-size:12px;color:#ccc;"></div>
                     </div>

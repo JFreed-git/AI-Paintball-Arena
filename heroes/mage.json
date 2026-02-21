@@ -30,30 +30,25 @@
   ],
   "modelType": "standard",
   "weapon": {
-    "cooldownMs": 250,
-    "magSize": 15,
-    "reloadTimeSec": 2.0,
-    "damage": 12,
-    "spreadRad": 0.02,
-    "sprintSpreadRad": 0.05,
+    "cooldownMs": 100,
+    "magSize": 0,
+    "reloadTimeSec": 2,
+    "damage": 8,
+    "spreadRad": 0,
+    "sprintSpreadRad": 0.02,
     "maxRange": 150,
     "pellets": 1,
     "projectileSpeed": 80,
     "projectileGravity": 0,
+    "manaCostPerShot": 1,
     "splashRadius": 0,
     "meleeOnly": false,
     "meleeDamage": 20,
-    "meleeRange": 2.0,
+    "meleeRange": 2,
     "meleeCooldownMs": 600,
     "meleeSwingMs": 350,
     "meleeUseHitMultiplier": true,
-    "lockOn": { "coneAngle": 15, "maxRange": 60, "turnRate": 3.0 },
     "scope": null,
-    "lockOn": {
-      "coneAngle": 15,
-      "maxRange": 60,
-      "turnRate": 3.0
-    },
     "modelType": "rifle",
     "tracerColor": 8865535,
     "crosshair": {
@@ -74,24 +69,21 @@
       "z": 0
     }
   },
-  "mana": {
-    "maxMana": 100,
-    "regenRate": 10,
-    "regenDelay": 2000
-  },
   "passives": [
-    { "id": "manaRegen" }
+    {
+      "id": "manaRegen"
+    }
   ],
   "abilities": [
     {
       "id": "teleport",
       "name": "Teleport",
       "key": "ability1",
-      "cooldownMs": 6000,
-      "duration": 0,
+      "cooldownMs": 15000,
+      "duration": 60000,
       "params": {
         "maxRange": 25,
-        "manaCost": 30,
+        "manaCost": 75,
         "snapTolerance": 1.5
       }
     },
@@ -99,13 +91,14 @@
       "id": "piercingBlast",
       "name": "Piercing Blast",
       "key": "secondaryDown",
-      "cooldownMs": 1000,
-      "duration": 0,
+      "cooldownMs": 15000,
+      "duration": 3000,
       "params": {
         "manaDrainRate": 20,
         "damagePerMana": 2.5,
         "maxChargeMs": 3000,
-        "beamRange": 200
+        "beamRange": 200,
+        "postFireCooldownMs": 1000
       }
     },
     {
@@ -113,13 +106,18 @@
       "name": "Meditate",
       "key": "ability2",
       "cooldownMs": 15000,
-      "duration": 5000,
+      "duration": 2000,
       "params": {
-        "manaRestoreFraction": 0.5,
+        "manaRestoreFraction": 0.75,
         "interruptOnDamage": true
       }
     }
   ],
+  "mana": {
+    "maxMana": 100,
+    "regenRate": 2,
+    "regenDelay": 2000
+  },
   "bodyParts": [
     {
       "name": "head_visual",
@@ -148,10 +146,5 @@
       "radius": 0.25,
       "height": 0.8
     }
-  ],
-  "cameraOffset": {
-    "x": 0,
-    "y": 0,
-    "z": 0
-  }
+  ]
 }

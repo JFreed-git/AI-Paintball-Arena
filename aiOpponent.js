@@ -576,6 +576,14 @@ class AIOpponent {
     // Try melee first if close enough
     if (this._tryMelee(ctx)) return;
 
+    // Mana-per-shot check: if weapon costs mana, verify sufficient mana
+    if (canShoot && this.weapon.manaCostPerShot > 0 && this.player && this.player.abilityManager) {
+      var _am = this.player.abilityManager;
+      if (_am.hasMana && _am.hasMana() && _am.getMana() < this.weapon.manaCostPerShot) {
+        canShoot = false;
+      }
+    }
+
     if (canShoot && this.weapon.ammo > 0) {
       var origin = this.eyePos;
       var perfectDir = ctx.playerPos.clone().sub(origin).normalize();
@@ -611,11 +619,16 @@ class AIOpponent {
       } else {
         result = sharedFireWeapon(this.weapon, origin, aimDir, fireOpts);
       }
-      if (result.magazineEmpty) {
+      // Consume mana per shot if applicable
+      if (this.weapon.manaCostPerShot > 0 && this.player && this.player.abilityManager) {
+        var _amShot = this.player.abilityManager;
+        if (_amShot.consumeMana) _amShot.consumeMana(this.weapon.manaCostPerShot);
+      }
+      if (result.magazineEmpty && this.weapon.magSize !== 0) {
         this.weapon.reloading = true;
         this.weapon.reloadEnd = now + this.weapon.reloadTimeSec * 1000;
       }
-    } else if (canShoot && this.weapon.ammo <= 0) {
+    } else if (canShoot && this.weapon.ammo <= 0 && this.weapon.magSize !== 0) {
       this.weapon.reloading = true;
       this.weapon.reloadEnd = now + this.weapon.reloadTimeSec * 1000;
     }
